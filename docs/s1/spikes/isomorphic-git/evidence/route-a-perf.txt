@@ -1,0 +1,12 @@
+# Route A (isomorphic-git pure-JS server) — indicative perf evidence (THROWAWAY spike)
+date: 2026-10-12T13:21:29.084Z
+machine: Apple M4, 16 GB RAM, macOS, loopback HTTP (no TLS)
+repo: 501 md files (~8KB each, ~4.1MB content), 21+ commits, bare size: 2.7M	/var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/spike-a-perf-26631Z/vaults/v001.git
+node: v24.21.0, git client: git version 2.50.1 (Apple Git-155), isomorphic-git: 1.44.1
+NOTE: 数字为指示性（单机回环、无 TLS、无并发）。服务端 fetch 采用「全量 closure + packObjects」的简化实现，增量协商（have/want delta 协商）未实现，fetch 时间随推送历史增长可能进一步劣化。
+
+full clone (cold), 5 runs: 637 / 588 / 567 / 608 / 604 ms -> median 604 ms
+push 1 small md commit, 5 runs: 100 / 115 / 110 / 103 / 105 ms -> median 105 ms
+push 100 x 8KB md commit, 3 runs: 247 / 297 / 291 ms -> median 291 ms
+no-op fetch, 5 runs: 66 / 68 / 66 / 65 / 68 ms -> median 66 ms
+server node process RSS after above load: 326000 KB (318.4 MB)

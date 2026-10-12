@@ -1,0 +1,8 @@
+{
+  "name": "spike-git-http-backend",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0-throwaway",
+  "description": "THROWAWAY spike: Node wrapping git http-backend CGI — evidence for docs/s1/selection.md",
+  "scripts": { "test": "node --test test/" }
+}
