@@ -1,0 +1,13 @@
+{
+  "name": "spike-isomorphic-git",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0-throwaway",
+  "description": "THROWAWAY spike: isomorphic-git pure-JS server-side capability — evidence for docs/s1/selection.md",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "isomorphic-git": "^1.44.1"
+  }
+}
