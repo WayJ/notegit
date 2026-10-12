@@ -6,7 +6,7 @@
 | 日期 / 产出 | 2026-10-12 / S1-T8 worker（Orca dispatch `ctx_5c15ec78f399`，branch `WayJ/s1-t8-closeout`） |
 | 核对基线 | `sprint/S1 @ d1b9b52`（本 worktree rebase 后与 `local/sprint/S1` **同树**，`git diff local/sprint/S1 HEAD` 为空） |
 | 核对环境 | Apple M4 (arm64) / macOS / Node v24.21.0 / Python 3.9.6 + jsonschema 4.25.1 / git 2.50.1（与 [gates-evidence §1](gates-evidence.md) 记录环境一致） |
-| 方法声明 | **只读核对**：除本文件外未改任何文件；三条命令均为本机真实复跑（UTC 时间戳与退出码见 §2），未引用他人输出；未 push；**不宣称 E1 DoD 任何条目完成** |
+| 方法声明 | 初核（2026-10-12）为**只读核对**；三条命令均为本机真实复跑（UTC 时间戳与退出码见 §2），未引用他人输出；未 push；**不宣称 E1 DoD 任何条目完成**。2026-10-12 修订：按 master G1/G2 裁决方案① 授权改动 spike 两文件（commit `700e1bb`，见 §8 修订记录），其余仍零改动 |
 
 ---
 
@@ -91,10 +91,10 @@
 | 核对对象 | 结果 | 证据 |
 |---|---|---|
 | T5 API 契约（api.md） | **✔ 满足** | [api.md L50](../contracts/api.md)：「规则版本唯一机器来源：[rules-version.json](../contracts/rules-version.json)，当前 **1.0.0-draft.1**」；L54、L82、L228、L265 等多处引用；且由 CMD3 第 14 项 lint **机器强制**（「rules-version.json 的 rulesVersion 字符串与文件路径在本文件出现」，§2.4，本次复跑 PASS） |
-| T4 spike（D7 并入 T1，即 `docs/s1/spikes/git-http-backend/`） | **✘ 不满足字面核对** | 全目录检索（`grep -rn "rules-version\|rulesVersion\|1\.0\.0-draft" docs/s1/spikes/`）**零命中**。[hook-pre-receive.mjs](spikes/git-http-backend/hook-pre-receive.mjs) 实现的是硬编码最小校验（.md 须有非空 title、README 豁免、删除跳过），依据标注指向**架构 §5.2/§5.4**而非 T2 契约文件，无任何版本标识 |
+| T4 spike（D7 并入 T1，即 `docs/s1/spikes/git-http-backend/`） | **✔ 满足（2026-10-12 G1/G2 处置后，commit `700e1bb`）** | 初核为零命中（见判定段成因记录）；处置（master 裁决方案①）：[README.md](spikes/git-http-backend/README.md) 引用 `docs/contracts/rules-version.json` 与 **1.0.0-draft.1**；[hook-pre-receive.mjs](spikes/git-http-backend/hook-pre-receive.mjs) 顶部注释同源引用，且**运行时读取 manifest**——内置常量一致性断言（版本漂移即拒绝推送）+ pre-receive 报告行透出 `rulesVersion`（pass/fail 均带，`rulesSource` 标注 manifest/常量）。处置后 B1–B7 复跑 **7/7、exit 0**（2026-10-12T14:48Z） |
 | rules-version.json 本身 | ✔ | `rulesVersion: "1.0.0-draft.1"`，status draft，artifacts 四文件齐全（CMD1 检查 4f PASS） |
 
-**判定**：按场景字面「两处引用同一文件路径、同一版本标识」为**部分满足**（api.md ✔ / spike ✘）。成因可解释：T1 spike 与 T2 契约同属 Wave 1 并行产出，spike 代码先于契约定稿，D7 将 T4 吸收进 T1 时未回补版本引用。设计机制本身是完整的：三端单一来源机制（validation §7.3：构建期同取 `docs/contracts/`、服务端权威、每报告带 `rulesVersion`）+ 共用发布组件检查点 0–5（api.md §8.1，检查点 4 明确「T2 契约 + rulesVersion」对 Web submit 与 Git receive 两入口同规则）+ S3 落地强制（S3-T3 rulesVersion 读自 rules-version.json、S3-T7 同构性测试、S6-T7 CI 断言，见 [implementation-breakdown §2.2/§2.5](implementation-breakdown.md)）。spike 的硬编码规则与 validation §2/§3.1 语义一致（title 必填、README 豁免），但**无机器可核的版本链接**。处置建议（二选一，master 裁决）：① 在 spike README/hook 注释补一行对 `docs/contracts/rules-version.json` 与 1.0.0-draft.1 的引用（spike 标注 THROWAWAY，改动最小）；② 按 D7 精神在 sprint 文档追加记录，将场景 S3 的核对口径明确为「T5 契约侧机器核对（已满足）+ 三端一致性由 S3-T3/T7 与 S6-T7 在实现层强制」。列入 §6-G1/G2。
+**判定**：**满足**。初核按场景字面为部分满足（api.md ✔ / spike ✘，成因：T1 spike 与 T2 契约同属 Wave 1 并行产出，spike 代码先于契约定稿，D7 将 T4 吸收进 T1 时未回补版本引用）；2026-10-12 master 裁决采用处置建议①，落地于 commit `700e1bb`：spike README 与 hook 顶部注释引用同一 `docs/contracts/rules-version.json` 与 1.0.0-draft.1，hook 运行时读取 manifest 并以内置常量做一致性断言（漂移拒绝）、在 pre-receive 报告行透出 `rulesVersion`；B1–B7 复跑 7/7 无回归，且 fallback（manifest 缺失→常量+来源标注）/漂移（拒绝）/一致（manifest 来源）三路径手工探针验证通过。设计机制（三端单一来源 validation §7.3 + 共用发布组件检查点 0–5（api.md §8.1）+ S3-T3/T7、S6-T7 实现层强制）不变；spike 保持 THROWAWAY，manifest 驱动的完整校验仍属 S3-T3 实现任务。
 
 ## 4. S1 完成标准与验收场景对照
 
@@ -105,7 +105,7 @@
 | 「Q1–Q4、Q6–Q8 有记录」/ 场景 S6 | **满足** | §1 逐问核对：七问均有 ADR/契约链接；open 项均显式标注后续 sprint 义务 |
 | 「选型不要求外部 Git 平台」/ 场景 S1 | **满足** | D10（自带 git http-backend 包装）+ [D1](../superpowers/roadmaps/2026-10-12-notegit-v01.md#decisions-adr)（自带 Git 服务）；selection.md §1 约束表「不依赖外部平台」；ADR 行已归档（L235） |
 | 「可演示服务端拒绝 push」/ 场景 S2 | **满足** | CMD2 本次复跑 7/7、exit 0（B3/B4/B5/B6 即拒绝路径）；命令已固化进 gates 与场景 S2 固化记录（L84） |
-| 「Git 接入与 Web 发布能共用规则」/ 场景 S3 | **部分满足（按场景字面）** | §3：api.md 侧 ✔（机器核对）；spike 侧无版本引用（G1）。契约机制（单一来源 + 检查点 0–5 共用序列）已交付 |
+| 「Git 接入与 Web 发布能共用规则」/ 场景 S3 | **满足（G1/G2 已处置，2026-10-12）** | §3：api.md 侧 ✔（机器核对）；spike 侧已补同源引用 + manifest 一致性断言 + 报告行透出 rulesVersion（commit `700e1bb`，B1–B7 复跑 7/7）。契约机制（单一来源 + 检查点 0–5 共用序列）已交付 |
 | 场景 S4（Q6/Q8 设计记录齐全） | **满足** | §1 Q6/Q8：两契约存在且关键决策附依据（D-IC/D-BR 决策表、后果表、R 清单） |
 | 场景 S5（gates 命令真实可运行） | **满足** | §2 CMD1/CMD2 fresh 复跑与 AGENTS.md gates、gates-evidence §2 声明一致 |
 
@@ -121,15 +121,15 @@
 | T6 gates 落地 | AGENTS.md `### gates` 小节 + 运行证据文件 | [AGENTS.md](../../AGENTS.md) L10–17；[gates-evidence.md](gates-evidence.md)（**实测 201 行**，sprint 计划记载 206 行——见 §6-G6） | 两条 gate 命令本次独立复跑均与记载一致（CMD1 82/82、CMD2 7/7、exit 0）；场景 S2/S5 固化文本已入 sprint 计划（L82–85） | ✔ |
 | T7 实施拆分 | S2–S9 任务分解 + 风险更新 | [implementation-breakdown.md](implementation-breakdown.md)（实测 307 行，与记载一致）；N1–N4 新风险已入 epic 风险表（L295–298，实测在树） | 结构核对：8 sprint × 7–8 任务、波次 W1–W6 WIP≤3、epic 8 风险行逐条处置 + D10 新增 4 行 | ✔ |
 
-AGENTS.md gates 两条命令（contracts / tests）均已由本次独立复跑证实「真实可运行且当前通过」（§2）；ddl_smoke 未登记进 gates（§6-G3）。
+AGENTS.md gates 命令（初核两条：contracts / tests）均已由独立复跑证实「真实可运行且当前通过」（§2）；ddl_smoke 已由 master 补登为第三条 gate（storage，commit `f504744`；G3 已处置，见 §6）。
 
 ## 6. 缺口、不一致与未决事项（如实清单，未淡化）
 
-**核对过并确认存在的缺口/不一致**（编号供 master 裁决引用）：
+**核对过并确认存在的缺口/不一致**（编号供 master 裁决引用；**G1/G2/G3 已处置**——G1/G2 见 commit `700e1bb`，G3 见 master commit `f504744`；G4–G8 待裁决）：
 
-- **G1（场景 S3，见 §3）**：route-b spike（T4 承接方）无 `rules-version.json`/版本号引用，场景 S3 字面核对只满足 T5 侧。需 master 裁决：补 spike 引用（最小改动）或在 sprint 文档追加口径记录（由 S3-T3/T7、S6-T7 在实现层强制）。
-- **G2**：[validation.md §7.3 第 3 条](../contracts/validation.md)（L270）宣称「T4 spike 与 T5 API 契约引用…同一版本标识」——前半句与实际不符（spike 未引用），与 G1 同源。
-- **G3**：`ddl_smoke.test.mjs` 未登记进 AGENTS.md `### gates`：[storage-model §8](../contracts/storage-model.md)（L352）、[api.md §12](../contracts/api.md) T6 行均「建议 T6 登记」，T6 实际只登记 2 条命令。本次复跑证明该命令可运行（14/14）。是否补登记由 master 裁决（登记本身只需改 AGENTS.md gates 小节）。
+- **G1（场景 S3，见 §3）**：**已处置**（2026-10-12，master 裁决方案①，commit `700e1bb`）。初核记录：route-b spike（T4 承接方）无 `rules-version.json`/版本号引用，场景 S3 字面核对只满足 T5 侧。处置内容：README 与 hook 顶部注释引用 `docs/contracts/rules-version.json`@1.0.0-draft.1；hook 运行时读 manifest + 内置常量一致性断言（漂移即拒绝）+ pre-receive 报告行透出 `rulesVersion`；B1–B7 复跑 7/7（2026-10-12T14:48Z）。spike 保持 THROWAWAY；manifest 驱动的完整校验仍属 S3-T3。
+- **G2**：**已处置**（随 G1，2026-10-12）。初核记录：[validation.md §7.3 第 3 条](../contracts/validation.md)（L270）宣称「T4 spike 与 T5 API 契约引用…同一版本标识」——前半句与当时实际不符。处置后 spike 已实际引用同一 manifest 与版本（commit `700e1bb`），该表述与事实一致，validation.md 无需改动。
+- **G3**：`ddl_smoke.test.mjs` 未登记进 AGENTS.md `### gates`：[storage-model §8](../contracts/storage-model.md)（L352）、[api.md §12](../contracts/api.md) T6 行均「建议 T6 登记」，T6 实际只登记 2 条命令。本次复跑证明该命令可运行（14/14）。**已处置**：master 于 2026-10-12 补登第三条 gate「storage」（AGENTS.md `### gates`，commit `f504744`）。
 - **G4**：[backup-recovery §4](../contracts/backup-recovery.md) 步骤 8「校验命令随 T6 gates 固化」未兑现——gates 无备份件校验命令。备份件本身 S8 才产生，命令无法先测；属文档预期与 T6 实际交付的偏差，建议随 S8-T4 落地或在 backup 契约改标归属。
 - **G5**：T3 遗留「5 项 Minor」（DB 引擎相关标「待 T1」、恢复演练证据留 S8）按 sprint 计划 T3 行记载仅存于 worker 报告（dispatch `ctx_7a964742de70`），**仓库内无对应文档，本次无法复核其内容**。建议 master 决定是否落档进仓库（或随 S2/S8 任务化吸收）。
 - **G6**：sprint 计划 T6 行记载「gates-evidence.md 206 行」，实测 **201 行**（文件自 9ec5650 落地后无改动，`git log --follow` 单提交）。行数记载与实物不符（内容完整性不受影响）。
@@ -149,6 +149,14 @@ AGENTS.md gates 两条命令（contracts / tests）均已由本次独立复跑�
 
 ## 7. 结论与移交
 
-- S1 完成标准四条：**三条满足并附 fresh 证据**（七问有记录、不依赖外部平台、可演示服务端拒绝 push），「Git 接入与 Web 发布能共用规则」**按场景 S3 字面为部分满足**（api.md 侧机器核对通过；spike 侧缺版本引用，G1/G2），契约与机制层（单一来源、共用发布组件检查点、S3/S6 强制路径）完整。是否视为达标及 G1–G8 处置，交 master 验收裁决。
-- 本报告为独立核对：三条命令全部本机真实复跑（82/82、7/7、14/14，exit 0）；除本文件外零文件改动；未 push；**不宣称 E1 DoD（含 DOD-05）任何条目完成**。
-- 移交 master：① G1–G8 逐项裁决（G1/G2 为场景 S3 收口口径；G3/G4 为 gates 登记面；G5 为 T3 遗留落档）；② T8 勾选与 sprint state 变更；③ S2 启动前置核对（implementation-breakdown §2.1：S1 整体验收为最后剩余项）。
+- S1 完成标准四条：**四条全部满足并附 fresh 证据**（七问有记录、不依赖外部平台、可演示服务端拒绝 push；「共用规则」经 G1/G2 处置后满足——spike 与 api.md 引用同一 `rules-version.json`@1.0.0-draft.1，B1–B7 复跑 7/7，2026-10-12）。契约与机制层（单一来源、共用发布组件检查点、S3/S6 强制路径）完整。
+- 本报告为独立核对：三条命令全部本机真实复跑（82/82、7/7、14/14，exit 0）；除本文件及 G1/G2 处置授权的 spike 两文件（commit `700e1bb`）外零文件改动；未 push；**不宣称 E1 DoD（含 DOD-05）任何条目完成**。
+- 移交 master：① G4–G8 逐项裁决（G4 备份校验命令归属、G5 T3 遗留落档、G6/G7 文档字面修订、G8 epic 行补记——G1/G2/G3 已处置）；② T8 勾选与 sprint state 变更；③ S2 启动前置核对（implementation-breakdown §2.1：S1 整体验收为最后剩余项）。
+
+## 8. 修订记录
+
+| date | change | evidence |
+|---|---|---|
+| 2026-10-12 | 初版：S1-T8 收口核对（七问核对、三条命令 fresh 复跑、T1–T7 证据清单、G1–G8 缺口清单） | commit `15f45d8`（master 并入 `aa40e61`） |
+| 2026-10-12 | G1/G2 处置（master 裁决方案①）：route-b spike README 与 hook 补 `docs/contracts/rules-version.json`@1.0.0-draft.1 引用 + manifest 一致性断言 + 报告行透出 rulesVersion；B1–B7 复跑 7/7；§3/§4/§6/§7 相应更新 | spike commit `700e1bb` + 本报告修订提交 |
+| 2026-10-12 | G3 处置（master）：ddl_smoke 补登为 AGENTS.md gates 第三条（storage） | commit `f504744` |
