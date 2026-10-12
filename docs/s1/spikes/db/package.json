@@ -1,0 +1,9 @@
+{
+  "name": "s1-t1-db-spike",
+  "private": true,
+  "type": "module",
+  "description": "THROWAWAY spike for S1-T1 DB comparison (SQLite vs PostgreSQL). Not product code.",
+  "dependencies": {
+    "pg": "^8.13.0"
+  }
+}

@@ -1,0 +1,10 @@
+✔ P1: concurrent UPDATEs on different rows both commit (MVCC) (27.267708ms)
+✔ P2: pg_dump under concurrent writes restores to a consistent copy (1026.590167ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1103.387208

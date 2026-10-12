@@ -1,0 +1,11 @@
+✔ S1: without busy_timeout, a concurrent writer fails SQLITE_BUSY (hazard) (629.151542ms)
+✔ S2: WAL + busy_timeout=5000 -> both concurrent writers succeed (657.895541ms)
+✔ S3+S4: VACUUM INTO while writer commits -> consistent backup, passes integrity_check, serves reads (982.97125ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2304.386542
