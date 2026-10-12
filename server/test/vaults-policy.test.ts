@@ -32,13 +32,12 @@ test('vaultRepoPath：安全整数边界内接受（含 MAX_SAFE_INTEGER）', ()
 
 test('branchWriteRules 默认形态：main 快进、禁 force、禁删除默认分支、main_admin_only 默认关', () => {
   const rules = branchWriteRules({ default_branch: 'main', main_admin_only: 0 });
-  assert.deepEqual(rules, {
-    defaultBranch: 'main',
-    fastForwardOnly: true,
-    denyForcePush: true,
-    denyDeleteDefault: true,
-    mainAdminOnly: false,
-  });
+  // 逐维度断言（D6 禁全等硬编码——S3-T5 扩展模型字段后整对象 deepEqual 即脆断）
+  assert.equal(rules.defaultBranch, 'main');
+  assert.equal(rules.fastForwardOnly, true);
+  assert.equal(rules.denyForcePush, true);
+  assert.equal(rules.denyDeleteDefault, true);
+  assert.equal(rules.mainAdminOnly, false, '可配置维度默认关（vaults.main_admin_only=0）');
 });
 
 test('branchWriteRules：main_admin_only 开启随库配置生效（可配置维度，架构 §4.3）', () => {
@@ -49,6 +48,6 @@ test('branchWriteRules：main_admin_only 开启随库配置生效（可配置维
   assert.equal(rules.denyDeleteDefault, true);
 });
 
-test('branchWriteRules：default_branch 随库行（初始 main，非默认分支规则不在本模型）', () => {
+test('branchWriteRules：default_branch 随库行（初始 main；非默认分支/命名空间维度自 S3-T5 入模型）', () => {
   assert.equal(branchWriteRules({ default_branch: 'trunk', main_admin_only: 0 }).defaultBranch, 'trunk');
 });

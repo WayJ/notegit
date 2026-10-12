@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseGitSmartRequest, buildRemoteUser, parseRemoteUser, buildCgiEnv } from '../src/githttp/cgi.ts';
 import { vaultRepoDirName } from '../src/vaults/repo-path.ts';
-import { refCommandRejection, ZERO_OID } from '../src/githttp/pre-receive.ts';
 
-// S3-T2 单元测试：CGI 环境组装、Smart HTTP 请求解析、REMOTE_USER 透传格式、
-// pre-receive 逐 ref 授权判定（行为级闭环见 githttp-behavior.test.ts）。
+// S3-T2 单元测试：CGI 环境组装、Smart HTTP 请求解析、REMOTE_USER 透传格式
+// （行为级闭环见 githttp-behavior.test.ts；逐 ref 判定自 S3-T5 起见
+//  githttp-ref-rules.test.ts）。
 
 const sp = (qs: string) => new URLSearchParams(qs);
 
@@ -131,38 +131,5 @@ test('vaultRepoDirName：正整数 → `<id>.git`；注入域与 vaultRepoPath �
   }
 });
 
-// ── pre-receive 逐 ref 授权判定（架构 §4.3；完整行为见 B4）─────────────────
-
-const CFG = (over: Partial<{ defaultBranch: string; mainAdminOnly: boolean; role: 'reader' | 'editor' | 'admin' }>) => ({
-  defaultBranch: 'main',
-  mainAdminOnly: true,
-  role: 'editor' as const,
-  ...over,
-});
-const oid = (c: string) => c.repeat(40);
-const cmd = (ref: string, newOid = oid('a'), oldOid = oid('0')) => ({ ref, oldOid, newOid });
-
-test('refCommandRejection：默认分支——删除全员拒；main_admin_only 下编辑者拒写、管理员放行', () => {
-  assert.match(refCommandRejection(cmd('refs/heads/main', ZERO_OID), CFG({ role: 'admin' }))!, /删除默认分支/);
-  assert.match(refCommandRejection(cmd('refs/heads/main'), CFG({ role: 'editor' }))!, /仅库管理员|main_admin_only/);
-  assert.equal(refCommandRejection(cmd('refs/heads/main'), CFG({ role: 'admin' })), null);
-  assert.equal(refCommandRejection(cmd('refs/heads/main'), CFG({ mainAdminOnly: false })), null);
-});
-
-test('refCommandRejection：非默认分支——编辑者创建/更新/删除均放行；reader 任何写拒', () => {
-  assert.equal(refCommandRejection(cmd('refs/heads/feature/x'), CFG({})), null);
-  assert.equal(refCommandRejection(cmd('refs/heads/feature/x', ZERO_OID), CFG({})), null);
-  assert.equal(refCommandRejection(cmd('refs/heads/feature/x'), CFG({ mainAdminOnly: false })), null);
-  assert.match(refCommandRejection(cmd('refs/heads/feature/x'), CFG({ role: 'reader' }))!, /只读成员/);
-});
-
-test('refCommandRejection：tag 命名空间一律拒（第一版无客户端 tag 写入）', () => {
-  assert.match(refCommandRejection(cmd('refs/tags/v1'), CFG({ role: 'admin' }))!, /tag/);
-  assert.match(refCommandRejection(cmd('refs/tags/v1', ZERO_OID), CFG({ role: 'admin' }))!, /tag/);
-});
-
-test('refCommandRejection：默认分支名取自库配置（非硬编码 main）', () => {
-  const trunk = CFG({ defaultBranch: 'trunk', role: 'editor' });
-  assert.match(refCommandRejection(cmd('refs/heads/trunk'), trunk)!, /仅库管理员|main_admin_only/);
-  assert.equal(refCommandRejection(cmd('refs/heads/main'), trunk), null); // main 在该库只是普通分支
-});
+// ── pre-receive 逐 ref 授权判定已移驻 githttp/ref-rules.ts（S3-T5 单一判定源，
+//    pre-receive 与 update hook 共用）——判定测试见 githttp-ref-rules.test.ts ──
