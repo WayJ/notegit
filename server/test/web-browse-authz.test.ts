@@ -4,7 +4,7 @@ import { browseHarness, seededVault, addEmployee, addMember } from './web-browse
 
 // S4-T1 无权 404 反存在性（breakdown §2.3 完成标准「无权库 URL 直接访问 404（与
 // 不存在一致）」——D-IC-06 页面形态：无权与不存在同状态码同响应体，不泄露库
-// 存在性）+ 预览占位路由族行为。
+// 存在性）+ 预览路由族行为（S4-T2 起为安全渲染页）。
 
 const SEED: Record<string, string> = {
   'README.md': '# 导航\n',
@@ -89,7 +89,7 @@ test('库根 GET /vaults/{slug}：成员 → 302 目录浏览 canonical URL', as
   }
 });
 
-test('预览占位：blob → 200 占位页（名称/大小/占位标注）；tree → 302 browse；缺失 → 404', async () => {
+test('预览路由：blob .md → 200 安全渲染页（名称/大小/正文）；tree → 302 browse；缺失 → 404', async () => {
   const h = await browseHarness();
   try {
     const alice = addEmployee(h.db, { username: 'alice' });
@@ -97,11 +97,14 @@ test('预览占位：blob → 200 占位页（名称/大小/占位标注）；tr
     addMember(h.db, 1, alice, 'editor', alice);
     const headers = h.session(alice);
 
+    // S4-T2 起 view 由安全渲染接管（S4-T1 占位退役）：断言正文渲染与占位标注消失
     const blob = await h.app.inject({ method: 'GET', url: '/vaults/alpha/view/docs/first.md', headers });
     assert.equal(blob.statusCode, 200, blob.body);
     assert.ok(blob.body.includes('first.md'));
-    assert.ok(blob.body.includes('占位'), '如实标注占位（安全渲染属 S4-T2）');
+    assert.ok(!blob.body.includes('占位'), '安全渲染已落地，不再是占位页');
     assert.ok(/大小：\d+ 字节/.test(blob.body), '展示大小元信息');
+    assert.ok(blob.body.includes('正文一'), '.md 正文经安全渲染呈现');
+    assert.ok(!blob.body.includes('title: First'), 'frontmatter 不入正文');
 
     const tree = await h.app.inject({ method: 'GET', url: '/vaults/alpha/view/docs', headers });
     assert.equal(tree.statusCode, 302);
