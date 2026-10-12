@@ -1,8 +1,12 @@
 import path from 'node:path';
+import { unlink } from 'node:fs/promises';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { Writable } from 'node:stream';
 import type { ServerResponse } from 'node:http';
+import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyPluginAsync } from 'fastify';
+import { sweepOrphanedPending } from '../audit/reconciliation.ts';
+import { createPushByteCounter, newPushId, pushBytesFile } from './receive-audit.ts';
 import { authorize, type MembershipSource, type VaultScope } from '../auth/lifecycle.ts';
 import { ApiError, type AuthTokenContext } from '../credentials/service.ts';
 import type { MaintenanceGate } from '../maintenance/gate.ts';
@@ -38,6 +42,9 @@ export interface GitHttpPluginOptions {
   /** HTTP Basic 口令侧 token 认证（凭据域服务；四状态 ApiError 原样上抛） */
   readonly authenticateToken: (token: string) => AuthTokenContext;
   readonly maintenanceGate: MaintenanceGate;
+  /** S3-T6 审计清扫：receive 子进程链退出后，残留 pending 审计行按 pushId 标待核对。
+   *  缺省（无 db 注入的单测形态）跳过清扫——行留待启动清扫。 */
+  readonly db?: DatabaseSync;
 }
 
 /** pack 请求体上限：流式转发不落整包，此为防滥用护栏（资源限制正式值属 S3-T8） */
@@ -110,6 +117,10 @@ export const gitHttpPlugin: FastifyPluginAsync<GitHttpPluginOptions> = async (in
 
     // receive-pack：首个推送请求前完成仓库服务侧准备（幂等）
     const repoPath = vaultRepoPath(opts.dataDir, hit.vaultId);
+    // S3-T6：一次 receive 请求一个 pushId（hook 预记录/终态核对与中断清扫的关联键）
+    const pushId = target.service === 'git-receive-pack' ? newPushId() : undefined;
+    // E-LIMIT-004 计量：chunked 推送无 CONTENT_LENGTH，经计数透传流累计并落盘（hook 读）
+    const bytesFile = pushId === undefined ? undefined : pushBytesFile(repoPath, pushId);
     if (target.service === 'git-receive-pack') {
       await ensureReceiveSetup(repoPath);
     }
@@ -130,6 +141,8 @@ export const gitHttpPlugin: FastifyPluginAsync<GitHttpPluginOptions> = async (in
         NOTEGIT_DB: opts.dbFile,
         NOTEGIT_VAULT_ID: String(hit.vaultId),
         NOTEGIT_VAULT_SLUG: target.slug,
+        NOTEGIT_PUSH_ID: pushId,
+        NOTEGIT_PUSH_BYTES_FILE: bytesFile,
       },
     });
 
@@ -143,9 +156,30 @@ export const gitHttpPlugin: FastifyPluginAsync<GitHttpPluginOptions> = async (in
     });
     child.on('close', () => {
       if (!res.writableEnded) res.end();
+      // S3-T6 中断兜底：推送子进程链已退出，本次 push 仍有 pending 审计行 ⇒ 推送
+      // 未能走到 post-receive 终态核对（receive-pack 被杀/异常退出）——标待核对
+      // （unresolved，S8 恢复对账消费）；pushId 定域，不误伤并发在途推送。
+      if (pushId !== undefined) {
+        if (opts.db !== undefined) {
+          try {
+            const swept = sweepOrphanedPending(opts.db, { pushId, reason: 'receive-aborted' });
+            if (swept > 0) {
+              console.error(`[notegit githttp] vault=${hit.vaultId} push=${pushId} 中断：${swept} 行审计标待核对（unresolved）`);
+            }
+          } catch (err) {
+            console.error(`[notegit githttp] 中断清扫失败（行留待启动清扫）：${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+        if (bytesFile !== undefined) void unlink(bytesFile).catch(() => {});
+      }
     });
     forwardCgiOutput(child, res);
-    req.raw.pipe(child.stdin);
+    if (bytesFile !== undefined) {
+      const counter = createPushByteCounter(bytesFile);
+      req.raw.pipe(counter).pipe(child.stdin); // 计量透传：字节原样转发，终值落盘
+    } else {
+      req.raw.pipe(child.stdin);
+    }
     // 客户端中断：终止子进程链，quarantine 原生保证不落半写状态。
     // 判据用响应侧 'close' + 未完成写入——请求侧 'close' 对无体 GET 在收头后
     // 即触发（destroyed 已置位），不能用作中断信号。

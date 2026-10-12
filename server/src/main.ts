@@ -11,6 +11,7 @@ import type { RequestAuthenticator } from './auth/lifecycle.ts';
 import { loadOrCreatePepper } from './bootstrap/pepper.ts';
 import { ensureBootstrapToken } from './bootstrap/token.ts';
 import { isUninitialized } from './bootstrap/state.ts';
+import { sweepOrphanedPending } from './audit/reconciliation.ts';
 
 /**
  * 启动接线（S2-T1 交接，architecture-notes §3）：open → pragmas（openDatabase 内）→
@@ -45,6 +46,14 @@ export async function startApp(opts: StartOptions = {}): Promise<StartedApp> {
   const db = openDatabase(dbFile); // open + pragmas（WAL / busy_timeout / foreign_keys）
   try {
     migrate(db, MIGRATIONS);
+
+    // S3-T6 启动清扫（storage-model §6 步骤 4 的运行侧锚点）：单进程假设（架构 §9、
+    // backup §3）下启动时不存在在途写——残留 pending 发布行皆上次进程崩溃所留，标
+    // 待核对（unresolved），由 S8 恢复对账按引用实际 OID 定终态（backup §7 步骤 7）。
+    const swept = sweepOrphanedPending(db, { reason: 'startup-orphan' });
+    if (swept > 0) {
+      console.warn(`[notegit] 启动清扫：${swept} 行残留 pending 审计已标待核对（unresolved）`);
+    }
 
     const pepperFile = path.join(dataDir, 'keys', 'token-pepper.key');
     if (!isUninitialized(db) && !existsSync(pepperFile)) {
