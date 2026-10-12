@@ -111,6 +111,7 @@
 
 #### GET /api/v1/admin/employees
 - 成功：200 `{employees: [{username, display_name, active, is_instance_admin, created_at}], next_cursor}`。
+- 错误：403 E-AUTHZ-001（非实例管理员）。
 
 #### POST /api/v1/admin/employees（写：邀请创建）
 - 请求：`{username, display_name}`。第一版无自助注册（identity §2）。
@@ -141,6 +142,7 @@
 
 #### GET /api/v1/credentials
 - 成功：200 `{credentials: [{id, name, display_hint, scope_access, scope_vaults, created_at, expires_at, revoked_at, last_used_at}]}`（`display_hint` 形如 `ngt_ab…wxyz`）。
+- 错误：401（通用，§1）。
 
 #### POST /api/v1/credentials（写）
 - 请求：`{name, expires_at, scope: {access: "read"|"read_write", vaults: [<slug 清单>]}}`（scope 可省 = read_write + 全部有权库；只能收窄，identity §3.4）。
@@ -165,6 +167,7 @@
 
 #### GET /api/v1/vaults
 - 成功：200：**仅**当前员工有成员关系的库（`{slug, name, role, default_branch, main_admin_only}`，未授权库不进列表，架构 §4.2）。
+- 错误：401（通用，§1）；列表本身不产生 404（无权库不出现而非报错）。
 
 #### GET /api/v1/vaults/{slug}
 - 成功：200（同上单库）。错误：404 E-RES-001（无成员关系或不存在）。
