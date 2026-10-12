@@ -38,7 +38,7 @@ test('空库 ensure：写 0600 token 文件 + 插入未用 bootstrap 行（hmacv
     assert.match(token, /^[A-Za-z0-9_-]{43}$/); // 32B base64url（identity §7.1 K5）
     assert.equal(unusedBootstrapRows(db), 1);
     const row = db.prepare("SELECT token_hash, expires_at FROM one_time_tokens WHERE purpose='bootstrap'").get() as { token_hash: string; expires_at: string };
-    assert.match(row.token_hash, /^hmac1\$[0-9a-f]{64}$/); // 不存明文（D-IC-03 同则）
+    assert.match(row.token_hash, /^hmacv1\$[0-9a-f]{64}$/); // 不存明文（D-IC-03 同则；hmacv1$ 与凭据域统一，S2-T5 收尾 a）
     assert.equal(new Date(row.expires_at).getTime(), new Date('2026-10-12T00:00:00Z').getTime() + BOOTSTRAP_TOKEN_TTL_MS);
     db.close();
   } finally {

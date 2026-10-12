@@ -7,7 +7,8 @@ import path from 'node:path';
  * K1 pepper（identity §6.1）：32B 随机、/data/keys/token-pepper.key（0600）、首次初始化自动生成。
  * 文件为版本化列表（identity §6.2）：{active, retired[]}；retired 仅校验用，轮换/rehash-on-use
  * 随 S2-T4 落地，本模块当前只消费 active。一次性令牌哈希与其同源（storage-model §3.9 注，
- * D-IC-03 同则）：存储串 `hmac<pepper版本>$<hex>`。
+ * D-IC-03 同则）：存储串 `hmacv<pepper版本>$<hex>`——与凭据域 hashToken 同一拼写
+ * （identity §3.2 唯一契约形态；S2-T5 收尾 a 统一，此前本模块误用 hmac<版本>$）。
  */
 
 export interface PepperKey {
@@ -56,8 +57,8 @@ function fromJson(j: PepperFileJson): PepperFile {
   };
 }
 
-/** 以 active 键计算存储哈希 `hmac<version>$<hex>`（identity §3.2：内嵌 pepper 版本）。 */
+/** 以 active 键计算存储哈希 `hmacv<version>$<hex>`（identity §3.2：内嵌 pepper 版本）。 */
 export function hmacTokenHash(pepper: PepperFile, token: string): string {
   const digest = createHmac('sha256', pepper.active.key).update(token, 'utf8').digest('hex');
-  return `hmac${pepper.active.version}$${digest}`;
+  return `hmacv${pepper.active.version}$${digest}`;
 }
