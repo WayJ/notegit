@@ -1,0 +1,26 @@
+{
+  "name": "notegit-validation",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Notegit shared content validator — code embodiment of docs/contracts/validation.md (single source for pre-commit hook / pre-receive / web-submit)",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "notegit-validation": "./bin/notegit-validation.ts"
+  },
+  "scripts": {
+    "test": "tsc --noEmit && node --test"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}

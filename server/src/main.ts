@@ -11,6 +11,8 @@ import type { RequestAuthenticator } from './auth/lifecycle.ts';
 import { loadOrCreatePepper } from './bootstrap/pepper.ts';
 import { ensureBootstrapToken } from './bootstrap/token.ts';
 import { isUninitialized } from './bootstrap/state.ts';
+import { sweepOrphanedPending } from './audit/reconciliation.ts';
+import { sweepVaultResidue } from './gitrepo/hygiene.ts';
 
 /**
  * 启动接线（S2-T1 交接，architecture-notes §3）：open → pragmas（openDatabase 内）→
@@ -46,6 +48,24 @@ export async function startApp(opts: StartOptions = {}): Promise<StartedApp> {
   try {
     migrate(db, MIGRATIONS);
 
+    // S3-T6 启动清扫（storage-model §6 步骤 4 的运行侧锚点）：单进程假设（架构 §9、
+    // backup §3）下启动时不存在在途写——残留 pending 发布行皆上次进程崩溃所留，标
+    // 待核对（unresolved），由 S8 恢复对账按引用实际 OID 定终态（backup §7 步骤 7）。
+    const swept = sweepOrphanedPending(db, { reason: 'startup-orphan' });
+    if (swept > 0) {
+      console.warn(`[notegit] 启动清扫：${swept} 行残留 pending 审计已标待核对（unresolved）`);
+    }
+
+    // S3-T8 库目录残留清理（listen 前——单进程假设下启动无在途写，三类残留
+    // 皆上次进程生命周期所留：notegit-push-*.bytes 计数文件 / objects/incoming-*
+    // 隔离目录 / 拒绝发布残留的无引用松对象 git prune——E-LIMIT-005 容量口径回收）
+    const hygiene = await sweepVaultResidue(dataDir);
+    if (hygiene.bytesFiles + hygiene.quarantineDirs + hygiene.prunedRepos > 0) {
+      console.warn(
+        `[notegit] 启动清理：${hygiene.bytesFiles} 个推送计量残留、${hygiene.quarantineDirs} 个隔离目录、${hygiene.prunedRepos} 个库执行松对象 prune`,
+      );
+    }
+
     const pepperFile = path.join(dataDir, 'keys', 'token-pepper.key');
     if (!isUninitialized(db) && !existsSync(pepperFile)) {
       // 已有账号却无 pepper：重生成会静默废掉全部已存哈希——大声失败，走备份恢复（identity §6.1）
@@ -60,6 +80,8 @@ export async function startApp(opts: StartOptions = {}): Promise<StartedApp> {
       db,
       pepper,
       bootstrapTokenFile,
+      dataDir, // S3-T1：建库端点真实 init bare 于 <dataDir>/git/<id>.git
+      dbFile, // S3-T2：/git 入口透传 NOTEGIT_DB 给 pre-receive hook 直连
       authenticateRequest: opts.authenticateRequest,
       hashPassword: opts.hashPassword,
     });

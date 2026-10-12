@@ -50,7 +50,7 @@ test('迁移 0006：schema_version 引导行不在迁移内容中（runner 持�
 test('迁移 0006：在 v4 之上应用，audit_events 表/列/索引落地，重入跳过', () => {
   const db = memory();
   const first = migrate(db, MIGRATIONS);
-  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6]);  // 集成修正：0005（T6）已插于 4 与 6 之间
+  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0007（T8 app_settings）已并入
 
   const cols = (db.prepare('PRAGMA table_info(audit_events)').all() as { name: string }[]).map((c) => c.name);
   assert.deepEqual(cols.sort(), [
@@ -68,7 +68,7 @@ test('迁移 0006：在 v4 之上应用，audit_events 表/列/索引落地，�
 
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6]);  // 集成修正：0005（T6）已并入
+  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0007（T8 app_settings）已并入
   db.close();
 });
 

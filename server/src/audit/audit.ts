@@ -39,7 +39,9 @@ export interface AuditSubjectRef {
   readonly employeeId: number;
   /** credential:<id> / session:<id>（DDL 注释契约：不含任何 token 材料） */
   readonly carrierRef: string;
-  readonly entry: 'web' | 'api';
+  /** 入口（identity §8）：Git Smart HTTP 入口自 S3-T5 起以 'git' 归因（Basic →
+   *  token 载体，carrierRef 仍为 credential:<id>） */
+  readonly entry: AuditEntryKind;
 }
 
 export interface AuditEventInput {
@@ -78,7 +80,8 @@ function maskGuard(field: string, text: string): void {
   }
 }
 
-function guardDetail(detail: Record<string, unknown>): string {
+/** detail 脱敏 + JSON 序列化（S3-T6 起导出：终态合并路径复用同一守卫） */
+export function guardDetail(detail: Record<string, unknown>): string {
   maskGuard('detail', JSON.stringify(detail));
   const walk = (obj: Record<string, unknown>): void => {
     for (const [key, value] of Object.entries(obj)) {

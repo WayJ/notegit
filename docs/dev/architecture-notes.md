@@ -191,3 +191,38 @@ storage-model §5 event_kind 注册表是事件清单唯一源（D6 只读），
 1. api.md 补录维护端点（§8.2）——coordinator 台账挂账，随 S3 的 api.md 修订闭环。
 2. S3 消费面：pre-receive / Web 发布组件经 `recordAuditEvent(pending)` → update-ref → `settleAuditEvent`；执行点复查叠加维护标志（§7.5 预留位）；audit.chain 查询随恢复对账（backup §7 步骤 7）。
 3. `employee.password_reset` 的管理员触发端点（api.md §3.1 POST …/password-reset）尚未实现（非本任务面）；落地时按 §8.4 形态挂接。
+
+## 9. S3-T3 决策记录（共享校验器 packages/validation）
+
+日期：2026-10-13（S3-T3，Orca dispatch `ctx_f8b5c8acfe64`）。本节登记共享校验器包的选型与实现语义；契约语义唯一来源仍是 docs/contracts/validation.md（只读消费），此处只记录契约未逐字规定、由本任务定稿的部分。测试基线：packages/validation 92 用例（含 7 份契约示例逐份复现）+ server 3 用例构建断言，根 npm test 337 全绿。
+
+### 9.1 选型
+
+| 决策 | 内容与理由 |
+|---|---|
+| rulesVersion 来源 | **运行时读取** docs/contracts/rules-version.json（任务二选一：运行时读取 vs 构建期内联+断言）。理由：本仓无构建步骤（tsc --noEmit + Node 24 type stripping 直跑 .ts），「构建期」不存在；运行时读文件保持 manifest 为唯一机器来源，一致性由测试对同一文件运行时比对保证（D6：无硬编码版本号）。部署期打包（S8）需将 contracts 目录随包分发或改内联，留 S8 定稿。 |
+| YAML 解析 | **`yaml` 2.9.1（唯一新增运行时依赖，--save-exact）**。安全子集以 AST 层实现：`parseDocument` + 自走查（uniqueKeys:false）检测重复键/锚点/别名/合并键/自定义 tag（core tag 白名单外 URI 与 `!short` 形态均拒）；不用 uniqueKeys:true 是因为需要重复键的字段名与行号（库报错不含）。资源常量在走查中同程计量：块 ≤64KiB、节点 ≤1000（pair/键/值/集合每节点计数）、深度 ≤8（集合层数，根=1）。 |
+| 测试零依赖 | 沿用 S2-T1「零测试依赖」：**不引 ajv**，测试内嵌 JSON Schema 子集校验器（test/helpers/schema-check.ts，覆盖本 schema 用到的 type/required/properties/enum/const/pattern/minLength/minimum/items/allOf/if-then/$ref）；先对 6 份契约示例自证再校验实现产出。 |
+| glob | 自实现最小匹配器（`*` 单段、`?` 单字符、`**` 跨段）。无 `/` 的模式按**文件名**匹配任意目录（.gitignore 式——`docs/.gitattributes` 需命中默认清单）；模式匹配大小写**敏感**（契约仅规定 README 与扩展名匹配不敏感）。 |
+| 包接线 | exports `.` → `src/index.ts`；Node 24 经 node_modules 符号链接加载 .ts（spike 实测可行，tsc 7.0.2 接受）；server 显式声明依赖 `notegit-validation@0.0.0`（workspace 解析），构建断言测试即 server 侧 import + rulesVersion 比对（sprint D7）。CLI 入口 bin/notegit-validation.ts：stdin 读 ValidateInput JSON → stdout 报告 JSON → 按报告 exitCode 退出。 |
+
+### 9.2 判定语义定稿（契约未逐字规定处）
+
+1. **短路链**（单文件）：危险 tree 条目（symlink/gitlink/非法 mode/.git 系）→ 整条拒绝，不做路径/类型/内容判定（示例 3：evil-link 无扩展名但只报 E-PATH-002）；路径形状违规 → 仅 E-PATH-001；文档超限 → 仅 E-LIMIT-001 且不解析内容（资源防护）；缺 frontmatter 块（E-FM-001）→ 不再产生链接 warning（示例 6 warningCount=0）。
+2. **E-FM-002 覆盖面**：YAML 语法错误、未闭合块、**顶层非映射**（合法 YAML 但形状不符）、内容非有效 UTF-8（注册表无编码专属码，取最近语义；TextDecoder fatal 探测）。
+3. **`<<` 合并键**：任何值为 `<<` 的映射键即拒（含引号形态——严于 YAML 规范的 plain-only 语义，防规避）。
+4. **E-FM-003 行号**：title 缺失=块内首个内容行（空块=第 2 行）；空白 title=title 键所在行。E-FM-004/005/009=违规字段键行；E-FM-006=重复键行；E-FM-007=首个不安全构造（单条 issue，防多构造刷屏）。
+5. **E-PATH-004 范围**：同一提交的**变更路径集**内比对（契约「同一提交内」字面）；跨存量 tree 的大小写冲突基线检查留 T4 扩展（当前 API 未接收逐提交全 tree 列表）。pre-commit/web-submit 在 files 集合内比对。
+6. **E-LIMIT-004/005 落位**：顶层 `issues[]`、每受影响 ref 一条（schema issue.ref 字段即为此设计）；pushBytes/vaultCurrentBytes 由消费方计量传入（口径=打包对象字节，T4/T6 落地时确认，契约 §9 开放项）。
+7. **special 文件无容量规则**：契约只定义文档（E-LIMIT-001）与附件（E-LIMIT-003）限额，specialFilePatterns 命中者两者皆不适用——留 T8 容量任务复核（若需限额属 B1 变更走契约修订）。
+8. **运行时限制**：超时=阶段边界协作检查（可注入 clock；骨架检查点产出的 E-RUN-001 定位首个 ref，复现示例 5）；内存=入口 RSS 对 maxValidationMemoryMb（近似上界——进程 RSS 含 Node 基线，默认 256MiB 不误伤）；并发=createValidator 实例级信号量、超限立即 E-RUN-001（validate() 单发入口不带并发——并发是实例运行态）；运行错误报告 files 恒为 []（不做部分判定，与示例 5 一致）。
+9. **frontmatter 提取**：首行/闭合行 trimEnd 容忍 CRLF 与尾随空白；UTF-8 BOM 剥离；行号一律折算为文档内 1 起始行号（链接行 +closeLine 偏移）。
+10. **W-LINK-101 提取**：正则级 Markdown 链接（inline/image/reference 定义，含 `<>` 空格形态）；外部 scheme/协议相对/纯锚点跳过；`/` 起始按库根解析；目录链接以「其下存在文件」判存在。漏检只影响 warning（不阻断），可接受——不引 CommonMark 解析器。
+11. **消息文案**：代码渲染注册表 §6.2 模板（与契约表逐字一致，测试对 validation.md 运行时解析交叉核对）；契约示例的消息为人工润色（含上下文建议），复现对比剥离 message、全等比较其余字段（定位字段/actual/expected/limit/limitKey/summary/refs/outcome/exempt）。
+
+### 9.3 移交与欠账
+
+1. T4（pre-receive）：refs/commits 输入由 git 遍历组装（合并提交按父展开、根提交全检）；E-PATH-004 全 tree 基线、tag ref 处置（契约 §1「第一版不提供 tag 写入」）属 T4/T5 面。
+2. T7（发布组件）：web-submit scope 已可用（候选提交条目 + commit/vaultId 透传）；「保留草稿」是调用方（Web 层）消费 fail 报告的行为。
+3. T8（容量）：validation-defaults 全键已可经 config 覆盖（withOverrides，E-LIMIT 测试含收紧/放宽用例）；Q7 建议值校正后走契约 changelog（B1/B2）。
+4. CLI stdin 挂起（无管道输入时不退出）留 S6 hook 集成时定稿（hook 恒管道输入）。
