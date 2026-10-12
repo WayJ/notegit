@@ -1,0 +1,32 @@
+{
+  "contract": "notegit-validation",
+  "rulesVersion": "1.0.0-draft.1",
+  "status": "draft",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "effectiveDate": "2026-10-12",
+  "supersedes": null,
+  "baseline": {
+    "architecture": "architecture.md §5、§9（v0.2，2026-10-12，commit 81777db）",
+    "task": "S1-T2",
+    "questions": ["Q4", "Q7"]
+  },
+  "artifacts": {
+    "contract": "validation.md",
+    "frontmatterSchema": "schemas/frontmatter.schema.json",
+    "reportSchema": "schemas/validation-report.schema.json",
+    "defaults": "validation-defaults.json"
+  },
+  "changelog": [
+    {
+      "version": "1.0.0-draft.1",
+      "date": "2026-10-12",
+      "changes": [
+        "初始草案：六字段 title-only frontmatter 规则与 YAML 安全子集（架构 §5.1）",
+        "README 豁免与文档判定规则（架构 §5.2）",
+        "路径/tree/附件/容量限制与建议默认值（架构 §9，Q7 待基准校正）",
+        "结构化错误协议：错误码注册表、报告 JSON 形状、退出码 0/1/2（架构 §5.3/§5.4）",
+        "SemVer 版本化与三端引用机制（Q4）：本文件为版本号唯一机器来源"
+      ]
+    }
+  ]
+}

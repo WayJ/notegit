@@ -1,0 +1,36 @@
+{
+  "$comment": "示例 2/5：本地 pre-commit 校验失败——同一批暂存文件『部分通过、部分失败』。架构 §5.3：title 为空阻断；§5.4：退出非零并给出文件、规则与修正提示。本地校验读取暂存区而非工作目录（§5.4）。",
+  "rulesVersion": "1.0.0-draft.1",
+  "scope": "pre-commit",
+  "result": "fail",
+  "exitCode": 1,
+  "summary": {
+    "filesTotal": 2,
+    "filesPassed": 1,
+    "filesFailed": 1,
+    "errorCount": 1,
+    "warningCount": 0
+  },
+  "files": [
+    {
+      "path": "docs/finance/report-q3.md",
+      "status": "pass",
+      "issues": []
+    },
+    {
+      "path": "docs/finance/forecast.md",
+      "status": "fail",
+      "issues": [
+        {
+          "severity": "error",
+          "code": "E-FM-003",
+          "rule": "frontmatter.title_required",
+          "message": "docs/finance/forecast.md：title 缺失或去空白后为空（第 2 行）；请填写非空标题，例如「2026 Q3 财务预测」。",
+          "line": 2,
+          "field": "title",
+          "expected": "去空白后非空的字符串（≤200 字符）"
+        }
+      ]
+    }
+  ]
+}

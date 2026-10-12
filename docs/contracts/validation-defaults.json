@@ -1,0 +1,68 @@
+{
+  "status": "suggested",
+  "note": "全部为建议值·待基准校正（roadmap Q7：S1 提议可配置值，S3 实现期与 S8 用实际基准校正）。判定型（kind=verdict）改变默认配置下的内容接受集或安全边界；运维型（kind=operational）只影响校验运行的资源行为，不改变接受集判定。两类默认值的版本化级别见 validation.md §7。",
+  "adminConfigurable": {
+    "validation.limits.maxDocumentBytes": {
+      "default": 1048576,
+      "unit": "bytes",
+      "kind": "verdict",
+      "basis": "架构 §9 文档大小限制；1 MiB 覆盖纯文本 Markdown 知识文档（建议值，待校正）"
+    },
+    "validation.limits.maxAttachmentBytes": {
+      "default": 10485760,
+      "unit": "bytes",
+      "kind": "verdict",
+      "basis": "架构 §9 附件大小限制；10 MiB 覆盖图像与小型 PDF（建议值，待校正）"
+    },
+    "validation.limits.attachmentAllowedExtensions": {
+      "default": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"],
+      "unit": "extension-list",
+      "kind": "verdict",
+      "basis": "架构 §5.2/§9 类型规则；svg 默认排除——可内嵌脚本属安全边界，放宽为 MAJOR 变更（建议清单，待校正）"
+    },
+    "validation.limits.maxPushBytes": {
+      "default": 52428800,
+      "unit": "bytes",
+      "kind": "verdict",
+      "basis": "架构 §9 单次 push 大小限制；50 MiB（建议值，待校正）"
+    },
+    "validation.limits.vaultCapacityBytes": {
+      "default": 5368709120,
+      "unit": "bytes",
+      "kind": "verdict",
+      "basis": "架构 §9 库容量限制；5 GiB（建议值，待校正）"
+    },
+    "validation.exemptions.additionalNavPatterns": {
+      "default": [],
+      "unit": "glob-list",
+      "kind": "verdict",
+      "basis": "架构 §5.2 管理员可增加导航/特殊文件豁免；默认空（建议，待校正）"
+    },
+    "validation.exemptions.specialFilePatterns": {
+      "default": [".gitignore", ".gitattributes"],
+      "unit": "glob-list",
+      "kind": "verdict",
+      "basis": "架构 §5.2 配置文件不套用 frontmatter 但仍受路径/类型/容量规则；默认最小清单（建议，待校正）"
+    }
+  },
+  "runtime": {
+    "validation.runtime.validationTimeoutMs": {
+      "default": 10000,
+      "unit": "ms",
+      "kind": "operational",
+      "basis": "架构 §9 校验进程时间限制；单次校验运行 10 s（建议值，待校正），超时→E-RUN-001/退出码 2，不产生内容判定"
+    },
+    "validation.runtime.maxConcurrentValidations": {
+      "default": 4,
+      "unit": "count",
+      "kind": "operational",
+      "basis": "架构 §9 并发限制；单实例 4（建议值，待校正）"
+    },
+    "validation.runtime.maxValidationMemoryMb": {
+      "default": 256,
+      "unit": "MiB",
+      "kind": "operational",
+      "basis": "架构 §9 内存限制；单次校验 256 MiB（建议值，待校正）"
+    }
+  }
+}

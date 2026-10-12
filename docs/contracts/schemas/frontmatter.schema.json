@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://notegit.local/contracts/schemas/frontmatter.schema.json",
+  "title": "Notegit 知识文档 frontmatter（title-only 必填）",
+  "description": "架构 §5.1 六字段的机器可读定义。仅 title 必填；额外字段允许（additionalProperties=true），但其值仍受 YAML 安全子集约束（见 validation.md §3，YAML 层规则不在本 schema 表达）。长度/数量上限为版本化常量（T2 建议值），随 rulesVersion 变更，不由管理员配置覆盖。",
+  "$comment": "$id 使用占位域名 notegit.local；T1 选型定案后由实现方在分发物中固定真实 $id 并保持本文件路径不变。",
+  "type": "object",
+  "properties": {
+    "title": {
+      "$comment": "必填；去空白后非空（架构 §5.1）。pattern 要求至少一个非空白字符；缺失或仅空白→E-FM-003；类型错误→E-FM-004；超长→E-FM-009。",
+      "type": "string",
+      "pattern": "\\S",
+      "maxLength": 200
+    },
+    "owner": {
+      "$comment": "可选；知识负责人，不等同于最后修改人（架构 §5.1）。类型错误→E-FM-004；超长→E-FM-009；缺失仅提示→W-FM-101。",
+      "type": "string",
+      "maxLength": 100
+    },
+    "description": {
+      "$comment": "可选；简短摘要（架构 §5.1）。类型错误→E-FM-004；超长→E-FM-009；缺失仅提示→W-FM-101。",
+      "type": "string",
+      "maxLength": 500
+    },
+    "tags": {
+      "$comment": "可选；字符串列表（架构 §5.1）。类型错误→E-FM-004；元素/数量/重复超限→E-FM-009。",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "status": {
+      "$comment": "可选；active/draft/deprecated，缺省按 active 解释（架构 §5.1）。缺省语义由校验器解释，不回写文件。非法值→E-FM-005；类型错误→E-FM-004。",
+      "enum": ["active", "draft", "deprecated"]
+    },
+    "source": {
+      "$comment": "可选；原始资料或依据（架构 §5.1）。类型错误→E-FM-004；超长→E-FM-009；缺失仅提示→W-FM-101。",
+      "type": "string",
+      "maxLength": 500
+    }
+  },
+  "required": ["title"],
+  "additionalProperties": true
+}
