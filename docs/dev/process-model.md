@@ -9,7 +9,7 @@
 
 ## 2. Git 请求 = 每请求一个子进程
 
-- 每个 Git HTTP 请求由应用进程 **spawn 一个 `git http-backend` CGI 子进程**（路线 B，D10）。子进程链（http-backend → upload-pack/receive-pack）是短生命周期 CPU 脉冲，selection §2 实测：单请求子进程链峰值 RSS 合计约 17MB。
+- 每个 Git HTTP 请求由应用进程 **spawn 一个 `git http-backend` CGI 子进程**（路线 B，D10）。子进程链（http-backend → upload-pack/receive-pack）是短生命周期 CPU 脉冲，selection §5（内存行）实测：单请求子进程链峰值 RSS 合计约 17MB。
 - **必须异步 spawn**（`node:child_process` 的异步 API）：S1 spike 两次复现并定根因——对自家 HTTP 服务同步 spawn（`execFileSync` 阻塞事件循环）会造成自死锁。此约束进入 S3 Git 接入实现的 checklist。
 - 子进程是请求作用域的：不持有任何权威状态（权限、凭据、会话都在应用进程与数据库内）。应用进程是唯一的协调者。
 
