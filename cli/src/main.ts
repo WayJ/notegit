@@ -3,6 +3,8 @@ import process from 'node:process'
 import { COMMANDS, COMMAND_ORDER, type CommandSpec } from './commands.ts'
 import { VERSION } from './version.ts'
 import { EXIT_ERROR, EXIT_OK } from './exit-codes.ts'
+import { runLogin } from './login.ts'
+import { runCredentialHelper } from './credentials.ts'
 
 function topHelp(): string {
   const lines = [
@@ -34,7 +36,7 @@ function commandHelp(cmd: CommandSpec): string {
     '',
     '说明：',
     `  ${cmd.detail}`,
-    `  状态：尚未实现（${cmd.status}）。`,
+    `  状态：${cmd.implemented === true ? `已实现（${cmd.status}）` : `尚未实现（${cmd.status}）`}`,
     '',
     '选项：',
     ...cmd.options.map((o) => `  ${o}`),
@@ -45,7 +47,7 @@ function commandHelp(cmd: CommandSpec): string {
 }
 
 /** 解析 argv 并执行；返回进程退出码（0/1/2，见 exit-codes.ts）。 */
-export function run(argv: string[]): number {
+export async function run(argv: string[]): Promise<number> {
   const [first, ...rest] = argv
   if (first === undefined) {
     process.stderr.write('notegit: 未提供命令。运行 notegit --help 查看用法。\n')
@@ -63,6 +65,15 @@ export function run(argv: string[]): number {
     process.stderr.write(`notegit: 未知选项：${first}（notegit --help 查看用法）\n`)
     return EXIT_ERROR
   }
+  if (first === 'credential') {
+    // 内部命令：git credential-helper 协议后端（不进帮助；由 login 注册的配置调用）
+    const verb = rest[0]
+    if (verb !== 'get' && verb !== 'store' && verb !== 'erase') {
+      process.stderr.write('notegit credential: 需要动词 get|store|erase（git credential-helper 协议；内部命令）\n')
+      return EXIT_ERROR
+    }
+    return await runCredentialHelper(verb)
+  }
   const cmd = COMMANDS[first]
   if (cmd === undefined) {
     process.stderr.write(`notegit: 未知命令：${first}（notegit --help 查看可用命令）\n`)
@@ -72,6 +83,7 @@ export function run(argv: string[]): number {
     process.stdout.write(commandHelp(cmd))
     return EXIT_OK
   }
+  if (cmd.name === 'login') return await runLogin(rest)
   process.stderr.write(`notegit ${cmd.name}: 尚未实现（${cmd.status}）\n`)
   return EXIT_ERROR
 }

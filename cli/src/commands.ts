@@ -4,6 +4,8 @@
  */
 export interface CommandSpec {
   name: string
+  /** 已实现命令渲染「已实现」状态行；缺省 = 占位（尚未实现）。 */
+  implemented?: boolean
   summary: string
   status: string
   usage: string
@@ -16,9 +18,14 @@ export const COMMANDS: Record<string, CommandSpec> = {
     name: 'login',
     summary: '登录并配置员工凭据（安全存储 / Git credential helper）',
     status: 'S6-T2 交付',
-    usage: 'notegit login [<server>]',
-    detail: '获取、配置员工凭据并交给操作系统安全存储或 Git credential helper；凭据不写入 remote URL、仓库文件或日志。',
-    options: ['-h, --help  输出本帮助'],
+    implemented: true,
+    usage: 'notegit login <server> [--username <用户名>]',
+    detail: '交互或参数提供用户名与访问令牌（ngt_，网页端「查看访问凭据」创建）；令牌仅经隐藏输入或环境变量 NOTEGIT_TOKEN 提供，绝不走命令行参数、remote URL、仓库文件或日志；校验通过后存入 0600 凭据文件并注册 Git credential helper。',
+    options: [
+      '--username <用户名>  参数式提供用户名（缺省交互输入）',
+      '令牌来源：环境变量 NOTEGIT_TOKEN 或隐藏交互输入（不接受 --token 参数）',
+      '-h, --help  输出本帮助',
+    ],
   },
   ls: {
     name: 'ls',

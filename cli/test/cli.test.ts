@@ -106,14 +106,6 @@ test('sync --help：退出码 0，stdout 按 D6 标注 S7 实现且本 sprint �
   assert.match(r.stdout, /S7/)
 })
 
-test('login（占位执行）：退出码 2，stderr 标注尚未实现，stdout 无输出', () => {
-  const r = runCli(['login'])
-  assert.equal(r.status, 2)
-  assert.match(r.stderr, /尚未实现/)
-  assert.match(r.stderr, /login/)
-  assert.equal(r.stdout, '')
-})
-
 test('ls（占位执行）：退出码 2，stderr 标注尚未实现', () => {
   const r = runCli(['ls', '--json'])
   assert.equal(r.status, 2)
