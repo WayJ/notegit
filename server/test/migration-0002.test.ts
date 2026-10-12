@@ -40,7 +40,7 @@ function freshMigrated(): DatabaseSync {
 test('迁移 0002：新建 employees 与 one_time_tokens 表并记录版本行', () => {
   const db = freshMigrated();
   const versions = db.prepare('SELECT version FROM schema_version ORDER BY version').all() as { version: number }[];
-  assert.deepEqual(versions.map((r) => r.version), [1, 2]);
+  assert.deepEqual(versions.map((r) => r.version), MIGRATIONS.map((m) => m.version)); // 出厂列表随任务 append 递增
   assert.equal(
     db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('employees','one_time_tokens')").get()?.n,
     2,
@@ -52,7 +52,7 @@ test('迁移 0002：可重入——第二次运行跳过不重执行', () => {
   const db = freshMigrated();
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2]);
+  assert.deepEqual(again.skipped, MIGRATIONS.map((m) => m.version));
   db.close();
 });
 

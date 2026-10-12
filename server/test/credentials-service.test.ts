@@ -5,20 +5,18 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { CredentialsService, ApiError, AUTHN_TOKEN_SQL } from '../src/credentials/service.ts';
-import type { PepperSet } from '../src/credentials/pepper.ts';
+import type { PepperFile } from '../src/bootstrap/pepper.ts';
 import { generateToken, hashToken, displayHint } from '../src/credentials/token.ts';
 import { newDb, addEmployee, addVault, addMember, dumpAllText, auditRows } from './credentials-fixtures.ts';
 
 // identity §3 为唯一语义源；storage-model §4 authn.token 为规范查询；
 // api.md §2.3 错误码。本文件测服务层（路由层另见 credentials-routes.test.ts）。
 
-function makePepper(activeId = 1, retiredIds: number[] = []): PepperSet {
-  const keys = [activeId, ...retiredIds].map((id) => ({ id, key: randomBytes(32) }));
-  const byId = new Map(keys.map((k) => [k.id, k] as const));
+function makePepper(activeVersion = 1, retiredVersions: number[] = []): PepperFile {
+  const mk = (version: number) => ({ version, key: randomBytes(32) });
   return {
-    active: keys[0]!,
-    retired: keys.slice(1),
-    pepperFor: (v: number) => byId.get(v),
+    active: mk(activeVersion),
+    retired: retiredVersions.map(mk),
   };
 }
 
@@ -35,7 +33,7 @@ interface Setup {
   svc: CredentialsService;
 }
 
-function setup(opts: { pepper?: PepperSet; now?: () => string; maxCredentialsPerEmployee?: number } = {}): Setup {
+function setup(opts: { pepper?: PepperFile; now?: () => string; maxCredentialsPerEmployee?: number } = {}): Setup {
   const db = newDb();
   const alice = addEmployee(db, { username: 'alice', is_instance_admin: 1 });
   const bob = addEmployee(db, { username: 'bob' });

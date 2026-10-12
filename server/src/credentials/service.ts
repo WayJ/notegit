@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { PepperSet, PepperKey } from './pepper.ts';
+import type { PepperFile, PepperKey } from '../bootstrap/pepper.ts';
 import { generateToken, hashToken, displayHint } from './token.ts';
 
 /**
@@ -82,7 +82,7 @@ export interface CreateCredentialInput {
 
 export interface ServiceConfig {
   readonly db: DatabaseSync;
-  readonly pepper: PepperSet;
+  readonly pepper: PepperFile;
   readonly now?: () => string;
   readonly maxCredentialsPerEmployee?: number;
   readonly maxTokenLifetimeDays?: number;
@@ -96,7 +96,7 @@ interface ResolvedScope {
 
 export class CredentialsService {
   private readonly db: DatabaseSync;
-  private readonly pepper: PepperSet;
+  private readonly pepper: PepperFile;
   private readonly now: () => string;
   private readonly maxCredentials: number;
   private readonly maxLifetimeMs: number;

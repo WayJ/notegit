@@ -1,18 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { buildApp } from '../src/app.ts';
 import { CredentialsService } from '../src/credentials/service.ts';
-import { loadOrCreatePepper } from '../src/credentials/pepper.ts';
+import { loadOrCreatePepper } from '../src/bootstrap/pepper.ts';
 import { displayHint } from '../src/credentials/token.ts';
 import { newDb, addEmployee, addVault, addMember, dumpAllText, auditRows } from './credentials-fixtures.ts';
 
 // api.md §4 端点映射 + §2.1 错误信封；identity §3.1 明文仅创建响应一次。
-// 认证载体：Authorization: Bearer ngt_…（api.md §1；Web 会话载体随 S2-T3 并行任务落地）。
+// 认证载体：Authorization: Bearer ngt_…（api.md §1；ngt_sid 会话载体随 S2-T3 并行任务落地，
+// 经 buildApp 的 resolveSubject 缝接入——本域路由先试缝再解析 Bearer）。
 
 interface Ctx {
   app: FastifyInstance;
@@ -21,6 +22,7 @@ interface Ctx {
   bob: number;
   seed: CredentialsService;
   dir: string;
+  pepperPath: string;
 }
 
 async function build(logFile?: string, maxCredentialsPerEmployee?: number): Promise<Ctx> {
@@ -33,14 +35,18 @@ async function build(logFile?: string, maxCredentialsPerEmployee?: number): Prom
   addMember(db, beta, bob, 'reader', alice);
   const dir = await mkdtemp(path.join(tmpdir(), 'notegit-routes-'));
   const pepperPath = path.join(dir, 'token-pepper.key');
-  const seed = new CredentialsService({ db, pepper: loadOrCreatePepper(pepperPath) });
+  const pepper = await loadOrCreatePepper(pepperPath);
+  const seed = new CredentialsService({ db, pepper });
+  const bootstrapTokenFile = path.join(dir, 'admin-bootstrap.token');
+  await writeFile(bootstrapTokenFile, 'fixture-unused'); // 本域测试不触发 bootstrap 端点
   const app = buildApp({
     db,
-    pepperPath,
+    pepper,
+    bootstrapTokenFile,
     logger: logFile ? { file: logFile, level: 'info' } : false,
-    maxCredentialsPerEmployee,
+    credentials: { maxCredentialsPerEmployee },
   });
-  return { app, db, alice, bob, seed, dir };
+  return { app, db, alice, bob, seed, dir, pepperPath };
 }
 
 async function dispose(ctx: Ctx): Promise<void> {
@@ -228,9 +234,14 @@ test('明文扫描：真实遍历全部响应、日志文件与全库转储—�
   const ctx = await build();
   const logFile = path.join(ctx.dir, 'server.log');
   try {
-    // 重建带文件日志的应用（build 的 logger 指向 logFile）
+    // 重建带文件日志的应用（logger 指向 logFile）
     await ctx.app.close();
-    const app = buildApp({ db: ctx.db, pepperPath: path.join(ctx.dir, 'token-pepper.key'), logger: { file: logFile, level: 'info' } });
+    const app = buildApp({
+      db: ctx.db,
+      pepper: await loadOrCreatePepper(ctx.pepperPath),
+      bootstrapTokenFile: path.join(ctx.dir, 'admin-bootstrap.token'),
+      logger: { file: logFile, level: 'info' },
+    });
     ctx.app = app;
 
     const bobToken = await seedToken(ctx, ctx.bob); // token A：作为 Bearer 使用
