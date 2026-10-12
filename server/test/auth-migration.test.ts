@@ -21,7 +21,7 @@ function columns(db: DatabaseSync, table: string): { name: string; notnull: numb
 
 test('迁移 0003 已注册：版本 [1, 2, 3]，v3 仅含 sessions（与 0002 无重复建表）', () => {
   const versions = MIGRATIONS.map((m) => m.version);
-  assert.deepEqual(versions, [1, 2, 3, 4, 5]);  // 集成修正：0005（S2-T6 vaults）已 append
+  assert.deepEqual(versions, [1, 2, 3, 4, 5, 6]);  // 集成修正：0005（T6）与 0006（T7）均已并入
   const v3 = MIGRATIONS.find((m) => m.version === 3);
   assert.ok(v3, '版本 3 应存在');
   assert.match(v3?.description ?? '', /sessions/);
@@ -78,6 +78,6 @@ test('重入：migrate 二次执行跳过 0003，不重复建表', () => {
   const db = freshDb();
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5]);  // 集成修正：0005（S2-T6 vaults）已 append
+  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6]);  // 集成修正：0005（T6）与 0006（T7）均已并入
   db.close();
 });

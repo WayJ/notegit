@@ -46,13 +46,13 @@ test('迁移 0005：schema_version 引导行不在迁移内容中（runner 持�
 
 test('出厂迁移列表：v1 基线 + v2/v3/v4（S2-T2/T3/T4）在前、v5（S2-T6）append 在后', () => {
   const versions = MIGRATIONS.map((m) => m.version);
-  assert.deepEqual(versions, [1, 2, 3, 4, 5]);
+  assert.deepEqual(versions, [1, 2, 3, 4, 5, 6]);  // 集成修正：0006（T7 audit_events）已并入
 });
 
 test('迁移 0005：全量迁移后表/列/索引落地，重入跳过', () => {
   const db = memory();
   const first = migrate(db, MIGRATIONS);
-  assert.deepEqual(first.applied, [1, 2, 3, 4, 5]);
+  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6]);  // 集成修正：0006（T7 audit_events）已并入
 
   const vaultCols = (db.prepare('PRAGMA table_info(vaults)').all() as { name: string }[]).map((c) => c.name);
   assert.deepEqual(vaultCols.sort(), [
@@ -66,7 +66,7 @@ test('迁移 0005：全量迁移后表/列/索引落地，重入跳过', () => {
 
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5]);
+  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6]);  // 集成修正：0006（T7 audit_events）已并入
   db.close();
 });
 

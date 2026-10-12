@@ -144,3 +144,50 @@
 3. **收尾 c**：CSRF 同源校验钩子落地（§7.3）；受影响存量测试补同源 Origin 头。
 4. **基线收敛**：master 的 D11 ADR 同步（97ab349）只改了契约侧 display_hint 注释，迁移 0004 文本滞后致基线 1 例失败；本任务将迁移注释逐字对齐契约，防漂移测试收紧为逐行等价断言。
 5. §6.6-2 的 CSRF 遗留项随收尾 c 关闭。
+
+## 8. S2-T7 决策记录（维护模式写闸门 + 审计主体基座）
+
+日期：2026-10-13（S2-T7，Orca dispatch `ctx_645c17b8b35d`，branch `WayJ/s2-t7-maintenance`）。backup-recovery §3（矩阵唯一语义源）、identity §8、storage-model §3.8/§5 为契约依据；本节只记录契约未逐字规定、由本任务定稿（或经协调人批复）的实现语义。只追加，不改写上文。
+
+### 8.1 login/logout 不入审计（协调人 2026-10-13 批复）
+
+storage-model §5 event_kind 注册表是事件清单唯一源（D6 只读），其中无 session.login/logout；identity §8 亦明确认证类事件不逐条入审计（防噪音）。session 生命周期由 sessions 表承载足够；未来若需要会话审计事件，走契约修订（epic ADR），不破例。任务 brief 中列出的 login/logout 挂接据此裁剪。
+
+### 8.2 维护模式生命周期端点（协调人 2026-10-13 批复形状）
+
+- `POST /api/v1/admin/maintenance`（开启）/ `DELETE /api/v1/admin/maintenance`（关闭）；均需实例管理员（403 E-AUTHZ-001），未认证 401 经统一缝。
+- 幂等：已处于目标态返回 204 且**不重复记审计**（仅状态迁移记行）。
+- 维护期间自身放行（backup §3 写分类：维护生命周期属运行态写入）——闸门 allowlist 显式列入，否则开启后无法关闭。
+- api.md 尚无此端点定义（§1 只定 E-MAINT-001 与放行规则）；补录欠账挂 coordinator 台账，随下次契约修订（S3 会再动 api.md）落地。
+
+### 8.3 闸门放行清单与拒绝对象（backup §3 矩阵的实现定稿）
+
+- 全局 onRequest 第一位（api.md §10 组装序），先于路由解析：api.md 标注「写」的未来端点（vaults/成员/草稿/提交）无需各自挂接即被覆盖（矩阵测试以契约路径直证）。
+- 放行的非安全方法 = 运行态写入三入口：`/api/v1/auth/login`（矩阵明列）、`/api/v1/auth/logout`（会话删除与创建同属会话运行态——backup §3「登录会话属运行态写入」的对偶面；api.md §1 的「一切写端点 503」按矩阵唯一语义源裁剪）、`/api/v1/admin/maintenance`（§8.2）。
+- 拒绝响应：503 E-MAINT-001，`details.maintenance: true`；无 Retry-After（api.md §2.1：仅 429 使用）。
+- `/healthz` 与（未来的）/git/* 不在闸门层：Git receive-pack 的 403「维护中」由 S3 的 /git 入口落地（api.md §8.4）。
+- bootstrap 端点未单列：开启维护需已认证实例管理员（预初始化态不可能），已初始化后 bootstrap 恒 410——组合不可达，闸门按通用规则覆盖。
+
+### 8.4 审计基座（server/src/audit/）消费面与守卫
+
+- `recordAuditEvent`：主体字段唯一来源 = 认证缝 AuthSuccess（employee_id + carrierRef + entry；载体优先级按 §7.1 由缝定稿，基座不另行挑选）。commit author/committer 只可能进 detail，永不进主体字段（identity §8；伪造 author 测试两层覆盖：基座单元 + 流程级）。
+- 脱敏守卫 fail-closed：detail 含 `ngt_` 明文（≥20 连续 token 字符；掩码形态 `ngt_ab…wxyz` 不误伤）或口令/密钥类键名（password/passphrase/secret/authorization，任意深度）、carrierRef 非 `credential:<id>`/`session:<id>` 限定形态 → AuditMaskingError，行不落库。
+- employee 主体两种归因形态：`subject`（有凭据载体：会话/token）或 `employeeId`（无载体：K5 一次性令牌消费——K5 不属 identity §8 的凭据载体，credential_ref NULL）；互斥，actor_kind ≠ employee 不得携带主体（DDL 注释一致性由写入口径保证）。
+- `settleAuditEvent`（pending → 终态，供 S3 发布链）与 `drainCount`（audit.drain_count 规范 SQL 逐字，backup §4 步骤 2 排空）。
+- 凭据域（T4 已落地）的 credential.create/revoke 行维持原样：其 credential_ref 记**被操作凭据**（`credential:<id>`，合并时已评审的语义），非认证载体；detail 键（name/managed_for）过守卫无冲突，未改走基座以避免对已并入行为的无谓翻动。
+
+### 8.5 挂接点小改清单
+
+- bootstrap/routes.ts：account.bootstrap（actor_kind=bootstrap ⇒ employee_id NULL，创建的管理员记 detail；entry=api——HTTP 初始化无凭据载体）。
+- invites/routes.ts：employee.create（主体=邀请管理员）；employee.password_reset（主体=K5 归属目标员工，credential_ref NULL，entry=api）。invite.ts 的 consumePasswordReset 返回值 void → employee_id（向后兼容）。
+- auth/routes.ts PATCH admin employees：employee.activate/deactivate（按请求最终态；is_instance_admin 变更无注册表 kind，不记）。
+
+### 8.6 与 S2-T6 的并行缝（vaults 父表）
+
+迁移 0006 的 audit_events.vault_id 外键在 `PRAGMA foreign_keys=ON` 下要求 vaults 父表**在场**（即使插入 NULL）——0005（vaults/vault_members，S2-T6 独占）未并入前，任何审计写入都会失败。处置：复用 S2-T4 的测试夹具模式（credentials-fixtures 的 FIXTURE_DDL 导出，IF NOT EXISTS 契约等价 DDL），凡触发审计写入的 app 级测试先应用夹具；0005 并入后夹具成 no-op。迁移注册表双方各自 append（本任务 6、T6 的 5），集成侧按序交错为 [1..6]。
+
+### 8.7 移交与欠账
+
+1. api.md 补录维护端点（§8.2）——coordinator 台账挂账，随 S3 的 api.md 修订闭环。
+2. S3 消费面：pre-receive / Web 发布组件经 `recordAuditEvent(pending)` → update-ref → `settleAuditEvent`；执行点复查叠加维护标志（§7.5 预留位）；audit.chain 查询随恢复对账（backup §7 步骤 7）。
+3. `employee.password_reset` 的管理员触发端点（api.md §3.1 POST …/password-reset）尚未实现（非本任务面）；落地时按 §8.4 形态挂接。

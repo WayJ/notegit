@@ -51,12 +51,13 @@ export function createInvite(
   }
 }
 
+/** @returns 归属员工 id（审计挂接用，S2-T7：employee.password_reset 记目标员工） */
 export function consumePasswordReset(
   db: DatabaseSync,
   pepper: PepperFile,
   input: { token: string; newPasswordHash: string },
   now: Date,
-): void {
+): number {
   const hash = hmacTokenHash(pepper, input.token);
   const nowIso = now.toISOString();
   db.exec('BEGIN');
@@ -73,6 +74,7 @@ export function consumePasswordReset(
     // 副作用「该账号会话全部失效」（identity §2/§7.2）：sessions 表随 S2-T3 落地，
     // 届时在此（或会话域）执行 DELETE FROM sessions WHERE employee_id = ?
     db.exec('COMMIT');
+    return row.employee_id;
   } catch (err) {
     db.exec('ROLLBACK');
     throw err;

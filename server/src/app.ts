@@ -13,6 +13,8 @@ import { credentialsPlugin } from './credentials/routes.ts';
 import { createDbMembershipSource } from './vaults/membership.ts';
 import { VaultService } from './vaults/service.ts';
 import { vaultsPlugin } from './vaults/routes.ts';
+import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
+import { registerMaintenanceRoutes } from './maintenance/routes.ts';
 
 /** 认证主体（identity §1：认证主体 = 员工账号）。 */
 export interface Subject {
@@ -89,6 +91,12 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       return reply.send(err); // 默认语义（404/500 保持原状态码）
     });
 
+    // 维护模式写闸门（S2-T7；backup-recovery §3）：进程内同步标志（传播上界 0），
+    // 全局 onRequest 第一位（api.md §10 组装序：maintenance → …），先于路由解析——
+    // 未来「写」端点自动被覆盖。运行态写入（登录/登出/维护生命周期）放行。
+    const maintenanceGate = createMaintenanceGate();
+    app.addHook('onRequest', maintenanceGuard(maintenanceGate));
+
     // 初始化态闸门：未初始化 ⇒ 一切 /api/v1 业务入口 503（未来任务的路由自动被覆盖）
     app.addHook('onRequest', async (req, reply) => {
       const p = req.url.split('?')[0];
@@ -105,6 +113,13 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
 
     registerBootstrapRoutes(app, wired);
     registerInviteRoutes(app, wired);
+    // S2-T7 维护模式生命周期端点（POST/DELETE /api/v1/admin/maintenance；实例管理员）；
+    // 切换记 maintenance.enable/disable 审计行（运行态写入，闸门 allowlist 放行自身）
+    registerMaintenanceRoutes(app, {
+      db: wired.db,
+      gate: maintenanceGate,
+      authenticateRequest: wired.authenticateRequest,
+    });
     // S2-T3 认证域路由（api.md §3：login/logout/me/password/PATCH admin employees）；
     // S2-T5 起认证缝统一（/me 与 /me/password 双载体，api.md §3 错误列 001–004）
     void app.register(registerAuth, {

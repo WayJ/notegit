@@ -3,11 +3,16 @@ import { migrate } from '../src/db/migrate.ts';
 import { MIGRATIONS } from '../src/db/migrations.ts';
 
 /**
- * S2-T4 测试夹具：employees（S2-T2）/ vaults、vault_members（S2-T6 迁移 0005）
- * 已由真实迁移建表，对应 IF NOT EXISTS DDL 成为 no-op；audit_events 属 S2-T7
- * 的迁移版本，仍由夹具先行。合并前后测试均可运行的意图保持不变。
+ * S2-T4 测试夹具：employees / vaults / vault_members / audit_events 属并行任务
+ * （S2-T2/T6/T7）的迁移版本，本任务分支上尚不存在。夹具取 storage-model.md
+ * 对应 @schema 块的等价 DDL（改写为 IF NOT EXISTS 形态）：合并后真实迁移先建表，
+ * 夹具成为 no-op，测试在合并前后均可运行。
+ *
+ * S2-T7 起：audit_events 已随迁移 0006 落地（本夹具对其为 no-op）；vaults 仍为
+ * S2-T6 的 0005 前置——audit_events.vault_id 外键在 foreign_keys=ON 下要求父表在
+ * 场（即使插入 NULL），因此任何触发审计写入的 app 级测试都需先应用本夹具。
  */
-const FIXTURE_DDL = [
+export const FIXTURE_DDL = [
   `CREATE TABLE IF NOT EXISTS employees (
   id                INTEGER NOT NULL PRIMARY KEY,
   username          TEXT    NOT NULL UNIQUE,

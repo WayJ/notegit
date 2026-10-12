@@ -4,6 +4,7 @@ import { rejectAuth } from '../auth/lifecycle.ts';
 import { createInvite, consumePasswordReset, InviteError } from './invite.ts';
 import { passwordPolicyError } from './passwordPolicy.ts';
 import { TokenError } from '../bootstrap/token.ts';
+import { recordAuditEvent } from '../audit/audit.ts';
 
 /**
  * POST /api/v1/admin/employees（邀请创建，api.md §3.1，需实例管理员）
@@ -31,6 +32,19 @@ export function registerInviteRoutes(app: FastifyInstance, deps: WiredAppDeps): 
     }
     try {
       const { token } = createInvite(deps.db, deps.pepper, { username, displayName, invitedBy: outcome.subject.employee_id }, new Date());
+      // 审计（identity §8；storage-model §5）：主体 = 邀请管理员（认证员工）+ 载体 +
+      // 入口；K5 令牌明文不入审计（脱敏守卫 fail-closed）
+      recordAuditEvent(deps.db, {
+        occurredAt: new Date().toISOString(),
+        actorKind: 'employee',
+        subject: {
+          employeeId: outcome.subject.employee_id,
+          carrierRef: outcome.carrierRef,
+          entry: outcome.entry,
+        },
+        eventKind: 'employee.create',
+        detail: { username },
+      });
       // 明文令牌仅此一次（identity §7.2：经企业内渠道交付）
       return reply.code(201).send({ username, password_reset_token: token });
     } catch (err) {
@@ -53,7 +67,17 @@ export function registerInviteRoutes(app: FastifyInstance, deps: WiredAppDeps): 
     }
     const passwordHash = await deps.hashPassword(b.new_password);
     try {
-      consumePasswordReset(deps.db, deps.pepper, { token, newPasswordHash: passwordHash }, new Date());
+      const employeeId = consumePasswordReset(deps.db, deps.pepper, { token, newPasswordHash: passwordHash }, new Date());
+      // 审计（identity §8；storage-model §5）：K5 一次性令牌不属凭据载体——
+      // 主体 = 口令被重置的目标员工，credential_ref NULL，entry=api
+      recordAuditEvent(deps.db, {
+        occurredAt: new Date().toISOString(),
+        actorKind: 'employee',
+        employeeId,
+        entry: 'api',
+        eventKind: 'employee.password_reset',
+        detail: { via: 'password_reset_token' },
+      });
       return reply.code(204).send();
     } catch (err) {
       if (err instanceof TokenError) {

@@ -8,6 +8,7 @@ import { migrate } from '../src/db/migrate.ts';
 import { MIGRATIONS } from '../src/db/migrations.ts';
 import { loadOrCreatePepper } from '../src/bootstrap/pepper.ts';
 import { ensureBootstrapToken } from '../src/bootstrap/token.ts';
+import { FIXTURE_DDL } from './credentials-fixtures.ts';  // vaults 父表：审计写入（S2-T7 挂接）在 T6 的 0005 前需要
 import { buildApp, type Subject } from '../src/app.ts';
 
 // 邀请创建账号流程（identity §2/§7.2，api.md §3.1/§3.2）：
@@ -25,6 +26,7 @@ async function makeInitialized(): Promise<Harness> {
   await mkdir(path.join(dir, 'db'), { recursive: true });
   const db = openDatabase(path.join(dir, 'db', 't.sqlite'));
   migrate(db, MIGRATIONS);
+  for (const ddl of FIXTURE_DDL) db.exec(ddl);  // audit_events.vault_id 外键父表（合并后 no-op）
   const pepper = await loadOrCreatePepper(path.join(dir, 'keys', 'token-pepper.key'));
   const tokenFile = path.join(dir, 'config', 'admin-bootstrap.token');
   await ensureBootstrapToken(db, pepper, tokenFile, new Date());
@@ -37,7 +39,7 @@ async function makeInitialized(): Promise<Harness> {
     // 统一认证缝（S2-T5）：注入桩绕过载体解析（本套件聚焦邀请流程本身）
     authenticateRequest: () =>
       subject
-        ? { ok: true, carrier: 'session', subject, carrierRef: 'session:stub', entry: 'web' }
+        ? { ok: true, carrier: 'session', subject, carrierRef: 'session:0', entry: 'web' }
         : { ok: false, carrier: null, code: 'E-AUTH-001', reason: 'unauthenticated' },
   });
   await app.ready();
