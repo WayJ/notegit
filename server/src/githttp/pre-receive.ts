@@ -1,27 +1,31 @@
-import { DatabaseSync } from 'node:sqlite';
 import { rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 import { createDbMembershipSource } from '../vaults/membership.ts';
-import type { VaultRole } from '../auth/lifecycle.ts';
+import { branchWriteRules } from '../vaults/branch-rules.ts';
 import { parseRemoteUser } from './cgi.ts';
+import { runGit } from './git-spawn.ts';
+import { isZeroOid, refCommandRejection, type RefCommand } from './ref-rules.ts';
 import { collectRefDeltas, hookGitTraversal, knownPathsOfTip } from './validation-input.ts';
 import { createValidator, type RefInput, type Report } from 'notegit-validation';
 
 /**
- * pre-receive hook（S3-T2 挂接 + S3-T4 逐提交校验；git receive-pack 在更新任何
- * ref 之前、全部命令已读入之后调用；拒绝即整包回滚——多 ref 全有或全无的原生
- * 语义）。
+ * pre-receive hook（S3-T2 挂接 + S3-T4 逐提交校验 + S3-T5 ref 级规则唯一判定源；
+ * git receive-pack 在更新任何 ref 之前、全部命令已读入之后调用；拒绝即整包回滚
+ * ——多 ref 全有或全无的原生语义）。
  *
  * 认证主体经 CGI 层透传的 REMOTE_USER 取得（api.md §8.4；不信任 commit author，
  * 架构 §4.4）；成员/角色与库配置实时直连库文件查询（NOTEGIT_DB 透传——与
  * Web/API 入口同一 vaults/vault_members 源，D-IC-05 无缓存；在途撤权在
  * HTTP 授权之后、执行点之前发生时在此 fail-closed 拒绝）。
  *
- * 判定层次：
- * 1. 逐 ref 授权（refCommandRejection，架构 §4.3）：tag 命名空间一律拒；默认
- *    分支删除全员拒；main_admin_only 开启时仅库管理员可写默认分支；reader
- *    任何写拒；非默认分支编辑者创建/更新/删除放行。任何授权拒绝即整包拒
+ * 判定层次（S3-T5 起 ref 级规则唯一判定源为 ref-rules.ts，与 update hook
+ * 执行点复查同构；集成裁决 2026-10-13：授权先行、内容随后——廉价检查先失败）：
+ * 1. 逐 ref 授权（refCommandRejection，架构 §4.3）：非 refs/heads 命名空间一律
+ *    拒；默认分支删除全员拒；main_admin_only 开启时仅库管理员可写默认分支；
+ *    reader 任何写拒；非默认分支编辑者创建/更新/删除放行。force push 由原生
+ *    receive.denyNonFastForwards 拦截（不在本层）。任何授权拒绝即整包拒
  *    （内容校验不再运行——推送已被否决）。
  * 2. 逐提交内容校验（S3-T4，packages/validation 单一来源——sprint D7）：推送
  *    范围内全部新提交经 git 遍历组装为 CommitDelta（合并按父展开、根提交全
@@ -31,43 +35,8 @@ import { createValidator, type RefInput, type Report } from 'notegit-validation'
  *    2=运行错误，均整包拒绝）；任何遍历异常 fail-closed 拒绝。
  *
  * 本文件既被 git 作为子进程执行（entry guard），也被单元测试导入其纯判定面
- * （refCommandRejection）——导入不触发 hook 行为。
+ * （refCommandRejection 已移驻 ref-rules.ts）——导入不触发 hook 行为。
  */
-
-/** 全零 OID（ref 删除命令的 new 值 / ref 创建命令的 old 值） */
-export const ZERO_OID = '0'.repeat(40);
-
-const isZero = (oid: string) => /^0+$/.test(oid);
-
-export interface RefCommand {
-  readonly ref: string;
-  readonly oldOid: string;
-  readonly newOid: string;
-}
-
-export interface RefAuthzConfig {
-  readonly defaultBranch: string;
-  readonly mainAdminOnly: boolean;
-  readonly role: VaultRole;
-}
-
-/** 逐 ref 授权判定（架构 §4.3）；返回 null = 放行，否则拒绝原因（hook stderr）。 */
-export function refCommandRejection(cmd: RefCommand, cfg: RefAuthzConfig): string | null {
-  if (cmd.ref.startsWith('refs/tags/')) {
-    return `${cmd.ref}：第一版不支持客户端写入 tag（架构 §4.3）`;
-  }
-  const isDefault = cmd.ref === `refs/heads/${cfg.defaultBranch}`;
-  if (isDefault && isZero(cmd.newOid)) {
-    return `${cmd.ref}：不允许删除默认分支（架构 §4.3）`;
-  }
-  if (cfg.role === 'reader') {
-    return `${cmd.ref}：只读成员不可推送`;
-  }
-  if (isDefault && cfg.mainAdminOnly && cfg.role !== 'admin') {
-    return `${cmd.ref}：main_admin_only 已开启，仅库管理员可写默认分支`;
-  }
-  return null;
-}
 
 /** 审计挂接点落盘路径（T6 消费；裸库根目录，git 不入对象库） */
 export function auditReportPath(gitDir: string): string {
@@ -103,6 +72,7 @@ function issueLines(report: Report): string[] {
   }
   return lines;
 }
+
 
 // ── hook 进程入口（仅当 git 以本文件为可执行脚本调用时运行）────────────────
 
@@ -165,16 +135,12 @@ async function check(): Promise<number> {
       console.error(`[notegit pre-receive] vault id=${membership.vaultId} 配置缺失——fail-closed 拒绝`);
       return 1;
     }
-    const cfg: RefAuthzConfig = {
-      defaultBranch: vault.default_branch,
-      mainAdminOnly: vault.main_admin_only === 1,
-      role: membership.role,
-    };
-
-    // 1. 逐 ref 授权：任何拒绝即整包否决（内容校验不再运行）
+    const rules = branchWriteRules(vault);
+    const role = membership.role;
+    // 1. 逐 ref 授权：任何拒绝即整包否决（内容校验不再运行——集成裁决：授权先行）
     const rejections: string[] = [];
     for (const cmd of commands) {
-      const rejection = refCommandRejection(cmd, cfg);
+      const rejection = refCommandRejection(cmd, rules, role);
       if (rejection !== null) rejections.push(rejection);
     }
     if (rejections.length > 0) {
@@ -188,16 +154,16 @@ async function check(): Promise<number> {
     const knownPaths = new Set<string>();
     const refs: RefInput[] = [];
     for (const cmd of commands) {
-      if (isZero(cmd.newOid)) {
+      if (isZeroOid(cmd.newOid)) {
         // 删除类命令无新提交可校验（授权层已放行）
-        refs.push({ ref: cmd.ref, headOld: isZero(cmd.oldOid) ? null : cmd.oldOid, headNew: null, commits: [] });
+        refs.push({ ref: cmd.ref, headOld: isZeroOid(cmd.oldOid) ? null : cmd.oldOid, headNew: null, commits: [] });
         continue;
       }
-      if (!isZero(cmd.oldOid)) {
+      if (!isZeroOid(cmd.oldOid)) {
         for (const p of await knownPathsOfTip(traversal, cmd.oldOid)) knownPaths.add(p);
       }
       const commits = await collectRefDeltas(traversal, cmd.ref, cmd.oldOid, cmd.newOid);
-      refs.push({ ref: cmd.ref, headOld: isZero(cmd.oldOid) ? null : cmd.oldOid, headNew: cmd.newOid, commits });
+      refs.push({ ref: cmd.ref, headOld: isZeroOid(cmd.oldOid) ? null : cmd.oldOid, headNew: cmd.newOid, commits });
     }
 
     const report = await createValidator().validate({

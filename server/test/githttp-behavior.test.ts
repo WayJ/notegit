@@ -243,10 +243,12 @@ test('B4: 逐 ref 授权——main_admin_only 下编辑者拒写默认分支、�
   await git(['-C', bobClone, 'push', 'origin', 'HEAD:refs/heads/feature/x']);
   const refs = (await git(['--git-dir', h.docsRepo, 'for-each-ref', '--format=%(refname)'])).stdout;
   assert.match(refs, /refs\/heads\/feature\/x/);
-  // 默认分支删除：即使库管理员（alice）也被拒（架构 §4.3）
+  // 默认分支删除：即使库管理员（alice）也被拒（架构 §4.3）——S3-T5 起双层：
+  // 原生 receive.denyDeleteCurrent（bare 库 HEAD 目标）先拦，判定层兜底
   await assert.rejects(
     git(['-C', aliceClone, 'push', 'origin', ':main']),
-    (e: Error & { stderr?: string }) => /删除默认分支|deleting main|delete.*main/i.test(String(e.stderr)),
+    (e: Error & { stderr?: string }) =>
+      /删除默认分支|deletion of the current branch|delete.*main/i.test(String(e.stderr)),
   );
   // 非默认分支删除：编辑者允许（架构 §4.3）
   await git(['-C', bobClone, 'push', 'origin', ':refs/heads/feature/x']);

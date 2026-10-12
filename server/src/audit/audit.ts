@@ -39,7 +39,9 @@ export interface AuditSubjectRef {
   readonly employeeId: number;
   /** credential:<id> / session:<id>（DDL 注释契约：不含任何 token 材料） */
   readonly carrierRef: string;
-  readonly entry: 'web' | 'api';
+  /** 入口（identity §8）：Git Smart HTTP 入口自 S3-T5 起以 'git' 归因（Basic →
+   *  token 载体，carrierRef 仍为 credential:<id>） */
+  readonly entry: 'web' | 'api' | 'git';
 }
 
 export interface AuditEventInput {
