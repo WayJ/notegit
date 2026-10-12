@@ -8,6 +8,7 @@ import { migrate } from '../src/db/migrate.ts';
 import { MIGRATIONS } from '../src/db/migrations.ts';
 import { loadOrCreatePepper } from '../src/bootstrap/pepper.ts';
 import { ensureBootstrapToken } from '../src/bootstrap/token.ts';
+import { FIXTURE_DDL } from './credentials-fixtures.ts';  // vaults 父表：审计写入（S2-T7 挂接）在 T6 的 0005 前需要
 import { buildApp } from '../src/app.ts';
 import { verifyPassword } from '../src/auth/password.ts';
 
@@ -30,6 +31,7 @@ async function makeInstance(dir?: string, opts?: { realHash?: boolean }): Promis
   await mkdir(path.join(d, 'db'), { recursive: true });
   const db = openDatabase(path.join(d, 'db', 't.sqlite'));
   migrate(db, MIGRATIONS);
+  for (const ddl of FIXTURE_DDL) db.exec(ddl);  // audit_events.vault_id 外键父表（合并后 no-op）
   const pepper = await loadOrCreatePepper(path.join(d, 'keys', 'token-pepper.key'));
   const tokenFile = path.join(d, 'config', 'admin-bootstrap.token');
   await ensureBootstrapToken(db, pepper, tokenFile, new Date());

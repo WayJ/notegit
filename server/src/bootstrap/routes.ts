@@ -4,12 +4,13 @@ import { isUninitialized } from './state.ts';
 import { completeBootstrap, TokenError } from './token.ts';
 import type { WiredAppDeps } from '../app.ts';
 import { passwordPolicyError } from '../invites/passwordPolicy.ts';
+import { recordAuditEvent } from '../audit/audit.ts';
 
 /**
  * POST /api/v1/auth/bootstrap（api.md §3，一次性）：
  * 前置初始化态（employees 空），否则 410 E-RES-006；成功 201 {employee_id, username}；
  * token 单次失效、文件由应用删除（identity §7.1-3）。不自动登录。
- * 审计 account.bootstrap（actor_kind=bootstrap）随 S2-T7 审计基座落地。
+ * 审计 account.bootstrap（actor_kind=bootstrap；api.md §3）。
  */
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string): FastifyReply {
@@ -38,6 +39,15 @@ export function registerBootstrapRoutes(app: FastifyInstance, deps: WiredAppDeps
       const { employeeId } = completeBootstrap(deps.db, deps.pepper, { token, username, displayName, passwordHash }, new Date());
       // api.md §3：token 单次失效并由应用删除文件；文件缺失不影响已完成的事务
       await rm(deps.bootstrapTokenFile, { force: true });
+      // 审计（identity §8；storage-model §5）：actor_kind=bootstrap ⇒ employee_id NULL
+      //（DDL 注释一致性），创建的管理员记于 detail；入口=api（HTTP 初始化，无凭据载体）
+      recordAuditEvent(deps.db, {
+        occurredAt: new Date().toISOString(),
+        actorKind: 'bootstrap',
+        entry: 'api',
+        eventKind: 'account.bootstrap',
+        detail: { username, employee_id: employeeId },
+      });
       return reply.code(201).send({ employee_id: employeeId, username });
     } catch (err) {
       if (err instanceof TokenError) {

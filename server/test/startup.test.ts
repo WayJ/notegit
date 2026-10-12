@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { startApp } from '../src/main.ts';
+import { FIXTURE_DDL } from './credentials-fixtures.ts';  // vaults 父表：审计写入（S2-T7 挂接）在 T6 的 0005 前需要
 import { MIGRATIONS } from '../src/db/migrations.ts';
 
 // S2-T1 交接（architecture-notes §3）：启动接线 open → pragmas → migrate → listen
@@ -66,6 +67,7 @@ test('已初始化实例丢失 pepper → 启动大声失败（防静默重生�
   const dir = await mkdtemp(path.join(tmpdir(), 'notegit-start-'));
   try {
     const inst = await startApp({ dataDir: dir, host: '127.0.0.1', port: 0, hashPassword: stubHash });
+    for (const ddl of FIXTURE_DDL) inst.db.exec(ddl);  // audit_events.vault_id 外键父表（T6 的 0005 前置；合并后 no-op）
     const token = await readFile(inst.bootstrapTokenFile, 'utf8');
     const boot = await inst.app.inject({
       method: 'POST',

@@ -100,4 +100,36 @@ CREATE TABLE credentials (
       `CREATE INDEX idx_credentials_employee ON credentials(employee_id);  -- 依据：identity §3.5 每员工上限（默认 20，应用层）与员工凭据列表查询`,
     ],
   },
+  {
+    // DDL 来源：storage-model.md §3.8 `-- @schema audit_events` 块逐字迁移（防漂移测试对照原文）；
+    // schema_version 引导行剔除（runner 持有，architecture-notes §3）。版本号 0006 为 S2-T7
+    // 独占；0005 为 S2-T6（vaults/vault_members）并行预留，并入 sprint/S2 时插于 4 与 6 之间。
+    version: 6,
+    description: 'S2-T7: audit_events — subject/vault/time/commits/result + drain index (identity §8; storage-model §3.8; backup-recovery §4/§5)',
+    statements: [
+      `-- 以服务端认证身份记录主体、库、时间、旧新 commit 和结果（架构 §4.4）。
+-- 发布类事件（vault.push / vault.web_submit）先预记录 pending，引用更新后置终态；
+-- 异常 → unresolved（待核对），由恢复对账标为 succeeded/rejected（架构 §4.4；
+-- backup-recovery §4 步骤 2、§5.1–2、§7 步骤 7）。
+-- commit author/committer 是客户端可填的内容元数据，不进主体字段（identity §8）。
+CREATE TABLE audit_events (
+  id             INTEGER NOT NULL PRIMARY KEY,
+  occurred_at    TEXT    NOT NULL,             -- 依据：架构 §4.4 时间；服务端时钟
+  actor_kind     TEXT    NOT NULL CHECK (actor_kind IN ('employee','bootstrap','system')),  -- 依据：identity §8 主体=认证员工；bootstrap=K5 初始化；system=应用自身（对账等）
+  employee_id    INTEGER REFERENCES employees(id),  -- NULL 当且仅当 actor_kind != 'employee'（应用层保证）
+  credential_ref TEXT,                         -- 依据：identity §8 凭据载体标识（credential:<id> / session:<短哈希>）；不含任何 token 材料
+  entry          TEXT    NOT NULL CHECK (entry IN ('web','api','git')),  -- 依据：identity §8 入口
+  event_kind     TEXT    NOT NULL,             -- 注册表见 §5
+  vault_id       INTEGER REFERENCES vaults(id),  -- NULL = 实例级事件（凭据域、密钥、维护、备份）
+  ref_name       TEXT,                         -- 引用更新类事件：refs/heads/<branch>
+  old_commit     TEXT,                         -- 依据：架构 §4.4 旧 commit
+  new_commit     TEXT,                         -- 依据：架构 §4.4 新 commit（删除 ref 时为全零 OID）
+  status         TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','succeeded','rejected','unresolved')),  -- 依据：架构 §4.4 结果 + 待核对；管理类事件直接以终态插入
+  detail         TEXT    NOT NULL DEFAULT '{}' -- JSON：错误码（引用 T2 注册表时含 rulesVersion）、撤销原因、拒绝原因等（T5 建议）
+) STRICT;`,
+      `CREATE INDEX idx_audit_vault_time ON audit_events(vault_id, occurred_at);   -- 依据：架构 §4.4 按库/时间查询（api.md §8 审计查询）`,
+      `CREATE INDEX idx_audit_employee_time ON audit_events(employee_id, occurred_at);  -- 依据：按主体检索`,
+      `CREATE INDEX idx_audit_open ON audit_events(status) WHERE status IN ('pending','unresolved');  -- 依据：backup-recovery §4 步骤 2 排空检查 / §7 步骤 7 恢复对账（部分索引，行数≈在途写数）`,
+    ],
+  },
 ];

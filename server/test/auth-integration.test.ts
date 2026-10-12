@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { migrate } from '../src/db/migrate.ts';
+import { FIXTURE_DDL } from './credentials-fixtures.ts';  // vaults 父表：审计写入（S2-T7 挂接）在 T6 的 0005 前需要
 import { MIGRATIONS } from '../src/db/migrations.ts';
 import { buildApp } from '../src/app.ts';
 import { hashPassword } from '../src/auth/password.ts';
@@ -15,6 +16,7 @@ async function buildIntegratedApp(): Promise<{ app: ReturnType<typeof buildApp>;
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON');
   migrate(db, MIGRATIONS);
+  for (const ddl of FIXTURE_DDL) db.exec(ddl);  // audit_events.vault_id 外键父表（合并后 no-op）
   const app = buildApp({
     db,
     pepper: { active: { version: 1, key: randomBytes(32) }, retired: [] },

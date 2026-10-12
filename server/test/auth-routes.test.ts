@@ -7,6 +7,7 @@ import { migrate } from '../src/db/migrate.ts';
 import { MIGRATIONS } from '../src/db/migrations.ts';
 import { hashPassword } from '../src/auth/password.ts';
 import { registerAuth } from '../src/auth/routes.ts';
+import { FIXTURE_DDL } from './credentials-fixtures.ts';  // vaults 父表：审计写入（S2-T7 挂接）在 T6 的 0005 前需要
 
 // api.md §3 身份与账号端点行为 + identity §2/§4/§5.2 语义：
 // 登录（统一失败文案 / 退避 429 / 未初始化 503）、会话认证、
@@ -28,6 +29,7 @@ async function buildAuthApp(overrides?: {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON');
   migrate(db, MIGRATIONS);
+  for (const ddl of FIXTURE_DDL) db.exec(ddl);  // audit_events.vault_id 外键父表（合并后 no-op）
   let nowMs = BASE;
   const app = fastify();
   await app.register(registerAuth, {
@@ -290,6 +292,7 @@ test('完成标准 4 —— 口令变更写面仅 employees/sessions（访问凭
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON');
   migrate(db, MIGRATIONS);
+  for (const ddl of FIXTURE_DDL) db.exec(ddl);  // audit_events.vault_id 外键父表（合并后 no-op）
   const stmts: string[] = [];
   const recordedDb = new Proxy(db, {
     get(target, prop, receiver) {

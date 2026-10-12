@@ -14,6 +14,7 @@ import {
   type SessionDefaults,
 } from './sessions.ts';
 import { COOKIE_NAME } from './subject.ts';
+import { recordAuditEvent } from '../audit/audit.ts';
 
 /**
  * 认证域路由（api.md §3）：login / logout / me / me/password / PATCH admin employees。
@@ -182,12 +183,20 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
     if (body === null || typeof body !== 'object' || typeof body.active !== 'boolean') {
       return sendError(reply, 400, 'E-RES-004', '请求形态错误：需要 active: boolean');
     }
-    // 审计事件（employee.deactivate / employee.activate）随审计基座（S2-T7）挂接
     if (body.active) {
       db.prepare('UPDATE employees SET active = 1, deactivated_at = NULL WHERE id = ?').run(target.id);
     } else {
       db.prepare('UPDATE employees SET active = 0, deactivated_at = ? WHERE id = ?').run(now().toISOString(), target.id);
     }
+    // 审计（identity §8；storage-model §5）：主体 = 操作管理员 + 载体 + 入口；
+    // 按请求最终态记 activate/deactivate（is_instance_admin 变更无注册表 kind，不记）
+    recordAuditEvent(db, {
+      occurredAt: now().toISOString(),
+      actorKind: 'employee',
+      subject: { employeeId: subject.employee_id, carrierRef: auth.carrierRef, entry: auth.entry },
+      eventKind: body.active ? 'employee.activate' : 'employee.deactivate',
+      detail: { username },
+    });
     if (typeof body.is_instance_admin === 'boolean') {
       db.prepare('UPDATE employees SET is_instance_admin = ? WHERE id = ?').run(body.is_instance_admin ? 1 : 0, target.id);
     }
