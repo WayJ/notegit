@@ -22,7 +22,7 @@ import { readSidCookie } from './subject.ts';
  * 有效 Cookie，校验先于（且独立于）会话有效性。
  */
 
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'] as const;
 
 /** URL/头值的 origin 归一：scheme://host[:port]，http:80 / https:443 视同省略；
  *  不可解析 → null（无法确立同源）。 */
@@ -56,7 +56,7 @@ function claimedOriginOf(req: FastifyRequest): string | null {
 
 /** onRequest 钩子本体（buildApp 于初始化态闸门之后挂载——api.md §10 组装序） */
 export async function csrfGuard(req: FastifyRequest, reply: FastifyReply): Promise<void> {
-  if (SAFE_METHODS.has(req.method)) return;
+  if ((SAFE_METHODS as readonly string[]).includes(req.method)) return;
   if (req.headers.authorization !== undefined) return; // 显式头凭据豁免（Bearer/Basic…）
   if (readSidCookie(req) === null) return; // 未呈现会话 Cookie
   const target = targetOriginOf(req);
