@@ -52,7 +52,11 @@ export interface ValidateInput {
   /** 库当前占用字节（与 pushBytes 合计判定 E-LIMIT-005） */
   vaultCurrentBytes?: number
   /** 库内既有路径（并入库内链接存在性判定） */
-  knownPaths?: string[]
+  knownPaths?: readonly string[]
+  /** 候选提交全 tree 路径（pre-commit/web-submit 的 E-PATH-004 基线，S3-T7 对称
+   *  扩展——与 pre-receive 的 CommitDelta.treePaths 同语义：命中基线的新增/修改
+   *  路径与库内存量路径的大小写冲突被拦截；缺省回退变更集内比对——既有语义不变） */
+  treePaths?: readonly string[]
   config?: ConfigOverrides
   /** 可注入时钟（测试用；默认 Date.now） */
   clock?: () => number
@@ -217,7 +221,12 @@ async function validateInternal(input: ValidateInput): Promise<Report> {
     }
   } else {
     const filesIn = input.files ?? []
-    const conflicts = caseConflictIssues(filesIn.map((f) => f.path))
+    // E-PATH-004 基线（S3-T7）：候选提交全 tree 路径给定时按其判定（变更 ⊆ 候选
+    // tree，并集去重；同路径重复不构成冲突）；缺省回退变更集内比对（既有语义）
+    const conflictBase = input.treePaths === undefined
+      ? filesIn.map((f) => f.path)
+      : [...new Set([...input.treePaths, ...filesIn.map((f) => f.path)])]
+    const conflicts = caseConflictIssues(conflictBase)
     for (const f of filesIn) knownPaths.add(f.path)
     for (const f of filesIn) {
       const outcome = processFile(f, cfg, knownPaths)
