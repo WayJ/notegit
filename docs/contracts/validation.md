@@ -164,7 +164,7 @@ secret: !exec "rm -rf /"     # 非法：自定义 tag → E-FM-007
 
 ### 5.2 类型规则
 
-- 非 `.md` 文件必须是**附件**（扩展名命中 `attachmentAllowedExtensions`）或**特殊文件**（命中 `specialFilePatterns` / `additionalNavPatterns`），否则 E-LIMIT-002（架构 §5.2：附件和配置文件不套用 frontmatter，但仍受路径、类型及容量规则约束）。
+- 非 `.md` 文件必须是**附件**（扩展名命中 `attachmentAllowedExtensions`）或**特殊文件**（命中 `specialFilePatterns` / `additionalNavPatterns`），否则 E-LIMIT-002。**清单制（不在清单即拒绝）是 T2 设计裁决**：架构 §5.2 仅规定附件和配置文件不套用 frontmatter 但仍受类型规则约束、未逐类型列举放行范围，本契约结合架构 §12「第一版限制支持范围与容量」将其收紧为显式清单制（与 README 全目录豁免同属 coordinator 批准的设计裁决）。
 - 扩展名匹配大小写不敏感；以实际字节内容做扩展名核验（伪装扩展名的深度内容检测不在第一版范围）。
 
 ### 5.3 容量与资源判定位置
@@ -203,8 +203,8 @@ secret: !exec "rm -rf /"     # 非法：自定义 tag → E-FM-007
 | E-LIMIT-001 | limit.document_size | error | 1 | path, actual, limit | {path}：文档 {actual} 字节超上限 {limit}；请拆分 | §9 |
 | E-LIMIT-002 | limit.file_type | error | 1 | path, actual, expected | {path}：文件类型 {actual} 不在允许清单 {expected} | §5.2/§9 |
 | E-LIMIT-003 | limit.attachment_size | error | 1 | path, actual, limit | {path}：附件 {actual} 字节超上限 {limit} | §9 |
-| E-LIMIT-004 | limit.push_size | error | 1 | refs, actual, limit | 本次 push 总量 {actual} 字节超上限 {limit}；请分批推送 | §9 |
-| E-LIMIT-005 | limit.vault_capacity | error | 1 | refs, actual, limit | 库容量将超上限 {limit}（当前+本次 {actual}）；请清理或申请扩容 | §9 |
+| E-LIMIT-004 | limit.push_size | error | 1 | ref, actual, limit | {ref}：本次 push 总量 {actual} 字节超上限 {limit}；请分批推送 | §9 |
+| E-LIMIT-005 | limit.vault_capacity | error | 1 | ref, actual, limit | {ref}：库容量将超上限 {limit}（当前+本次 {actual}）；请清理或申请扩容 | §9 |
 | E-RUN-001 | run.timeout | error | 2 | limit | 校验运行超时/资源超限（{limit}）；本次操作被拒绝，可重试或减小规模 | §9 |
 | E-RUN-002 | run.internal | error | 2 | —— | 校验内部错误：{actual}；请重试并反馈管理员 | §5.4 |
 | W-FM-101 | frontmatter.optional_field_missing | warning | 0 | path, field | {path}：可选字段 {field} 缺失；不影响提交 | §5.3 |
@@ -212,6 +212,8 @@ secret: !exec "rm -rf /"     # 非法：自定义 tag → E-FM-007
 | N-UPGRADE-001 | upgrade.rules_stale | info | 0 | message | 客户端校验规则为 {actual}，服务端为 {expected}；请运行 notegit setup 更新 | §5.4 |
 
 **行号语义**：`line` 为知识文档内 1 起始行号（frontmatter 区或链接所在行）；tree/容量级问题无行号，省略字段。
+
+**限制类定位字段语义**（消除歧义的固定约定）：`limit` = 数值上限（整数）；`limitKey` = 对应配置键（字符串，如 `validation.limits.maxDocumentBytes`），两者互补可同报；push 级问题（E-LIMIT-004/005、E-RUN-001）以 issue 的 `ref` 字段定位所属 ref，不落在单文件上。
 
 ### 6.3 报告 JSON 形状（machine-readable）
 
@@ -221,6 +223,7 @@ Schema：[schemas/validation-report.schema.json](schemas/validation-report.schem
 - **部分通过/部分失败**：`files[]` 逐文件 `status: pass|fail` 与 `issues[]`；存在任一 error ⇒ `result=fail`。示例见 [examples/report-field-errors-partial.json](examples/report-field-errors-partial.json)（同批 1 过 1 败）。
 - **push 全有或全无**：scope=pre-receive 时 `refs[]` 必填（schema 强制）；`result=fail|error` ⇒ 所有 `outcome=rejected`，服务端不做部分接受；`files[].commit` 定位引入问题的新提交（逐提交检查，§5.4）。示例见 [examples/report-push-multiref.json](examples/report-push-multiref.json)。
 - 运行级问题（超时/内部错误）置于顶层 `issues[]`，`result=error`、退出码 2；示例见 [examples/report-runtime-error.json](examples/report-runtime-error.json)。
+- 网页提交示例（scope=web-submit，失败不发布、保留草稿、README 以 `exempt: true` 标注）：[examples/report-web-submit-draft-rejected.json](examples/report-web-submit-draft-rejected.json)。
 - 通过含警告示例：[examples/report-pass-with-warnings.json](examples/report-pass-with-warnings.json)；危险 tree 示例：[examples/report-dangerous-tree.json](examples/report-dangerous-tree.json)。
 - 错误输出标明规则版本（`rulesVersion`，§5.4）；客户端规则过期时服务端附 `notices[]` 的 N-UPGRADE-001（版本差异本身不构成拒绝理由——判定一律以服务端规则为准）。
 
@@ -237,6 +240,7 @@ Schema：[schemas/validation-report.schema.json](schemas/validation-report.schem
 **情形 A：加字段（新增可选能力）→ MINOR**
 
 适用：新增可选 frontmatter 字段（含其常量）、新增可选配置项、新增 W-/N- 码、报告新增**可选**字段。理由：旧校验器按 §5.1「允许额外字段」忽略新字段，既有内容判定不变。
+边界（与 B1 衔接，不得借道）：新增配置项若其**默认值**使默认配置下原本接受的内容被拒绝（例如新键默认拒绝某类文件），属 B1「收紧」情形，按 MAJOR 处理；A 的 MINOR 仅覆盖不缩小接受集的新增。
 例外：新增 **E- 码**必然伴随新拒绝规则（接受集收缩）→ 按情形 C 升 MAJOR；仅当新码是既有码的等价细分并在 changelog 声明为兼容别名时可为 MINOR。
 
 **情形 B：改默认值 → 分两类（不得互相打洞）**
@@ -280,5 +284,6 @@ python3 docs/contracts/tools/verify_validation_contracts.py
 - **Q7 校正**：§5.1 全部默认值为建议值，S3 实现期以 Q2 部署规格、S8 以实际基准校正（校正值按 §7.2 定版本级别）。
 - **$id 占位域名**（`notegit.local`）：T1 选型定案后由实现固定真实 $id，保持文件路径与 `rulesVersion` 机制不变（PATCH 级）。
 - **定稿**：S3 实现首版校验通过验收后，`1.0.0-draft.1 → 1.0.0`（status: final），changelog 记录。
-- E-LIMIT-004/005 的 `refs` 级定位与超限计量的精确口径（打包对象字节数 vs 解压字节数）在 S3 实现时确认。
+- E-LIMIT-004/005 的超限计量精确口径（打包对象字节数 vs 解压字节数）在 S3 实现时确认；`ref` 定位字段已纳入 schema（issue 级）。
+- §3.1/§3.2/§4.1 的版本化常量目前同时存在于 schema 与文档文本，门禁未做两者机器交叉核对——S3 定稿时建议提取常量清单文件或由代码生成文档表，消除该漂移面。
 - 本契约为 S1 草案：**不宣称 E1 DoD（含 DOD-05）完成**；DOD-05 的实证（暂存区/服务端/网页同规则、各绕过路径实测拦截）属 S3/S9 验收。

@@ -46,7 +46,8 @@
           "rule": "limit.document_size",
           "message": "docs/travel/policy/deck.md：文档 2097152 字节超过上限 1048576；请拆分文档或将大内容改为附件。",
           "actual": 2097152,
-          "limit": "validation.limits.maxDocumentBytes"
+          "limit": 1048576,
+          "limitKey": "validation.limits.maxDocumentBytes"
         }
       ]
     },

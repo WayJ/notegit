@@ -14,13 +14,18 @@
      schemas/frontmatter.schema.json；kind=raw 用例仅做注册表核对
      （YAML 层规则无法用 JSON 表达，留给实现方测试覆盖）；
   4. 交叉一致性：
-     a. 示例中出现的每个错误码都在 validation.md 错误码注册表内；
+     a. 示例中出现的每个错误码（含报告顶层 issues 与 notices）都在 validation.md 错误码注册表内；
      b. 注册表每行 severity 与码前缀一致（E=error / W=warning / N=info）；
-     c. 所有报告示例的 rulesVersion == rules-version.json 的 rulesVersion；
+     b2. 注册表退出码列一致（W/N→0、E-RUN-*→2、其余 E→1）；
+     c. 所有报告示例的 rulesVersion == rules-version.json 的 rulesVersion，
+        且该版本号出现在 validation.md 中；
      d. validation-defaults.json 的每个默认值与 validation.md 默认值表一致（双向）；
-     e. 报告示例 result 与 exitCode 映射正确（pass→0 / fail→1 / error→2）；
+     e. 报告示例 result 与 exitCode 映射正确（pass→0 / fail→1 / error→2），
+        summary 算术一致（filesTotal=filesPassed+filesFailed=len(files)，
+        errorCount/warningCount 与 issues 实算一致）；
      f. rules-version.json 的 artifacts 所列文件都存在；
-  5. result=fail 的报告示例中所有 refs[].outcome == "rejected"（push 全有或全无，架构 §5.4）。
+  5. result=fail 或 error 的报告示例中所有 refs[].outcome == "rejected"
+     （push 全有或全无，架构 §5.4）。
 
 validation.md 表格式约定（本脚本的解析契约）：
   - 错误码注册表行：`| <code> | <rule id> | <severity> | ... |`（severity 固定第 3 列）；
@@ -61,8 +66,12 @@ def load_json(path):
 
 
 def parse_md_tables(md_text):
-    """返回 (注册表行, 默认值表行)。单元格去掉首尾空白与反引号。"""
-    registry = []   # (code, severity)
+    """返回 (注册表行, 默认值表行)。单元格去掉首尾空白与反引号。
+
+    注册表行格式：`| <code> | <rule id> | <severity> | <退出码> | ... |`；
+    默认值表行格式：`| validation.* | <默认值：整数或 JSON 数组字符串> | ... |`。
+    """
+    registry = []   # (code, severity, exit_code_cell)
     defaults = []   # (config_key, raw_value)
     for line in md_text.splitlines():
         stripped = line.strip()
@@ -72,7 +81,7 @@ def parse_md_tables(md_text):
         if len(cells) < 3:
             continue
         if CODE_RE.match(cells[0]):
-            registry.append((cells[0], cells[2]))
+            registry.append((cells[0], cells[2], cells[3] if len(cells) > 3 else ""))
         elif cells[0].startswith("validation."):
             defaults.append((cells[0], cells[1]))
     return registry, defaults
@@ -143,12 +152,24 @@ def main():
     # ---- 4. 交叉一致性 ----
     md_text = VALIDATION_MD.read_text(encoding="utf-8") if VALIDATION_MD.is_file() else ""
     registry, default_rows = parse_md_tables(md_text)
-    codes = {c for c, _ in registry}
+    codes = {c for c, _severity, _exit in registry}
     check("validation.md: 注册表存在", len(registry) >= 20, f"共 {len(registry)} 行")
     check("validation.md: 注册表码唯一", len(codes) == len(registry))
-    for code, severity in registry:
+    for code, severity, _exit_cell in registry:
         check(f"registry: {code} severity 前缀一致",
               PREFIX_SEVERITY.get(code[0]) == severity, f"{code} -> {severity}")
+    # 注册表退出码列：W/N→0；E-RUN-*→2；其余 E→1（架构 §5.4）
+    bad_exit = []
+    for code, _severity, exit_cell in registry:
+        expected_exit = 0 if code[0] in "WN" else (2 if code.startswith("E-RUN-") else 1)
+        try:
+            actual_exit = int(exit_cell)
+        except ValueError:
+            actual_exit = None
+        if actual_exit != expected_exit:
+            bad_exit.append(f"{code}: 表列 {exit_cell!r} ≠ 期望 {expected_exit}")
+    check("registry: 退出码列一致（W/N→0、E-RUN→2、其余 E→1）", not bad_exit,
+          "; ".join(bad_exit[:3]))
 
     # 4a. 示例中的码都在注册表内
     used_codes = set()
@@ -157,6 +178,7 @@ def main():
             doc = load_json(path)
             for f_entry in doc.get("files", []):
                 used_codes.update(i.get("code") for i in f_entry.get("issues", []))
+            used_codes.update(i.get("code") for i in doc.get("issues", []))
             used_codes.update(n.get("code") for n in doc.get("notices", []))
         except Exception:  # noqa: BLE001 - 解析失败已由检查 2 覆盖
             continue
@@ -174,6 +196,10 @@ def main():
     if RULES_VERSION.is_file():
         try:
             rules_version_value = load_json(RULES_VERSION).get("rulesVersion")
+            if rules_version_value and md_text:
+                check("validation.md: 规则版本与 manifest 一致（版本号出现在文档中）",
+                      rules_version_value in md_text,
+                      f"{rules_version_value} 未出现在 validation.md")
         except Exception as exc:  # noqa: BLE001
             check("rules-version.json: 可解析", False, str(exc))
     else:
@@ -192,10 +218,25 @@ def main():
         result, exit_code = doc.get("result"), doc.get("exitCode")
         check(f"{name}: result/exitCode 映射", RESULT_EXIT.get(result) == exit_code,
               f"{result}/{exit_code}")
-        if result == "fail":
+        if result in ("fail", "error"):
             outcomes = {r.get("outcome") for r in doc.get("refs", [])}
-            check(f"{name}: fail ⇒ refs 全部 rejected", outcomes <= {"rejected"},
+            check(f"{name}: fail|error ⇒ refs 全部 rejected", outcomes <= {"rejected"},
                   f"outcomes={outcomes}")
+        # summary 算术：filesTotal = filesPassed + filesFailed；error/warning 计数与 issues 一致
+        files = doc.get("files", [])
+        err_n = sum(1 for f_entry in files for i in f_entry.get("issues", [])
+                    if i.get("severity") == "error")
+        err_n += sum(1 for i in doc.get("issues", []) if i.get("severity") == "error")
+        warn_n = sum(1 for f_entry in files for i in f_entry.get("issues", [])
+                     if i.get("severity") == "warning")
+        warn_n += sum(1 for i in doc.get("issues", []) if i.get("severity") == "warning")
+        summary = doc.get("summary", {})
+        arith_ok = (summary.get("filesTotal") == summary.get("filesPassed") + summary.get("filesFailed")
+                    and summary.get("filesTotal") == len(files)
+                    and summary.get("errorCount") == err_n
+                    and summary.get("warningCount") == warn_n)
+        check(f"{name}: summary 算术一致", arith_ok,
+              f"summary={summary} 实算 files={len(files)} err={err_n} warn={warn_n}")
 
     # 4d. 默认值双向一致
     if DEFAULTS_JSON.is_file():

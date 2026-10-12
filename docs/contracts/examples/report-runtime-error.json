@@ -18,7 +18,9 @@
       "code": "E-RUN-001",
       "rule": "run.timeout",
       "message": "校验运行超过 10000 ms 未完成（refs/heads/main，新引入 120 个提交）；本次推送被拒绝，可重试或减少单次推送规模。",
-      "limit": "validation.runtime.validationTimeoutMs"
+      "ref": "refs/heads/main",
+      "limit": 10000,
+      "limitKey": "validation.runtime.validationTimeoutMs"
     }
   ],
   "files": [],

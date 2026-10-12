@@ -147,11 +147,19 @@
           "type": "integer", "minimum": 1
         },
         "field": {"type": "string"},
+        "ref": {
+          "$comment": "可选；push 级问题（E-LIMIT-004/005 等）所属 ref 名（如 refs/heads/main）",
+          "type": "string"
+        },
         "actual": {"type": ["string", "integer", "number", "array"]},
         "expected": {"type": ["string", "integer", "number", "array"]},
         "limit": {
-          "$comment": "可选；对应限制值（整数）或配置键（字符串）",
-          "type": ["string", "integer"]
+          "$comment": "可选；对应限制的数值上限",
+          "type": "integer"
+        },
+        "limitKey": {
+          "$comment": "可选；对应配置键（如 validation.limits.maxDocumentBytes），与 limit 数值互补",
+          "type": "string"
         }
       }
     }

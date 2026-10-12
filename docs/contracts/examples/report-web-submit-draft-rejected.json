@@ -1,0 +1,36 @@
+{
+  "$comment": "示例 6/6：网页正式提交校验失败——scope=web-submit。架构 §5.4：根据 base commit 构造完整候选提交；失败时不发布、保留草稿和错误提示。README 豁免文件以 exempt=true 标注（架构 §5.2：豁免 frontmatter，仍受路径/类型/容量规则）。无 refs（非 push 场景）。",
+  "rulesVersion": "1.0.0-draft.1",
+  "scope": "web-submit",
+  "result": "fail",
+  "exitCode": 1,
+  "vaultId": "vault-013",
+  "commit": "7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d",
+  "summary": {
+    "filesTotal": 2,
+    "filesPassed": 1,
+    "filesFailed": 1,
+    "errorCount": 1,
+    "warningCount": 0
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "status": "pass",
+      "exempt": true,
+      "issues": []
+    },
+    {
+      "path": "docs/finance/new-policy.md",
+      "status": "fail",
+      "issues": [
+        {
+          "severity": "error",
+          "code": "E-FM-001",
+          "rule": "frontmatter.missing",
+          "message": "docs/finance/new-policy.md：知识文档缺少 frontmatter（首行须为 ---）；草稿已保留，补充 title 等元数据后可重新提交。"
+        }
+      ]
+    }
+  ]
+}
