@@ -37,6 +37,12 @@
       "unit": "glob-list",
       "kind": "verdict",
       "basis": "架构 §5.2 管理员可增加导航/特殊文件豁免；默认空（建议，待校正）"
+    },
+    "validation.exemptions.specialFilePatterns": {
+      "default": [".gitignore", ".gitattributes"],
+      "unit": "glob-list",
+      "kind": "verdict",
+      "basis": "架构 §5.2 配置文件不套用 frontmatter 但仍受路径/类型/容量规则；默认最小清单（建议，待校正）"
     }
   },
   "runtime": {
