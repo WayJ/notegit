@@ -14,6 +14,7 @@ import { createDbMembershipSource } from './vaults/membership.ts';
 import { VaultService } from './vaults/service.ts';
 import { vaultsPlugin } from './vaults/routes.ts';
 import { createVaultRepoOps } from './gitrepo/lifecycle.ts';
+import { gitHttpPlugin } from './githttp/http-backend.ts';
 import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
 import { registerMaintenanceRoutes } from './maintenance/routes.ts';
 import { registerWebRoutes } from './web/routes.ts';
@@ -47,8 +48,12 @@ export interface AppDeps {
   readonly credentials?: CredentialsOptions;
   readonly logger?: FastifyServerOptions['logger'];
   /** 数据目录（S3-T1）：注入后建库端点真实 init bare 于 <dataDir>/git/<id>.git；
-   *  缺省 = S2 测试形态（仅建行）。生产装配（main.ts）恒传入。 */
+   *  缺省 = S2 测试形态（仅建行）。生产装配（main.ts）恒传入。
+   *  S3-T2：注入后同时注册 /git Smart HTTP 入口（CGI 包装 git http-backend）。 */
   readonly dataDir?: string;
+  /** 库文件路径（S3-T2）：透传 NOTEGIT_DB 给 pre-receive hook 子进程直连；
+   *  缺省则 /git 推送在 hook 处 fail-closed（读路径不受影响）。main.ts 恒传入。 */
+  readonly dbFile?: string;
 }
 
 /** 已填默认值的依赖，注册路由用。 */
@@ -154,6 +159,18 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       db: wired.db,
       authenticateRequest: wired.authenticateRequest,
     });
+    // S3-T2 Git Smart HTTP 入口（api.md §8.4）：CGI 包装 git http-backend，认证
+    // 经 Basic→token（同一凭据域服务）、授权经同一 authorize/membershipSource、
+    // 维护模式 write 403——与 Web/API 三入口共用组件；dataDir 注入时注册
+    if (deps.dataDir !== undefined) {
+      app.register(gitHttpPlugin, {
+        dataDir: deps.dataDir,
+        dbFile: deps.dbFile,
+        membershipSource: createDbMembershipSource(deps.db),
+        authenticateToken: (token) => credentialsService.authenticate(token),
+        maintenanceGate,
+      });
+    }
   }
   return app;
 }

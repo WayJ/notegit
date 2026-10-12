@@ -42,7 +42,13 @@ test('静态规则：src/ 产品代码无任何同步子进程调用（execFileS
 test('静态规则：`.git` 磁盘命名仅存在于 vaults/repo-path.ts（路径映射唯一来源）', async () => {
   // repo-path.ts = 正/逆映射唯一来源；db/migrations.ts = 契约 DDL 逐字迁移，
   // 其 `.git` 全部是 SQL 注释里的契约原文（storage-model §3.5），无路径构造代码。
-  const allow = new Set([path.join('vaults', 'repo-path.ts'), path.join('db', 'migrations.ts')]);
+  // githttp/cgi.ts（S3-T2）= clone URL 惯例后缀剥离（/git/<slug>.git 的正则），
+  // 纯 URL 解析、不构造任何磁盘路径——磁盘 `<id>.git` 仍只出自 repo-path.ts。
+  const allow = new Set([
+    path.join('vaults', 'repo-path.ts'),
+    path.join('db', 'migrations.ts'),
+    path.join('githttp', 'cgi.ts'),
+  ]);
   for (const file of await tsFiles(SRC)) {
     if ([...allow].some((a) => file.endsWith(a))) continue;
     const code = stripComments(await readFile(file, 'utf8'));

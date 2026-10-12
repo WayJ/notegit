@@ -8,13 +8,23 @@ import path from 'node:path';
  * 消费者：S3-T1（建库即 `git init --bare` 于本路径）与 Git HTTP 接入层；
  * dataDir 由启动流程解析（默认 /data，NOTEGIT_DATA_DIR 可覆盖，backup §2）。
  */
-export function vaultRepoPath(dataDir: string, vaultId: number): string {
-  // 注入防线：id 只接受正的安全整数（INTEGER PRIMARY KEY rowid 域），
-  // 其余（0/负数/小数/NaN/超大数/字符串）一律拒绝，绝不进路径拼接。
+/**
+ * `<id>.git` 段形态（S3-T2）：磁盘目录名与 Git Smart HTTP 的 PATH_INFO 段共用
+ * 的唯一来源——`.git` 字面量只允许出现在本文件（gitrepo-static-rules 结构断言）。
+ * 与 parseVaultRepoDirName 互逆。
+ */
+export function vaultRepoDirName(vaultId: number): string {
+  // 与 vaultRepoPath 同一合法域与防线（见下）
   if (!Number.isSafeInteger(vaultId) || vaultId <= 0) {
     throw new RangeError(`vault id must be a positive safe integer, got: ${String(vaultId)}`);
   }
-  return path.join(dataDir, 'git', `${vaultId}.git`);
+  return `${vaultId}.git`;
+}
+
+export function vaultRepoPath(dataDir: string, vaultId: number): string {
+  // 注入防线：id 只接受正的安全整数（INTEGER PRIMARY KEY rowid 域），
+  // 其余（0/负数/小数/NaN/超大数/字符串）一律拒绝，绝不进路径拼接。
+  return path.join(dataDir, 'git', vaultRepoDirName(vaultId));
 }
 
 /**
