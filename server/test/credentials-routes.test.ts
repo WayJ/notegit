@@ -12,8 +12,8 @@ import { displayHint } from '../src/credentials/token.ts';
 import { newDb, addEmployee, addVault, addMember, dumpAllText, auditRows } from './credentials-fixtures.ts';
 
 // api.md §4 端点映射 + §2.1 错误信封；identity §3.1 明文仅创建响应一次。
-// 认证载体：Authorization: Bearer ngt_…（api.md §1；ngt_sid 会话载体随 S2-T3 并行任务落地，
-// 经 buildApp 的 resolveSubject 缝接入——本域路由先试缝再解析 Bearer）。
+// 认证载体：Authorization: Bearer ngt_…（api.md §1；经 buildApp 的统一认证缝
+// 接入——S2-T5 起 Bearer 优先、Cookie 会话为回退，四状态精确 401 映射）。
 
 interface Ctx {
   app: FastifyInstance;

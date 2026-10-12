@@ -6,7 +6,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import { openDatabase } from './db/connection.ts';
 import { migrate } from './db/migrate.ts';
 import { MIGRATIONS } from './db/migrations.ts';
-import { buildApp, type PasswordHasher, type SubjectResolver } from './app.ts';
+import { buildApp, type PasswordHasher } from './app.ts';
+import type { RequestAuthenticator } from './auth/lifecycle.ts';
 import { loadOrCreatePepper } from './bootstrap/pepper.ts';
 import { ensureBootstrapToken } from './bootstrap/token.ts';
 import { isUninitialized } from './bootstrap/state.ts';
@@ -23,7 +24,7 @@ export interface StartOptions {
   readonly dataDir?: string;
   readonly host?: string;
   readonly port?: number;
-  readonly resolveSubject?: SubjectResolver;
+  readonly authenticateRequest?: RequestAuthenticator;
   readonly hashPassword?: PasswordHasher;
 }
 
@@ -59,7 +60,7 @@ export async function startApp(opts: StartOptions = {}): Promise<StartedApp> {
       db,
       pepper,
       bootstrapTokenFile,
-      resolveSubject: opts.resolveSubject,
+      authenticateRequest: opts.authenticateRequest,
       hashPassword: opts.hashPassword,
     });
     const host = opts.host ?? process.env.HOST ?? '0.0.0.0';

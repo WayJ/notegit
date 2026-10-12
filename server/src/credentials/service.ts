@@ -49,6 +49,9 @@ export class ApiError extends Error {
 
 export type ScopeAccess = 'read' | 'read_write';
 
+/** 审计入口归因（identity §8；api.md §8.5）：凭据操作经会话载体（Web）或 token 载体（API）发起 */
+export type AuditEntry = 'web' | 'api';
+
 export interface CredentialPublic {
   id: number;
   name: string;
@@ -67,6 +70,8 @@ export interface AuthTokenContext {
   isInstanceAdmin: boolean;
   scopeAccess: ScopeAccess;
   scopeVaultIds: number[];
+  /** 入口归因（identity §8）：会话载体=web、token 载体=api（S2-T5 统一缝携带） */
+  entry: AuditEntry;
 }
 
 /** 授权层 scope 判定结果：not_found 与「库不存在」不可区分（identity §5.2/D-IC-06，404 语义） */
@@ -109,8 +114,13 @@ export class CredentialsService {
     this.maxLifetimeMs = (config.maxTokenLifetimeDays ?? DEFAULT_MAX_LIFETIME_DAYS) * 86_400_000;
   }
 
-  /** 创建凭据：明文仅随本返回值出现一次；写路径 BEGIN IMMEDIATE（storage-model §1） */
-  createCredential(employeeId: number, input: CreateCredentialInput): { record: CredentialPublic; token: string } {
+  /** 创建凭据：明文仅随本返回值出现一次；写路径 BEGIN IMMEDIATE（storage-model §1）。
+   *  auditCtx.entry = 载体归因（会话=web / token=api，identity §8；缺省 api）。 */
+  createCredential(
+    employeeId: number,
+    input: CreateCredentialInput,
+    auditCtx?: { entry?: AuditEntry },
+  ): { record: CredentialPublic; token: string } {
     if (typeof input.name !== 'string' || input.name.length === 0) {
       throw new ApiError(400, 'E-RES-004', '请求形态错误：name 必填且为非空字符串');
     }
@@ -143,7 +153,7 @@ export class CredentialsService {
         )
         .run(employeeId, input.name, tokenHash, hint, scope.access, JSON.stringify(scope.vaultIds), createdAt, expiresAt);
       const id = Number(info.lastInsertRowid);
-      this.audit(employeeId, `credential:${id}`, 'credential.create', { name: input.name });
+      this.audit(employeeId, `credential:${id}`, 'credential.create', { name: input.name }, auditCtx?.entry ?? 'api');
       this.db.exec('COMMIT');
       return {
         record: {
@@ -192,12 +202,13 @@ export class CredentialsService {
   /**
    * 撤销：置位 revoked_at（不删行，不可复活——identity §3.5），即时生效；
    * 他人凭据与不存在的凭据同报 404（不可见语义）；重复撤销幂等且不重复审计。
-   * 审计主体 = 认证员工（identity §8）：自助撤销为本人，代管撤销为管理员（detail 记代管目标）。
+   * 审计主体 = 认证员工（identity §8）：自助撤销为本人，代管撤销为管理员（detail 记代管目标）；
+   * auditInfo.entry = 载体归因（会话=web / token=api，identity §8；缺省 api）。
    */
   revokeCredential(
     credentialId: number,
     ownerEmployeeId: number,
-    auditInfo: { actorEmployeeId: number; managedByUsername?: string },
+    auditInfo: { actorEmployeeId: number; managedByUsername?: string; entry?: AuditEntry },
   ): void {
     const row = this.db
       .prepare(`SELECT id, revoked_at FROM credentials WHERE id = ? AND employee_id = ?`)
@@ -212,7 +223,7 @@ export class CredentialsService {
       this.db.prepare(`UPDATE credentials SET revoked_at = ? WHERE id = ?`).run(this.now(), credentialId);
       const detail =
         auditInfo.managedByUsername !== undefined ? { managed_for: auditInfo.managedByUsername } : {};
-      this.audit(auditInfo.actorEmployeeId, `credential:${credentialId}`, 'credential.revoke', detail);
+      this.audit(auditInfo.actorEmployeeId, `credential:${credentialId}`, 'credential.revoke', detail, auditInfo.entry ?? 'api');
       this.db.exec('COMMIT');
     } catch (err) {
       this.db.exec('ROLLBACK');
@@ -244,6 +255,7 @@ export class CredentialsService {
           isInstanceAdmin: hit.is_instance_admin === 1,
           scopeAccess: hit.scope_access,
           scopeVaultIds: JSON.parse(hit.scope_vaults) as number[],
+          entry: 'api', // token 载体认证即 API 入口（identity §8）
         };
       }
       // 归因：哈希命中存量行但被规范查询过滤 → 按四状态区分错误码
@@ -370,12 +382,18 @@ export class CredentialsService {
   }
 
   /** 审计事件（identity §8；storage-model §5：直接终态、credential_ref 不含 token 材料） */
-  private audit(employeeId: number, credentialRef: string, eventKind: 'credential.create' | 'credential.revoke', detail: Record<string, unknown>): void {
+  private audit(
+    employeeId: number,
+    credentialRef: string,
+    eventKind: 'credential.create' | 'credential.revoke',
+    detail: Record<string, unknown>,
+    entry: AuditEntry,
+  ): void {
     this.db
       .prepare(
         `INSERT INTO audit_events (occurred_at, actor_kind, employee_id, credential_ref, entry, event_kind, vault_id, status, detail)
-         VALUES (?, 'employee', ?, ?, 'api', ?, NULL, 'succeeded', ?)`,
+         VALUES (?, 'employee', ?, ?, ?, ?, NULL, 'succeeded', ?)`,
       )
-      .run(this.now(), employeeId, credentialRef, eventKind, JSON.stringify(detail));
+      .run(this.now(), employeeId, credentialRef, entry, eventKind, JSON.stringify(detail));
   }
 }

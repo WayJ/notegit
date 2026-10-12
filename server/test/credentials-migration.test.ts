@@ -9,8 +9,8 @@ import { addEmployee } from './credentials-fixtures.ts';
 
 // storage-model §3.4 + §3.1 迁移纪律：迁移 0004 = credentials 表（契约 @schema 块），
 // schema_version 引导行剔除（runner 持有，architecture-notes §3）；仅 append 注册
-// （0002 已随 S2-T2 并入，0003 为 S2-T3 预留）。display_hint 列为 master 2026-10-12
-// 批准的契约补正（api.md §4 需要、schema 原缺列）。
+// （0002 已随 S2-T2 并入，0003 为 S2-T3 预留）。display_hint 列：D11 ADR（2026-10-13）
+// 已将增列同步进契约 @schema 块——此后迁移与契约应逐行等价（S2-T5 随 D11 同步收敛）。
 
 function memory(): DatabaseSync {
   return new DatabaseSync(':memory:');
@@ -30,23 +30,15 @@ function migrationV4Lines(): string[] {
   return v4.statements.join('\n').split('\n').map((l) => l.trimEnd()).filter((l) => l.length > 0);
 }
 
-test('迁移 0004：契约 @schema 块逐行在迁移中按序保留，唯一增列 = display_hint（master 裁定）', () => {
+test('迁移 0004：与契约 @schema 块逐行等价（D11 同步后无任何增量，防漂移）', () => {
   const contract = contractCredentialsLines();
   const mine = migrationV4Lines();
-  // 契约行是迁移行的按序子序列（逐字保留，防漂移）
-  let i = 0;
-  for (const line of contract) {
-    while (i < mine.length && mine[i] !== line) i++;
-    assert.ok(i < mine.length, `迁移 0004 缺契约行：${line}`);
-    i++;
-  }
-  // 迁移相对契约的唯一增量 = display_hint 列行（含依据注释）
-  const mineSet = new Map<string, number>();
-  for (const l of mine) mineSet.set(l, (mineSet.get(l) ?? 0) + 1);
-  for (const l of contract) mineSet.set(l, (mineSet.get(l) ?? 1) - 1);
-  const extra = [...mineSet.entries()].filter(([, n]) => n > 0).flatMap(([l, n]) => Array<string>(n).fill(l));
-  assert.equal(extra.length, 1, `迁移 0004 相对契约只允许 display_hint 增列，实得多行：${JSON.stringify(extra)}`);
-  assert.match(extra[0]!, /display_hint\s+TEXT/);
+  // D11 后契约已含 display_hint 列：迁移与契约应完全一致（顺序 + 逐字）
+  assert.deepEqual(
+    mine,
+    contract,
+    '迁移 0004 应与 storage-model.md @schema credentials 块逐行一致（D11 同步后）',
+  );
 });
 
 test('迁移 0004：schema_version 引导行不在迁移内容中（runner 持有引导表）', () => {

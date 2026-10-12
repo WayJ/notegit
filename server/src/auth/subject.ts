@@ -1,12 +1,12 @@
 import type { FastifyRequest } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
-import type { Subject, SubjectResolver } from '../app.ts'; // type-only（运行时擦除，无环）
+import type { Subject } from '../app.ts'; // type-only（运行时擦除，无环）
 import { authenticateSession, diagnoseSessionFailure, sidHash, touchSession, DEFAULT_SESSION_TIMEOUTS } from './sessions.ts';
 
 /**
- * 会话主体解析（identity §5.1 第 1 层）：S2-T3 的 ngt_sid Cookie 载体解析，
- * 供本域路由（routes.ts）与 app.ts 的 SubjectResolver 缝共用——S2-T2 的注释
- * 「真实载体解析随 S2-T3 落地」的落点。Bearer ngt_（token 域）随 S2-T4/T5 并入。
+ * 会话载体解析（identity §5.1 第 1 层）：ngt_sid Cookie → Subject。
+ * 请求级双载体缝（Bearer + Cookie、四状态精确映射）在 auth/lifecycle.ts
+ * （S2-T5 统一，替换并吸收 T2 的 createSubjectResolver 缝）。
  */
 
 export const COOKIE_NAME = 'ngt_sid';
@@ -49,18 +49,4 @@ export function resolveSession(
   }
   const failure = diagnoseSessionFailure(db, hash, now, idleTimeoutMs);
   return { ok: false, reason: failure === 'account_disabled' ? 'account_disabled' : 'invalid' };
-}
-
-/** SubjectResolver 缝的真实实现（api.md §1 Cookie 载体）：失败一律 null → 调用方 401。 */
-export function createSubjectResolver(deps: {
-  db: DatabaseSync;
-  pepper: Uint8Array;
-  now?: () => Date;
-  idleTimeoutMs?: number;
-}): SubjectResolver {
-  const now = deps.now ?? (() => new Date());
-  return (req: FastifyRequest) => {
-    const r = resolveSession(deps.db, deps.pepper, readSidCookie(req), now(), deps.idleTimeoutMs);
-    return r.ok ? r.subject : null;
-  };
 }

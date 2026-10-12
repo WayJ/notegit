@@ -24,7 +24,7 @@ test('首次初始化自动生成 pepper：32B、0600、hmacv1$ 形态', async (
     assert.equal(pepper.active.key.length, 32);
     assert.equal(await fileMode(file), 0o600);
     const hash = hmacTokenHash(pepper, 'sometoken');
-    assert.match(hash, /^hmac1\$[0-9a-f]{64}$/);
+    assert.match(hash, /^hmacv1\$[0-9a-f]{64}$/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -49,7 +49,8 @@ test('pepper 派生 HMAC 确定性且随键变化（同 token 不同 pepper → 
   const b = { active: { version: 1, key: Buffer.alloc(32, 2) }, retired: [] };
   assert.equal(hmacTokenHash(a, 'tok'), hmacTokenHash(a, 'tok'));
   assert.notEqual(hmacTokenHash(a, 'tok'), hmacTokenHash(b, 'tok'));
-  // 版本内嵌：pepper 版本 2 → hmacv2$ 前缀（identity §6.2 校验按版本选键的钩子）
+  // 版本内嵌：pepper 版本 2 → hmacv2$ 前缀（identity §6.2 校验按版本选键的钩子；
+  // 与凭据域 hashToken 同一拼写 hmacv<版本>$，identity §3.2 唯一契约形态）
   const v2 = { active: { version: 2, key: ZERO32 }, retired: [] };
-  assert.match(hmacTokenHash(v2, 'tok'), /^hmac2\$/);
+  assert.match(hmacTokenHash(v2, 'tok'), /^hmacv2\$/);
 });

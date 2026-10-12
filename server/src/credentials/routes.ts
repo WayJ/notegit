@@ -1,22 +1,25 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { CredentialsService, ApiError } from './service.ts';
-import type { ServiceConfig, AuthTokenContext } from './service.ts';
+import type { AuthTokenContext } from './service.ts';
 import type { DatabaseSync } from 'node:sqlite';
-import type { SubjectResolver } from '../app.ts';
+import { authFailureMessage, type RequestAuthenticator } from '../auth/lifecycle.ts';
 
 /**
  * 访问凭据端点（api.md §4；identity §3.5 自助与代管并存）。
- * 认证双路：先试 app.ts 的 resolveSubject 缝（ngt_sid 会话载体随 S2-T3 落地后，
- * Cookie 认证的凭据自助操作即自动可用），未命中再解析 `Authorization: Bearer ngt_…`
- * （api.md §1）——Bearer 路径给出 identity §5.2 的精确 401 映射。
- * 错误统一走 api.md §2.1 信封；凭据明文永不进入日志（identity §3.1/§8）。
+ * 认证经 app.ts 的 authenticateRequest 缝（S2-T5 统一）：Bearer（显式头凭据，优先）
+ * 或 ngt_sid 会话 Cookie；四状态精确 401 映射（E-AUTH-001..004，identity §5.2）。
+ * 会话载体无凭据 scope（收窄仅对 token 有意义）；审计 entry 按载体归因
+ * （web/api，identity §8）。错误统一走 api.md §2.1 信封；凭据明文永不进入日志。
  */
 
-export interface CredentialsPluginOptions extends ServiceConfig {
-  readonly resolveSubject: SubjectResolver;
+export interface CredentialsPluginOptions {
+  readonly db: DatabaseSync;
+  readonly service: CredentialsService;
+  readonly authenticateRequest: RequestAuthenticator;
 }
 
-/** 认证结果挂在请求对象上（WeakMap，避免与 S2-T3 全局类型扩充冲突） */
+/** 认证结果挂在请求对象上（WeakMap，避免与 S2-T3 全局类型扩充冲突；
+ *  键为请求对象——每请求一个新键，天然不跨请求，非缓存（D-IC-05）） */
 const authUsers = new WeakMap<FastifyRequest, AuthTokenContext>();
 
 function requireUser(request: FastifyRequest): AuthTokenContext {
@@ -32,34 +35,43 @@ function parseIdParam(raw: string): number {
   return Number(raw);
 }
 
+/** 认证失败 → 凭据域信封（与 lifecycle.rejectAuth 同一映射/文案，经插件错误处理器呈现） */
+function authErrorOf(failure: { code: 'E-AUTH-001' | 'E-AUTH-002' | 'E-AUTH-003' | 'E-AUTH-004'; reason: string }): ApiError {
+  return new ApiError(401, failure.code, authFailureMessage(failure.code), { reason: failure.reason });
+}
+
 export const credentialsPlugin: FastifyPluginAsync<CredentialsPluginOptions> = async (
   instance: FastifyInstance,
   options: CredentialsPluginOptions,
 ) => {
-  const svc = new CredentialsService(options);
+  const svc = options.service;
   const db: DatabaseSync = options.db;
 
   // 认证钩子（identity §5.1 第 1 层；仅作用于本插件作用域内路由，/healthz 与其他域不受影响）
   instance.addHook('onRequest', async (request) => {
-    const subject = await options.resolveSubject(request);
-    if (subject) {
-      // 会话载体：无凭据上下文（scope 收窄仅对 token 有意义；audit 载体标识随 T3 对接）
+    const outcome = await options.authenticateRequest(request);
+    if (!outcome.ok) throw authErrorOf(outcome);
+    if (outcome.carrier === 'token' && outcome.token) {
+      // token 载体：凭据 scope 收窄随授权层取交集（identity §3.4）
       authUsers.set(request, {
-        credentialId: 0,
-        employeeId: subject.employee_id,
-        isInstanceAdmin: subject.is_instance_admin,
-        scopeAccess: 'read_write',
-        scopeVaultIds: [],
+        credentialId: outcome.token.credentialId,
+        employeeId: outcome.subject.employee_id,
+        isInstanceAdmin: outcome.subject.is_instance_admin,
+        scopeAccess: outcome.token.scopeAccess,
+        scopeVaultIds: [...outcome.token.scopeVaultIds],
+        entry: 'api',
       });
       return;
     }
-    const header = request.headers.authorization;
-    // RFC 7235：auth scheme 大小写不敏感（bearer/BEARER 同样受理）
-    const m = /^(\w+)\s+(.+)$/.exec(header ?? '');
-    if (!m || m[1]!.toLowerCase() !== 'bearer') {
-      throw new ApiError(401, 'E-AUTH-001', '未认证');
-    }
-    authUsers.set(request, svc.authenticate(m[2]!));
+    // 会话载体：无凭据上下文（员工全量权限；audit 载体标识随 T7 对接）
+    authUsers.set(request, {
+      credentialId: 0,
+      employeeId: outcome.subject.employee_id,
+      isInstanceAdmin: outcome.subject.is_instance_admin,
+      scopeAccess: 'read_write',
+      scopeVaultIds: [],
+      entry: 'web',
+    });
   });
 
   instance.setErrorHandler((err: Error & { statusCode?: number }, _request, reply) => {
@@ -84,7 +96,9 @@ export const credentialsPlugin: FastifyPluginAsync<CredentialsPluginOptions> = a
 
   instance.post('/api/v1/credentials', async (request, reply) => {
     const user = requireUser(request);
-    const { record, token } = svc.createCredential(user.employeeId, (request.body ?? {}) as Record<string, unknown>);
+    const { record, token } = svc.createCredential(user.employeeId, (request.body ?? {}) as Record<string, unknown>, {
+      entry: user.entry,
+    });
     request.log.info(
       { event: 'credential.create', employee_id: user.employeeId, credential_id: record.id },
       'credential created',
@@ -95,7 +109,7 @@ export const credentialsPlugin: FastifyPluginAsync<CredentialsPluginOptions> = a
   instance.delete('/api/v1/credentials/:id', async (request, reply) => {
     const user = requireUser(request);
     const id = parseIdParam((request.params as { id: string }).id);
-    svc.revokeCredential(id, user.employeeId, { actorEmployeeId: user.employeeId });
+    svc.revokeCredential(id, user.employeeId, { actorEmployeeId: user.employeeId, entry: user.entry });
     request.log.info(
       { event: 'credential.revoke', employee_id: user.employeeId, credential_id: id },
       'credential revoked',
@@ -128,7 +142,7 @@ export const credentialsPlugin: FastifyPluginAsync<CredentialsPluginOptions> = a
     const username = (request.params as { username: string }).username;
     const id = parseIdParam((request.params as { id: string }).id);
     const target = employeeIdByUsername(username);
-    svc.revokeCredential(id, target, { actorEmployeeId: admin.employeeId, managedByUsername: username });
+    svc.revokeCredential(id, target, { actorEmployeeId: admin.employeeId, managedByUsername: username, entry: admin.entry });
     request.log.info(
       { event: 'credential.revoke', employee_id: admin.employeeId, credential_id: id, managed_for: username },
       'credential revoked (managed)',

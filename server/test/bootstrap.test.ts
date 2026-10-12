@@ -40,7 +40,7 @@ async function makeInstance(dir?: string, opts?: { realHash?: boolean }): Promis
     // Argon2id 绑定经协调人 2026-10-12 批复由本任务落地（src/auth/password.ts，S2-T3 复用）；
     // 默认注入桩以省 ~20ms/次哈希，真实链路见文末用例（realHash）
     hashPassword: opts?.realHash ? undefined : stubHash,
-    resolveSubject: async () => null,
+    authenticateRequest: () => ({ ok: false, carrier: null, code: 'E-AUTH-001', reason: 'unauthenticated' }),
   });
   await app.ready();
   const inst: Instance = {

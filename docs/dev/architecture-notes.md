@@ -93,3 +93,54 @@
 2. CSRF 同源校验（api.md §1 `E-AUTH-006`）为全局插件，未随本任务实现；本任务写端点（login/logout/me/password/PATCH）此前依赖 SameSite=Lax 缓解，建议 T5/T7 落全局 onRequest 钩子。
 3. ~~本插件未接入 `buildApp()`~~（T2 的启动接线 rebase 后已在：`buildApp(deps)` 挂载本域路由并填实 SubjectResolver 默认实现，见 §6.5）。
 4. `PATCH /api/v1/admin/employees/{username}` 已实现 `active` 与 `is_instance_admin` 两字段；未加「最后管理员」保护——api.md 该端点错误列未含此路径，管理员全员锁死以 identity §7.2 主机侧恢复为设计兜底。
+
+## 7. S2-T5 决策记录（四状态×双入口生效语义 + 集成收尾）
+
+日期：2026-10-13（S2-T5，Orca dispatch `ctx_eb813c256cc1`）。本节登记生命周期统一模块（`server/src/auth/lifecycle.ts`）的定稿语义；identity §5 是唯一语义源，本节只记录契约未逐字规定、由本任务定稿的实现语义（任务 brief 授权「实现以你为准，T7 审计基座消费」）。只追加，不改写上文。
+
+### 7.1 载体并存优先级（Cookie + Bearer 同请求）
+
+**定稿：`Authorization` 头在场即优先；否则用 ngt_sid 会话 Cookie。**
+
+- 显式头凭据是调用方的明确选择，Cookie 是浏览器环境凭据——并存时以显式者为准，主体归因与 CSRF 豁免面由同一判定导出（见 §7.2/§7.3），不出现「认证用一个载体、豁免按另一个载体」的错配。
+- `Authorization` 在场但 scheme 非 Bearer → 401 E-AUTH-001，**不回退 Cookie**（防载体混淆：调用方已声明头凭据时静默改用环境 Cookie 意味着主体与调用方意图不一致）。
+- Bearer 失败（过期/撤销/停用）同样不回退 Cookie——四状态阻断对「该凭据」生效，换载体重试是调用方的新请求。
+- 会话载体独立凭据原则（identity §1）不变：token 过期/撤销不影响会话（§5.2 前两行 Web 列）。
+
+### 7.2 四状态 → 401 映射（api.md §2.3 的实现定稿）
+
+| 状态 | 载体 | code | reason |
+|---|---|---|---|
+| 未提交/未知凭据 | 任意 | E-AUTH-001 | unauthenticated |
+| 会话自身过期/无效 | session | E-AUTH-001 | unauthenticated（会话是独立凭据，identity §4；token 的 002/003 不适用于会话入口） |
+| 凭据过期 | token | E-AUTH-002 | expired |
+| 凭据撤销 | token | E-AUTH-003 | revoked |
+| 账号停用 | session 或 token | E-AUTH-004 | account_disabled |
+
+- 映射唯一实现点：`auth/lifecycle.ts`（`createRequestAuthenticator` / `rejectAuth`）；路由不得自判（T2 invites 路由的 E-AUTH-001 误报即旧缝丢失原因所致，本任务修复）。
+- 会话载体失败统一清 ngt_sid Cookie（「被登出」呈现，identity §5.2 停用行）；停用不删会话行（零延迟来自逐请求查 active）。
+- `/api/v1/me` 与 `/api/v1/me/password` 接受双载体（api.md §3 错误列 001–004）；`logout` 是会话载体操作（删除的是会话行，Bearer 请求无会话可删 → E-AUTH-001）。
+
+### 7.3 CSRF 同源校验（identity §4 + api.md §1 移交项的落地）
+
+`server/src/auth/csrf.ts`（全局 onRequest，挂初始化闸门之后）：非安全方法（GET/HEAD/OPTIONS 之外）且携带 ngt_sid 且无 `Authorization` 头 → 校验同源。回退链定稿：**Origin 在场即以 Origin 判定；缺失回退 Referer 的 origin 部分；两者皆缺失 → 403 E-AUTH-006**（同源浏览器对非安全方法必带 Origin/Referer，皆缺失无法确立同源；程序化客户端用 Bearer——天然豁免）。默认端口归一（http:80/https:443 ≡ 省略）。判定依据是 **Cookie 呈现**而非会话有效性：跨站请求带的是受害者有效 Cookie，校验独立于且先于认证层。
+
+### 7.4 审计入口归因（entry=web/api/git；identity §8）
+
+- **会话载体 → `entry='web'`；token 载体（CLI/程序化 API 的 Bearer）→ `entry='api'`；Git Smart HTTP Basic → `entry='git'`（S3 落地，api.md §8.5）**。
+- 载体标识 `carrierRef`：`session:<会话行 id>` / `credential:<凭据 id>`（不含任何凭据材料）；主体 = `subject.employee_id`（认证员工，不信任 commit author）。
+- `AuthSuccess.carrier / carrierRef / entry` 为 T7 审计基座的消费面；凭据域先行落地（创建/撤销审计行按载体写 entry），其余域随 T7 挂接。
+
+### 7.5 授权层接口与移交（T6/S3/T7）
+
+- `MembershipSource.lookup(slug, employeeId)`：identity §5.1 第 2 层的接口化；**S2-T6 以 vaults/vault_members 真实表实现**（storage-model §4 `authz.role` 规范查询 + slug→id 映射），三入口（Web/API/Git）共用。撤权/无权/不存在/越出 scope 清单 → not_found（404，D-IC-06）；成员而角色或范围不足写 → forbidden（403 E-AUTHZ-001）。
+- `reauthorizeAtExecutionPoint()`：写路径执行点复查钩子（identity §5.1 第 3 层）——**S3 在 pre-receive / Web 发布组件 update-ref 前挂接**（分支规则复查同点叠加）；维护模式标志复查位随 S2-T7。
+- 在途语义（identity §5.3）：一般操作按起点授权放行完成；**push 是例外**——撤权发生在检查后、执行点前，执行点复查拒绝并记审计 `rejected`（T7/S3 消费）。
+
+### 7.6 本任务收尾记录（master 集成裁决并入）
+
+1. **收尾 a**：one_time_tokens 哈希前缀 `hmac1$` → `hmacv1$`（`bootstrap/pepper.ts` 的 `hmacTokenHash`；与凭据域 `hashToken` 及 identity §3.2 契约拼写统一）。发布前无生产库，无存量哈希迁移问题。
+2. **收尾 b**：`SubjectResolver`（返回 `Subject | null`，丢失失败原因）→ `RequestAuthenticator`（返回 `AuthOutcome`，四状态精确区分）；T2 invites 路由停用账号由 E-AUTH-001 修正为 E-AUTH-004。
+3. **收尾 c**：CSRF 同源校验钩子落地（§7.3）；受影响存量测试补同源 Origin 头。
+4. **基线收敛**：master 的 D11 ADR 同步（97ab349）只改了契约侧 display_hint 注释，迁移 0004 文本滞后致基线 1 例失败；本任务将迁移注释逐字对齐契约，防漂移测试收紧为逐行等价断言。
+5. §6.6-2 的 CSRF 遗留项随收尾 c 关闭。
