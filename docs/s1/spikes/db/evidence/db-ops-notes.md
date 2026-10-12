@@ -28,3 +28,13 @@ better-sqlite3（同步 API、成熟、prebuilds）为备选（若需要其特�
 PostgreSQL 为容量/多实例未来演进路径（架构 §11），首发不选，理由：额外容器/进程、
 备份与升级复杂度，单实例知识库负载下收益不可见（perf 见 db-perf.txt，注意
 Docker Desktop port-forward 使 pg 数字偏悲观——注明）。
+
+## 镜像内 git-http-backend 归属（deployment 关键发现，2026-10-12 实测）
+
+- alpine:3.21 容器内 `apk add git`（git 2.47.3-r0，installed size **6833 KiB**）后
+  `apk info -L git` 文件清单**不含** `git-http-backend`（含 upload-pack/receive-pack）；
+  `apk add git-http-backend` 报 no such package。
+- 权威验证：https://pkgs.alpinelinux.org/contents?branch=v3.21&file=git-http-backend&arch=x86_64
+  与 branch=v3.22 同查 —— `/usr/libexec/git-core/git-http-backend` 由 **`git-daemon`** 包提供（main 仓库）。
+- 结论：路线 B 的 Dockerfile 必须 `apk add git git-daemon`（仅装 git 不够）。
+  本机 macOS 的 git（CommandLineTools）自带 http-backend，spike 因此未提前暴露此差异。
