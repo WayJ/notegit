@@ -1,0 +1,11 @@
+# Framework hello-world micro-benchmark — INDICATIVE (THROWAWAY spike)
+date: 2026-10-12T13:30:53.409Z
+machine: Apple M4, macOS, loopback, no TLS; autocannon -c 50 -d 3s; trivial GET /hello handler.
+fastify 5.12.5, express 5.3.0, node v24.21.0
+NOTE: 指示性数字（单进程、回环、无 TLS、hello-world），仅用于量级对比；不构成容量承诺。
+
+| target | req/s (avg) | p99 latency ms | errors |
+|---|---|---|---|
+| node:http (baseline) | 52304 | 0.00 | 0 |
+| fastify v5 | 52400 | 0.00 | 0 |
+| express v5 | 37061 | 0.00 | 0 |

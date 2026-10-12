@@ -1,0 +1,15 @@
+{
+  "name": "spike-frameworks",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0-throwaway",
+  "description": "THROWAWAY spike: web framework streaming/auth/testing evidence for docs/s1/selection.md",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "autocannon": "^8.0.0",
+    "express": "^5.3.0",
+    "fastify": "^5.12.5"
+  }
+}
