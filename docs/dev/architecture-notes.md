@@ -53,3 +53,41 @@
 1. `connection.ts` pragma 顺序为 WAL→busy_timeout：并发开库时败者以 timeout=0 执行取锁语句（实测竞态 10/10 触发 `database is locked`）。单进程内不可达（node:sqlite 全同步）；**任何第二进程/线程访问数据库的需求出现时**，改为 busy_timeout 先行 + 失败关闭句柄。
 2. `migrate.ts` 跳过检查只看成员不看边界：库 {1,3} 遇列表 [1,2,3] 会在已记录边界之下静默补跑 v2。仅手工构造库状态或未来重排版本号可触发；可加 `version > max(applied)` 守卫。
 3. 严格递增守卫放过 `NaN`：经 node:sqlite 绑定为 NULL 后由 rowid 别名落成 version=1，且报告 applied=[NaN] 破坏该列表重入。类型化 API 不可达（须显式传入 NaN）；加 `Number.isSafeInteger` 即堵。
+
+## 6. S2-T3 决策记录（账号登录、口令与停用）
+
+日期：2026-10-12（S2-T3，Orca dispatch `ctx_18e037d99cd1`）。本节登记该任务的选型与参数定稿；只追加，不改写上文。
+
+### 6.1 Argon2id 绑定库：消费 S2-T2 共享模块（选型子项被协调裁决覆盖）
+
+- **结论**：不另选库、无第二实现。`server/src/auth/password.ts`（S2-T2 落地，`@node-rs/argon2` 2.2.2）为唯一口令哈希模块；S2-T3 以**逐字复用**（本分支副本与 T2 工作区字节一致）+ 补充件 `password-policy.ts`（口令策略 / 登录等时防枚举）方式消费，对共享模块零改动以保合并零冲突。
+- **背景**：任务定义原要求 S2-T3 在 `@node-rs/argon2` vs `hash-wasm` 间定稿（判据：无编译依赖 / 测试覆盖）；实现期间协调人裁定 T2 先行落地共享模块（本终端 task_47d88253d766 收到 status 消息）。S2-T3 曾按原任务定义完成 hash-wasm 4.12.0 选型与实现（纯 WASM 零编译依赖、PHC 'encoded' 输出、本机实测单次哈希 ~21ms），收到裁决后撤销并切换，此处留档备查；两案在契约参数上等价，裁决（预构建含 linux-musl、PHC 与实现解耦）成立。
+- **验证性评审结论（PASS，无缺陷，未触发 ask）**：
+  1. 参数与契约一致——`auth-password.test.ts` 直接断言哈希串 PHC 参数 `$argon2id$v=19$m=19456,t=2,p=1`（identity §2 / D-IC-02 的机器核对，非仅读源码）；
+  2. PHC 格式标准且跨实现互操作——独立实现（hash-wasm 4.12.0）按契约参数生成的冻结向量能被共享模块校验（正/负口令各一），证明已存哈希不绑定生成实现；
+  3. fail-closed——哨兵（`INVITED_PASSWORD_SENTINEL`）与畸形串校验一律 false 不抛异常（受邀未设口令账号不可被任何口令登录）；
+  4. 盐每次哈希随机（同口令两次哈希盐不同）。
+- 观察项（非缺陷）：共享模块参数内联于 `hashPassword`，未导出常量；契约面是 PHC 串而非 API，测试已在串级断言，不要求改动。
+
+### 6.2 登录退避默认值（identity §2「阈值可配，默认值 S2 实现定」）
+
+`server/src/auth/backoff.ts`，进程内计数（storage-model §2：登录限速计数为运行态，不落库）：键 = `username + 来源IP`；`maxFails=3`（免延迟失败次数）、`baseDelayMs=1000`、`maxDelayMs=30000`（窗口封顶）、`windowMs=15min`（静置衰减重计）。锁定中 429 `E-AUTH-005` + `Retry-After`，**不校验口令、不计失败**（防时序探测）；成功登录清零；无永久锁定（封顶锁过期即放行，正确口令可登录）。可经 `AuthPluginOptions.backoff` 覆盖；`app_settings` 持久化配置随后续配置任务接线。
+
+### 6.3 `notegit admin recover` 命令名定稿（identity §7.2「待 T1」遗留项；D-IC-08）
+
+**定稿：`notegit admin recover`**（容器 CLI：`docker exec <container> notegit admin recover`）。理由：api.md §3.1 与 identity §7.2 两处契约引用已用此名（契约只读，定稿即消除「待定」标注，零契约变更）；`admin` 命名空间收拢主机侧管理动作；动宾结构直指「管理员锁死恢复」。被拒备选：`notegit admin-recover`（顶层扁平化，弃 admin 分组）、`notegit recover`（语义过宽，易误解为数据恢复）、`notegit admin password-reset`（与 HTTP 端点 `/admin/employees/{u}/password-reset` 的 K5 令牌流程混淆——本命令是主机侧兜底，产生 `admin.host_recovery` 审计）。**命令本体实现按任务定义留 S2-T8 或运维任务。**
+
+### 6.4 迁移 0003 形态与合并注意
+
+T2 未先落 employees 基础表（分支基点 sprint/S2 @ bcb29ca 仅含 T1），故 0003 按 storage-model §3.2 **整表创建** employees（含口令/状态列）+ §3.3 sessions；schema_version 引导块按本文件 §3 剔除。**合并注意（master 汇入 sprint/S2 时）**：若 T2 的 0002 亦含 employees 建表（两处同源同一契约块，去重无损），保留一处建表、另一处移除该语句即可；T2 分支另有 pepper/主启动接线（main.ts），与本分支 `registerAuth` 插件的接线由后续统一启动流程合并。
+
+### 6.5 会话 pepper 注入边界
+
+sessions.sid_hash = `HMAC-SHA256(pepper, sid)`（identity §4 / D-IC-03，键与 token K1 同源）。本任务以 `AuthPluginOptions.pepper` 注入取键，**不落地 pepper 文件与版本化列表**（`/data/keys/token-pepper.key`、`hmacv1$` 前缀、§6.2 轮换属 S2-T4 域），避免与 T4 的文件格式决策冲突；启动接线时统一供键。
+
+### 6.6 范围裁剪与移交
+
+1. 审计事件（`employee.password_reset` / `employee.deactivate` / `employee.activate`、登录失败计数指标——identity §8 失败不逐条入审计）挂接待审计基座 S2-T7（audit_events 表未落地，代码内已留注释锚点）。
+2. CSRF 同源校验（api.md §1 `E-AUTH-006`）为全局插件，未随本任务实现；本任务写端点（login/logout/me/password/PATCH）此前依赖 SameSite=Lax 缓解，建议 T5/T7 落全局 onRequest 钩子。
+3. 本插件未接入 `buildApp()`（启动接线 open→pragmas→migrate→listen 属 S2-T2+ 统一启动流程；T2 分支已见 main.ts 雏形，避免并行冲突）。
+4. `PATCH /api/v1/admin/employees/{username}` 已实现 `active` 与 `is_instance_admin` 两字段；未加「最后管理员」保护——api.md 该端点错误列未含此路径，管理员全员锁死以 identity §7.2 主机侧恢复为设计兜底。
