@@ -22,7 +22,7 @@ test('启动接线：open→pragmas→migrate→listen 顺序生效（WAL、版�
       // pragmas 已生效（open 阶段）
       assert.equal(inst.db.prepare('PRAGMA journal_mode').get()?.journal_mode, 'wal');
       assert.equal(inst.db.prepare('PRAGMA busy_timeout').get()?.timeout, 5000);
-      // migrate 在 listen 前跑完：出厂迁移全量记录（列表随任务增长，按列表推导）；依赖表已在（业务路由可用）
+      // migrate 在 listen 前跑完：出厂列表全量记录（随任务 append 递增，按 MIGRATIONS 推导）；依赖表已在（业务路由可用）
       const versions = inst.db.prepare('SELECT version FROM schema_version ORDER BY version').all() as { version: number }[];
       assert.deepEqual(versions.map((v) => v.version), MIGRATIONS.map((m) => m.version));
       const health = await inst.app.inject({ method: 'GET', url: '/healthz' });

@@ -41,7 +41,7 @@ test('迁移 0002：新建 employees 与 one_time_tokens 表并记录版本行',
   const db = freshMigrated();
   // 出厂列表随任务增长（S2-T3 起含 0003），按列表推导而非硬编码
   const versions = db.prepare('SELECT version FROM schema_version ORDER BY version').all() as { version: number }[];
-  assert.deepEqual(versions.map((r) => r.version), MIGRATIONS.map((m) => m.version));
+  assert.deepEqual(versions.map((r) => r.version), MIGRATIONS.map((m) => m.version)); // 出厂列表随任务 append 递增
   assert.equal(
     db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('employees','one_time_tokens')").get()?.n,
     2,

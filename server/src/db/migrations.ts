@@ -1,7 +1,8 @@
 /**
  * 出厂迁移列表（机制先行；内容随 S2-T2…T7 逐步落地）。
  * DDL 唯一来源是 docs/contracts/storage-model.md 的 -- @schema 块（D6 只读纪律）；
- * 本任务只带空基线，不建业务表。
+ * S2-T1 只带空基线；S2-T2 落 v2（employees/one_time_tokens）；S2-T4 落 v4（credentials）。
+ * v3 为 S2-T3 预留（并行任务独占版本号），并入时插于 2 与 4 之间。
  */
 export interface Migration {
   readonly version: number;
@@ -72,6 +73,31 @@ END`,
   absolute_expires_at TEXT    NOT NULL          -- 依据：identity §4 absolute_timeout（默认 30 天可配）
 ) STRICT`,
       `CREATE INDEX idx_sessions_employee ON sessions(employee_id);  -- 依据：identity §2 口令重置/停用需按账号批量失效`,
+    ],
+  },
+  {
+    // DDL 来源：storage-model.md §3.4 `-- @schema credentials` 块逐字迁移（防漂移测试对照原文）；
+    // schema_version 引导行剔除（runner 持有，architecture-notes §3）。版本号 0004 为 S2-T4 独占。
+    version: 4,
+    description: 'S2-T4: credentials — ngt_ token HMAC storage (identity §3/D-IC-01/03; storage-model §3.4)',
+    statements: [
+      `-- ngt_ 前缀不透明 token 的服务端存储（identity §3/D-IC-01）。明文只在创建响应出现一次，
+-- 库内只存 HMAC 校验值（identity §3.2/D-IC-03）。撤销 = 置位 revoked_at，不删行
+-- （到期或撤销后的 token 不可复活，只能新建——identity §3.5）。
+CREATE TABLE credentials (
+  id           INTEGER NOT NULL PRIMARY KEY,
+  employee_id  INTEGER NOT NULL REFERENCES employees(id),  -- 依据：identity §3.3 归属关系不可变更（无 UPDATE 路径，应用层保证）
+  name         TEXT    NOT NULL,               -- 依据：identity §3.3 展示名（员工自起）
+  token_hash   TEXT    NOT NULL UNIQUE,        -- 依据：identity §3.2 存 'hmacv1$<hex>'（内嵌 pepper 版本，支撑 §6.2 轮换）；以 HMAC 输出为唯一索引键查表，token 明文从不作索引或日志字段
+  scope_access TEXT    NOT NULL DEFAULT 'read_write' CHECK (scope_access IN ('read','read_write')),  -- 依据：identity §3.4 范围只能收窄（access 维）
+  scope_vaults TEXT    NOT NULL DEFAULT '[]',  -- 依据：identity §3.4 库允许清单（JSON 数组，存库 id；空 = 全部有权库），每次使用与员工当前权限取交集
+  created_at   TEXT    NOT NULL,
+  expires_at   TEXT    NOT NULL,               -- 依据：identity §3.3 到期必填，≤ 实例上限（默认 90 天可配）；认证层逐请求比较
+  revoked_at   TEXT,                           -- 依据：identity §3.3 NULL = 未撤销；四状态之一
+  display_hint TEXT    NOT NULL,               -- 依据：identity §3.1 此后仅显示前缀+末 4 位；列为本任务增补（master 2026-10-12 批准，契约 ADR 补正由 master 负责）
+  last_used_at TEXT                            -- 依据：identity §3.3 观测字段，≥60 秒节流批量写，不参与任何授权判断
+) STRICT;`,
+      `CREATE INDEX idx_credentials_employee ON credentials(employee_id);  -- 依据：identity §3.5 每员工上限（默认 20，应用层）与员工凭据列表查询`,
     ],
   },
 ];
