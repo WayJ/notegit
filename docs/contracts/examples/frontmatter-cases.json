@@ -1,0 +1,131 @@
+{
+  "$comment": "frontmatter 规则用例集。kind=object：frontmatter 为 JSON 对象，由验证门禁按 expect 实测 schemas/frontmatter.schema.json；kind=raw：frontmatter 为原始 YAML 文本，表达 JSON 无法表示的 YAML 层规则（重复键/自定义 tag/anchor/别名/超限），门禁仅做错误码注册核对，实际拒绝行为由实现方测试覆盖（S3）。",
+  "schemaRef": "schemas/frontmatter.schema.json",
+  "cases": [
+    {
+      "name": "valid-minimal：仅 title",
+      "kind": "object",
+      "expect": "valid",
+      "expectedCodes": [],
+      "frontmatter": { "title": "差旅报销制度" }
+    },
+    {
+      "name": "valid-full：六字段齐",
+      "kind": "object",
+      "expect": "valid",
+      "expectedCodes": [],
+      "frontmatter": {
+        "title": "差旅报销制度",
+        "owner": "zhangsan",
+        "description": "国内外差旅与报销流程、标准及审批要求。",
+        "tags": ["人事", "报销"],
+        "status": "active",
+        "source": "财务部正式发文"
+      }
+    },
+    {
+      "name": "valid-additional-fields：额外字段允许（架构 §5.1）",
+      "kind": "object",
+      "expect": "valid",
+      "expectedCodes": [],
+      "frontmatter": {
+        "title": "会议室预定规范",
+        "department": "行政部",
+        "reviewers": ["zhangsan", "lisi"]
+      }
+    },
+    {
+      "name": "invalid-title-whitespace：title 仅空白",
+      "kind": "object",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-003"],
+      "frontmatter": { "title": "   " }
+    },
+    {
+      "name": "invalid-title-missing：title 缺失",
+      "kind": "object",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-003"],
+      "frontmatter": { "owner": "zhangsan" }
+    },
+    {
+      "name": "invalid-title-type：title 非字符串",
+      "kind": "object",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-004"],
+      "frontmatter": { "title": 123 }
+    },
+    {
+      "name": "invalid-status：非法 status",
+      "kind": "object",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-005"],
+      "frontmatter": { "title": "归档流程", "status": "archived" }
+    },
+    {
+      "name": "invalid-tags-type：tags 非列表",
+      "kind": "object",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-004"],
+      "frontmatter": { "title": "标签错误的文档", "tags": "人事" }
+    },
+    {
+      "name": "invalid-tag-too-long：单个 tag 超 64 字符上限",
+      "kind": "object",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-009"],
+      "frontmatter": {
+        "title": "超长标签",
+        "tags": ["aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeeffffffffffggggg"]
+      }
+    },
+    {
+      "name": "invalid-title-too-long：title 超 200 字符上限",
+      "kind": "object",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-009"],
+      "frontmatter": {
+        "title": "标aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeefffffffffgggggggggghhhhhhhhhhiiiiiiiiiijjjjjjjjjjkkkkkkkkkkllllllllllmmmmmmmmmmnnnnnnnnnnooooooooooppppppppppqqqqqqqqqqrrrrrrrrrrssssssssssttttttttttuuuuuuuuuu1"
+      }
+    },
+    {
+      "name": "invalid-tags-duplicate：tag 重复",
+      "kind": "object",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-009"],
+      "frontmatter": { "title": "重复标签", "tags": ["人事", "人事"] }
+    },
+    {
+      "name": "raw-duplicate-key：YAML 重复键",
+      "kind": "raw",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-006"],
+      "note": "架构 §5.1 拒绝重复键；YAML 解析器须配置 duplicate-key 报错",
+      "frontmatter": "title: 差旅报销制度\ntitle: 另一个标题\n"
+    },
+    {
+      "name": "raw-custom-tag：自定义对象标签",
+      "kind": "raw",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-007"],
+      "note": "架构 §5.1 拒绝自定义对象标签，只支持安全基础 YAML 值",
+      "frontmatter": "title: !exec 'rm -rf /'\n"
+    },
+    {
+      "name": "raw-anchor-alias：锚点与别名",
+      "kind": "raw",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-007"],
+      "note": "安全子集不含 anchor/alias/merge key（防别名膨胀攻击，架构 §5.1 解析资源限制）",
+      "frontmatter": "a: &x [1, 2]\nb: *x\n"
+    },
+    {
+      "name": "raw-oversized：frontmatter 超大小常量",
+      "kind": "raw",
+      "expect": "invalid",
+      "expectedCodes": ["E-FM-008"],
+      "note": "frontmatter 块 > 64 KiB 或解析节点 > 1000 或嵌套深度 > 8（架构 §5.1 限制大小和解析资源；常量为 T2 建议值）；实际超限文本此处不内联，由实现方测试生成",
+      "frontmatter": "title: 占位（实际用例为超限大文本）\n"
+    }
+  ]
+}
