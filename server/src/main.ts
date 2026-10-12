@@ -61,6 +61,7 @@ export async function startApp(opts: StartOptions = {}): Promise<StartedApp> {
       pepper,
       bootstrapTokenFile,
       dataDir, // S3-T1：建库端点真实 init bare 于 <dataDir>/git/<id>.git
+      dbFile, // S3-T2：/git 入口透传 NOTEGIT_DB 给 pre-receive hook 直连
       authenticateRequest: opts.authenticateRequest,
       hashPassword: opts.hashPassword,
     });
