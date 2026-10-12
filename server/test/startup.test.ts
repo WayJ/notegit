@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { startApp } from '../src/main.ts';
+import { MIGRATIONS } from '../src/db/migrations.ts';
 
 // S2-T1 交接（architecture-notes §3）：启动接线 open → pragmas → migrate → listen
 // （backup §9 随新版本启动自动执行）；bootstrap token / pepper 落 /data 布局（backup §2）。
@@ -21,9 +22,9 @@ test('启动接线：open→pragmas→migrate→listen 顺序生效（WAL、版�
       // pragmas 已生效（open 阶段）
       assert.equal(inst.db.prepare('PRAGMA journal_mode').get()?.journal_mode, 'wal');
       assert.equal(inst.db.prepare('PRAGMA busy_timeout').get()?.timeout, 5000);
-      // migrate 在 listen 前跑完：0002 已记录；依赖表已在（业务路由可用）
+      // migrate 在 listen 前跑完：出厂迁移全量记录（列表随任务增长，按列表推导）；依赖表已在（业务路由可用）
       const versions = inst.db.prepare('SELECT version FROM schema_version ORDER BY version').all() as { version: number }[];
-      assert.deepEqual(versions.map((v) => v.version), [1, 2]);
+      assert.deepEqual(versions.map((v) => v.version), MIGRATIONS.map((m) => m.version));
       const health = await inst.app.inject({ method: 'GET', url: '/healthz' });
       assert.equal(health.statusCode, 200);
       // 空库 → 初始化态资产：bootstrap token 文件（0600）与 pepper（0600）已落 /data 布局

@@ -54,4 +54,24 @@ END`,
 ) STRICT`,
     ],
   },
+  {
+    // S2-T3（迁移 0003，本任务独占）：sessions。
+    // DDL 取自 storage-model.md §3.3 @schema 块（唯一来源，D6）；schema_version 引导块
+    // 按 architecture-notes §3 剔除。employees 基础表已由 S2-T2 的 0002 按同一契约
+    // §3.2 块整表落地（含 password_hash/active/deactivated_at 全部口令/状态列），
+    // 本迁移无需 ALTER 补列，仅建 sessions 表与按账号批量失效索引。
+    version: 3,
+    description: 'S2-T3: sessions (storage-model §3.3; identity §2/§4/§5.2)',
+    statements: [
+      `CREATE TABLE sessions (
+  id                  INTEGER NOT NULL PRIMARY KEY,
+  employee_id         INTEGER NOT NULL REFERENCES employees(id),  -- 依据：identity §1 会话归属员工
+  sid_hash            TEXT    NOT NULL UNIQUE,  -- 依据：identity §4 会话表同样以 HMAC 形式存储；唯一索引键查找
+  created_at          TEXT    NOT NULL,
+  last_seen_at        TEXT    NOT NULL,         -- 依据：identity §4 idle_timeout 滑动续期（默认 7 天可配）
+  absolute_expires_at TEXT    NOT NULL          -- 依据：identity §4 absolute_timeout（默认 30 天可配）
+) STRICT`,
+      `CREATE INDEX idx_sessions_employee ON sessions(employee_id);  -- 依据：identity §2 口令重置/停用需按账号批量失效`,
+    ],
+  },
 ];

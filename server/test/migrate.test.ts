@@ -9,7 +9,7 @@ import { MIGRATIONS } from '../src/db/migrations.ts';
 import { openDatabase } from '../src/db/connection.ts';
 
 // 契约依据 storage-model §3.1：仅前向、有序、可重入检查，历史行不可改。
-// 用例 1–6 用合成迁移驱动机制；用例 7 用真实出厂空基线验证端到端。
+// 用例 1–6 用合成迁移驱动机制；用例 7 用真实出厂基线验证端到端（S2-T3 起含业务 DDL）。
 
 function memory(): DatabaseSync {
   return new DatabaseSync(':memory:');
@@ -107,19 +107,19 @@ test('守卫：乱序（降序）版本号抛错且不执行任何语句（Revie
   db.close();
 });
 
-test('出厂基线：文件库首迁全量记录，重入 applied=[]（Review Focus 4；S2-T2 起基线含 0002+，按 MIGRATIONS 推导）', async () => {
+test('出厂基线：文件库按出厂列表全量首迁，重入 applied=[]（Review Focus 4；S2-T3 起列表含业务 DDL）', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'notegit-mig-'));
   try {
     const db = openDatabase(path.join(dir, 't.sqlite'));
-    const expected = MIGRATIONS.map((m) => m.version);
+    const versions = MIGRATIONS.map((m) => m.version);
     const first = migrate(db, MIGRATIONS);
-    assert.deepEqual(first.applied, expected);
+    assert.deepEqual(first.applied, versions);
     const again = migrate(db, MIGRATIONS);
     assert.deepEqual(again.applied, []);
-    assert.deepEqual(again.skipped, expected);
+    assert.deepEqual(again.skipped, versions);
     const all = rows(db, 'SELECT version, description FROM schema_version') as { version: number; description: string }[];
-    assert.equal(all.length, expected.length);
-    assert.deepEqual(all.map((r) => r.version), expected);
+    assert.equal(all.length, versions.length);
+    assert.deepEqual(all.map((r) => r.version), versions);
     db.close();
   } finally {
     await rm(dir, { recursive: true, force: true });

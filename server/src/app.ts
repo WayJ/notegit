@@ -4,6 +4,8 @@ import type { PepperFile } from './bootstrap/pepper.ts';
 import { isUninitialized } from './bootstrap/state.ts';
 import { registerBootstrapRoutes } from './bootstrap/routes.ts';
 import { registerInviteRoutes } from './invites/routes.ts';
+import { registerAuth } from './auth/routes.ts';
+import { createSubjectResolver } from './auth/subject.ts';
 import { hashPassword as defaultHashPassword } from './auth/password.ts';
 
 /** 认证主体（identity §1：认证主体 = 员工账号）。 */
@@ -47,7 +49,10 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
   app.get('/healthz', async () => ({ status: 'ok' }));
 
   if (deps) {
-    const resolveSubject: SubjectResolver = deps.resolveSubject ?? (() => null);
+    // 真实载体解析（S2-T3 落地）：默认 = ngt_sid 会话 Cookie（identity §5.1 第 1 层，
+    // auth/subject.ts）；Bearer ngt_（token 域）随 S2-T4/T5 并入此缝。注入可覆盖（测试用桩）。
+    const resolveSubject: SubjectResolver =
+      deps.resolveSubject ?? createSubjectResolver({ db: deps.db, pepper: deps.pepper.active.key });
     const hashPassword: PasswordHasher = deps.hashPassword ?? defaultHashPassword;
     const wired: WiredAppDeps = { ...deps, resolveSubject, hashPassword };
 
@@ -70,6 +75,8 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
 
     registerBootstrapRoutes(app, wired);
     registerInviteRoutes(app, wired);
+    // S2-T3 认证域路由（api.md §3：login/logout/me/password/PATCH admin employees）
+    void app.register(registerAuth, { db: deps.db, pepper: deps.pepper.active.key });
   }
   return app;
 }
