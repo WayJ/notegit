@@ -114,11 +114,16 @@ test('login（占位执行）：退出码 2，stderr 标注尚未实现，stdout
   assert.equal(r.stdout, '')
 })
 
-test('ls（占位执行）：退出码 2，stderr 标注尚未实现', () => {
-  const r = runCli(['ls', '--json'])
-  assert.equal(r.status, 2)
-  assert.match(r.stderr, /尚未实现/)
-  assert.match(r.stderr, /ls/)
+test('ls（已实现，S6-T3）：未配置凭据时退出码 1（业务性失败），stderr 提示配置面', () => {
+  // 显式剥离 NOTEGIT_*，保证断言不被外层环境影响（hermetic）
+  const env: Record<string, string> = {}
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v !== undefined && !k.startsWith('NOTEGIT_')) env[k] = v
+  }
+  const r = spawnSync(process.execPath, [BIN, 'ls', '--json'], { encoding: 'utf8', env })
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /未配置/)
+  assert.equal(r.stdout, '')
 })
 
 test('setup（占位执行）：退出码 2，stderr 标注尚未实现', () => {

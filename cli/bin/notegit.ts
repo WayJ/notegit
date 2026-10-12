@@ -3,4 +3,4 @@
 import process from 'node:process'
 import { run } from '../src/main.ts'
 
-process.exitCode = run(process.argv.slice(2))
+process.exitCode = await run(process.argv.slice(2))

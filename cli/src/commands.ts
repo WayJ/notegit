@@ -9,6 +9,8 @@ export interface CommandSpec {
   usage: string
   detail: string
   options: string[]
+  /** 已实现命令（S6-T3 起 ls）：帮助渲染「已实现」而非占位标注。 */
+  implemented?: boolean
 }
 
 export const COMMANDS: Record<string, CommandSpec> = {
@@ -23,10 +25,11 @@ export const COMMANDS: Record<string, CommandSpec> = {
   ls: {
     name: 'ls',
     summary: '列出有权访问的知识库、clone URL 与本地状态',
-    status: 'S6-T3 交付',
+    status: 'S6-T3 已实现（--json schema 固化于 cli/test/ls.test.ts）',
     usage: 'notegit ls [--json]',
-    detail: '实时按当前员工权限列出可见库；--json 输出结构稳定（schema 固化于 CLI 测试），本地状态标注已克隆/落后/未知。',
+    detail: '实时按当前员工权限列出可见库（GET /api/v1/vaults，Bearer）；本地状态 = 未克隆/已克隆/落后/未知（对照本地根目录 <root>/<slug>）。凭据占位面：NOTEGIT_SERVER 与 NOTEGIT_TOKEN 环境变量（S6-T2 login 交付后接管）；本地根目录默认 ~/knowbase，可用 NOTEGIT_LOCAL_ROOT 覆盖。',
     options: ['--json  输出 JSON（schema 固化）', '-h, --help  输出本帮助'],
+    implemented: true,
   },
   setup: {
     name: 'setup',
