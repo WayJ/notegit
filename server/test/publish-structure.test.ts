@@ -61,12 +61,16 @@ test('结构性：update-ref 在 publish/ 源码中恰一次且仅在 pipeline.t
   );
 });
 
-test('结构性：链判定件来自唯一来源（ref-rules / notegit-validation），publish/ 不复刻规则', async () => {
+test('结构性：链判定件来自唯一来源（ref-rules / limits engine→notegit-validation），publish/ 不复刻规则', async () => {
   const pipeline = stripComments(await readFile(path.join(SRC, 'pipeline.ts'), 'utf8'));
   assert.match(pipeline, /from '\.\.\/githttp\/ref-rules\.ts'/, '分支/ref 规则复用唯一判定源（S3-T5）');
   assert.match(pipeline, /refCommandRejection/, '逐 ref 判定调用唯一判定源函数');
-  assert.match(pipeline, /from 'notegit-validation'/, '内容校验复用共享校验器（sprint D7）');
-  assert.match(pipeline, /createValidator/, '校验经 createValidator 单一入口');
+  assert.match(pipeline, /from 'notegit-validation'/, '内容校验报告/类型复用共享校验器（sprint D7）');
+  // S3-T8 起校验入口经 limits/engine（配置覆盖链 + 共享并发闸门）包装
+  // createValidator——仍是单一入口（publish/ 不直接触碰校验器，也不复刻规则）
+  assert.match(pipeline, /from '\.\.\/limits\/engine\.ts'/, '校验经 server 配置引擎单一入口（S3-T8 覆盖链）');
+  assert.match(pipeline, /runServerValidation/, '校验调用 runServerValidation（pre-receive 与发布组件同源入口）');
+  assert.ok(!/\bcreateValidator\b/.test(pipeline), 'publish/ 不直接构造校验器（经 engine 统一装配配置与闸门）');
   // 审计 settle 消费 T6 导出面（同构锚点）
   assert.match(pipeline, /settlePushRejected|settlePushByRefState/, '终态核对消费 T6 审计链导出面');
 

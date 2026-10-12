@@ -1,9 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Report } from 'notegit-validation';
-import { createValidator } from 'notegit-validation';
+import { runServerValidation } from '../limits/engine.ts';
 import type { VaultRole } from '../auth/lifecycle.ts';
 import { reauthorizeAtExecutionPoint } from '../auth/lifecycle.ts';
 import { recordAuditEvent } from '../audit/audit.ts';
+import type { MaintenanceGate } from '../maintenance/gate.ts';
 import { branchWriteRules, type VaultBranchColumns } from '../vaults/branch-rules.ts';
 import { createDbMembershipSource } from '../vaults/membership.ts';
 import { vaultRepoPath } from '../vaults/repo-path.ts';
@@ -33,7 +34,8 @@ import { execGit } from './git-exec.ts';
  * 与 push 的同构锚点（S4 验收场景 S4 的代码基础）：
  * - ref 级规则：refCommandRejection（githttp/ref-rules.ts 唯一判定源，
  *   pre-receive/update hook 同源复用）；
- * - 内容规则：createValidator（packages/validation，sprint D7 单一来源）；
+ * - 内容规则：runServerValidation（limits/engine → notegit-validation，sprint D7
+ *   单一来源 + S3-T8 配置覆盖链——pre-receive 与本组件同源入口）；
  * - 审计链：vault.web_submit pending 预记录先于检查（T6「预记早于校验」同锚
  *   点——崩溃覆盖窗口最大化），拒绝 settle rejected、成功按实际 OID settle
  *   succeeded——settle 消费 T6 导出面（settlePushRejected/settlePushByRefState
@@ -78,6 +80,11 @@ export interface PublishWebSubmitInput {
   readonly committedAt?: string;
   /** 审计行时间戳（ISO；缺省服务端当前时钟） */
   readonly occurredAt?: string;
+  /** 维护模式复查（S3-T8 接线，backup-recovery §3——T5/T6/T7 挂账的执行点叠加位）：
+   *  execution-point 阶段实时检查（与在途撤权同位），开启即拒绝发布。
+   *  S4 提交路由传入 app 的 gate 实例（HTTP 层闸门是第一道，此处是最后一道）；
+   *  缺省不检查（无 gate 的调用形态——既有测试）。 */
+  readonly maintenanceGate?: MaintenanceGate;
   /** 步骤完成后的观察缝（测试注入/S4 进度提示）；不能改变步骤序列——结构上不可跳步 */
   readonly hooks?: { afterStep?(stage: PublishStage): void | Promise<void> };
 }
@@ -125,6 +132,8 @@ interface Ctx {
   ref: string | null;
   cmd: RefCommand | null;
   report: Report | null;
+  /** audit 步骤的库占用计量（E-LIMIT-005 web 侧判定输入；计量失败缺省 null=不判） */
+  vaultCurrentBytes: number | null;
   /** 审计行是否已预记录（candidate 失败/库不存在时为 false——无行可清算） */
   preRecorded: boolean;
   executed: PublishStage[];
@@ -252,6 +261,7 @@ const auditStep: Step = {
     } catch {
       // 计量缺失只少不少（T6 同语义）
     }
+    ctx.vaultCurrentBytes = vaultCurrentBytes ?? null;
     try {
       preRecordPendingWebSubmit(ctx.db, {
         employeeId: ctx.input.subject.employeeId,
@@ -329,18 +339,32 @@ const validationStep: Step = {
   async run(ctx) {
     const vaultId = ctx.vaultId!;
     const candidate = ctx.candidate!;
-    // 单一来源（sprint D7）：与 pre-receive 同一 createValidator；scope=web-submit
-    // 按「根据 base commit 构造的完整候选提交」校验变更集；候选全 tree 路径进
+    // 单一来源（sprint D7）：与 pre-receive 同一 runServerValidation（S3-T8 配置
+    // 覆盖链——app_settings 行热生效，与 push 入口同构）；scope=web-submit 按
+    // 「根据 base commit 构造的完整候选提交」校验变更集；候选全 tree 路径进
     // knownPaths（链接存在性基线）与 treePaths（E-PATH-004 基线——与 pre-receive
-    // 的 CommitDelta.treePaths 同语义，存量路径大小写冲突同构拦截）
-    const report = await createValidator().validate({
-      scope: 'web-submit',
-      vaultId: String(vaultId),
-      commit: candidate.commitOid,
-      files: candidate.changedFiles.map((x) => ({ ...x })),
-      knownPaths: candidate.candidateTreePaths,
-      treePaths: candidate.candidateTreePaths,
-    });
+    // 的 CommitDelta.treePaths 同语义，存量路径大小写冲突同构拦截）。
+    // push 级容量（S3-T8 接线，T7 honest-gap 移交）：pushBytes=变更字节合计
+    // （web 无传输包——口径裁决见 notes；删除不计入）；vaultCurrentBytes=audit
+    // 步骤的库占用计量；ref 已由 branch-rules 步骤定形。
+    const pushBytes = candidate.changedFiles.reduce(
+      (sum, f) => sum + (typeof f.content === 'string' ? Buffer.byteLength(f.content, 'utf8') : f.content.byteLength),
+      0,
+    );
+    const report = await runServerValidation(
+      {
+        scope: 'web-submit',
+        vaultId: String(vaultId),
+        commit: candidate.commitOid,
+        ref: ctx.ref ?? undefined,
+        pushBytes,
+        ...(ctx.vaultCurrentBytes === null ? {} : { vaultCurrentBytes: ctx.vaultCurrentBytes }),
+        files: candidate.changedFiles.map((x) => ({ ...x })),
+        knownPaths: candidate.candidateTreePaths,
+        treePaths: candidate.candidateTreePaths,
+      },
+      { db: ctx.db },
+    );
     ctx.report = report;
     if (report.result !== 'pass') {
       settleRejectedSafe(ctx, 'validation', {
@@ -381,6 +405,13 @@ const baseCommitStep: Step = {
 const executionPointStep: Step = {
   stage: 'execution-point',
   async run(ctx) {
+    // 维护模式复查（S3-T8 接线，backup-recovery §3；T5/T6/T7 挂账的同一执行点
+    // 叠加位）：检查后、update-ref 前开启 → 拒绝（HTTP 层闸门是第一道，此处是
+    // 最后一道——与 git 入口「HTTP 403 → update hook」双层同构）
+    if (ctx.input.maintenanceGate?.isEnabled()) {
+      settleRejectedSafe(ctx, 'maintenance', { checkpoint: 'execution-point', why: 'maintenance-mode' });
+      return rejectAt(ctx, 'execution-point', '维护中：写入被拒绝（不发布，草稿已保留）');
+    }
     // identity §5.1 第 3 层（与 update hook executionPointRecheck 同构）：
     // update-ref 前实时复查——在途撤权/降级在此拒绝（§5.2 行 4）
     const decision = reauthorizeAtExecutionPoint(
@@ -487,6 +518,7 @@ export async function publishWebSubmit(input: PublishWebSubmitInput): Promise<Pu
     ref: null,
     cmd: null,
     report: null,
+    vaultCurrentBytes: null,
     preRecorded: false,
     executed: [],
   };

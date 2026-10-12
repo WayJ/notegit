@@ -12,6 +12,7 @@ import { loadOrCreatePepper } from './bootstrap/pepper.ts';
 import { ensureBootstrapToken } from './bootstrap/token.ts';
 import { isUninitialized } from './bootstrap/state.ts';
 import { sweepOrphanedPending } from './audit/reconciliation.ts';
+import { sweepVaultResidue } from './gitrepo/hygiene.ts';
 
 /**
  * 启动接线（S2-T1 交接，architecture-notes §3）：open → pragmas（openDatabase 内）→
@@ -53,6 +54,16 @@ export async function startApp(opts: StartOptions = {}): Promise<StartedApp> {
     const swept = sweepOrphanedPending(db, { reason: 'startup-orphan' });
     if (swept > 0) {
       console.warn(`[notegit] 启动清扫：${swept} 行残留 pending 审计已标待核对（unresolved）`);
+    }
+
+    // S3-T8 库目录残留清理（listen 前——单进程假设下启动无在途写，三类残留
+    // 皆上次进程生命周期所留：notegit-push-*.bytes 计数文件 / objects/incoming-*
+    // 隔离目录 / 拒绝发布残留的无引用松对象 git prune——E-LIMIT-005 容量口径回收）
+    const hygiene = await sweepVaultResidue(dataDir);
+    if (hygiene.bytesFiles + hygiene.quarantineDirs + hygiene.prunedRepos > 0) {
+      console.warn(
+        `[notegit] 启动清理：${hygiene.bytesFiles} 个推送计量残留、${hygiene.quarantineDirs} 个隔离目录、${hygiene.prunedRepos} 个库执行松对象 prune`,
+      );
     }
 
     const pepperFile = path.join(dataDir, 'keys', 'token-pepper.key');

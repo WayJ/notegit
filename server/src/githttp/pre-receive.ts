@@ -8,7 +8,8 @@ import { parseRemoteUser } from './cgi.ts';
 import { runGit } from './git-spawn.ts';
 import { isZeroOid, refCommandRejection, type RefCommand } from './ref-rules.ts';
 import { collectRefDeltas, hookGitTraversal, knownPathsOfTip } from './validation-input.ts';
-import { createValidator, type RefInput, type Report } from 'notegit-validation';
+import type { RefInput, Report } from 'notegit-validation';
+import { runServerValidation } from '../limits/engine.ts';
 import { measureVaultBytes, newPushId, preRecordPendingPush, readPushBytes, settlePushRejected } from './receive-audit.ts';
 
 /**
@@ -220,7 +221,9 @@ async function check(): Promise<number> {
     }
 
     // 2. 逐提交内容校验（S3-T4）：git 遍历组装 → packages/validation 判定；
-    //    计量输入（pushBytes/vaultCurrentBytes）挂接 E-LIMIT-004/005（阈值随 T8 配置生效）
+    //    计量输入（pushBytes/vaultCurrentBytes）挂接 E-LIMIT-004/005；
+    //    S3-T8：限制配置经覆盖链实时读取（本 hook 进程继承 app 进程环境 + 直连
+    //    app_settings 行——管理员改行下一次推送即热生效；配置≠rulesVersion）
     const traversal = hookGitTraversal(gitDir);
     const knownPaths = new Set<string>();
     const refs: RefInput[] = [];
@@ -237,14 +240,17 @@ async function check(): Promise<number> {
       refs.push({ ref: cmd.ref, headOld: isZeroOid(cmd.oldOid) ? null : cmd.oldOid, headNew: cmd.newOid, commits });
     }
 
-    const report = await createValidator().validate({
-      scope: 'pre-receive',
-      vaultId: String(membership.vaultId),
-      refs,
-      knownPaths: [...knownPaths],
-      pushBytes: metering['pushBytes'],
-      vaultCurrentBytes: metering['vaultCurrentBytes'],
-    });
+    const report = await runServerValidation(
+      {
+        scope: 'pre-receive',
+        vaultId: String(membership.vaultId),
+        refs,
+        knownPaths: [...knownPaths],
+        pushBytes: metering['pushBytes'],
+        vaultCurrentBytes: metering['vaultCurrentBytes'],
+      },
+      { db },
+    );
     await writeAuditReport(gitDir, report);
 
     if (report.result !== 'pass') {

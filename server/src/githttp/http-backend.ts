@@ -6,6 +6,7 @@ import type { ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyPluginAsync } from 'fastify';
 import { sweepOrphanedPending } from '../audit/reconciliation.ts';
+import { effectiveConfig } from '../limits/engine.ts';
 import { createPushByteCounter, newPushId, pushBytesFile } from './receive-audit.ts';
 import { authorize, type MembershipSource, type VaultScope } from '../auth/lifecycle.ts';
 import { ApiError, type AuthTokenContext } from '../credentials/service.ts';
@@ -47,22 +48,27 @@ export interface GitHttpPluginOptions {
   readonly db?: DatabaseSync;
 }
 
-/** pack 请求体上限：流式转发不落整包，此为防滥用护栏（资源限制正式值属 S3-T8） */
-const GIT_BODY_LIMIT = 2 ** 30;
+/** pack 请求体护栏：流式转发不落整包，此为防滥用天花板（S3-T8 起随配置升降——
+ *  只升不降：max(生效 maxPushBytes, 1GiB)，护栏永不先于 E-LIMIT-004 判定给出
+ *  费解错误；组装时读取一次（重启生效），正式判定逐推送热生效）。 */
+const bodyGuardCeiling = (db?: DatabaseSync): number =>
+  Math.max(effectiveConfig({ db }).maxPushBytes, 2 ** 30);
 
 export const gitHttpPlugin: FastifyPluginAsync<GitHttpPluginOptions> = async (instance, opts) => {
   const projectRoot = path.join(opts.dataDir, 'git');
 
   // pack 请求体透传：不解析（body 保持 undefined、流不消费，handler 直接 pipe
-  // req.raw）；解析器级 bodyLimit 抬高——默认 1MB 会误拒大推送。
+  // req.raw）；解析器级 bodyLimit 抬高——默认 1MB 会误拒大推送（护栏见
+  // bodyGuardCeiling：随生效 maxPushBytes 升降、只升不降，判定在 E-LIMIT-004）。
+  const bodyLimit = bodyGuardCeiling(opts.db);
   instance.addContentTypeParser(
     'application/x-git-upload-pack-request',
-    { bodyLimit: GIT_BODY_LIMIT },
+    { bodyLimit },
     (_req, _payload, done) => done(null),
   );
   instance.addContentTypeParser(
     'application/x-git-receive-pack-request',
-    { bodyLimit: GIT_BODY_LIMIT },
+    { bodyLimit },
     (_req, _payload, done) => done(null),
   );
 

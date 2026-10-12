@@ -50,7 +50,7 @@ test('迁移 0004：schema_version 引导行不在迁移内容中（runner 持�
 test('迁移 0004：在 v2（employees）之上应用，credentials 表与约束落地，重入跳过', () => {
   const db = memory();
   const first = migrate(db, MIGRATIONS);
-  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6]);  // 集成修正：0005（T6）与 0006（T7）均已并入
+  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0007（T8 app_settings）已并入
 
   const cols = (db.prepare('PRAGMA table_info(credentials)').all() as { name: string }[]).map((c) => c.name);
   assert.deepEqual(cols.sort(), [
@@ -61,7 +61,7 @@ test('迁移 0004：在 v2（employees）之上应用，credentials 表与约束
 
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6]);  // 集成修正：0005（T6）与 0006（T7）均已并入
+  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0007（T8 app_settings）已并入
   db.close();
 });
 
@@ -88,5 +88,5 @@ test('迁移 0004 约束：token_hash 唯一、scope_access CHECK、employee 外
 
 test('出厂迁移列表：v1 基线、v2（S2-T2）在前、v4 append 在后（0003 为 S2-T3 sessions，已集成于前）', () => {
   const versions = MIGRATIONS.map((m) => m.version);
-  assert.deepEqual(versions, [1, 2, 3, 4, 5, 6]);  // 集成修正：0005（T6）与 0006（T7）均已并入
+  assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0005/0006 已并入；0007（T8 app_settings）append
 });

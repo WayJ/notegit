@@ -51,6 +51,11 @@ export interface ValidateInput {
   pushBytes?: number
   /** 库当前占用字节（与 pushBytes 合计判定 E-LIMIT-005） */
   vaultCurrentBytes?: number
+  /** web-submit 的目标 ref（S3-T8 接线，T7 honest-gap 移交：push 级容量判定
+   *  E-LIMIT-004/005 的定位字段——与 pushBytes/vaultCurrentBytes 同时给出时生效
+   *  （web 口径：pushBytes=变更字节合计）；pre-commit/pre-receive 不用（后者以
+   *  refs[].ref 定位）。缺省不判定（惰性输入，既有语义不变）。 */
+  ref?: string
   /** 库内既有路径（并入库内链接存在性判定） */
   knownPaths?: readonly string[]
   /** 候选提交全 tree 路径（pre-commit/web-submit 的 E-PATH-004 基线，S3-T7 对称
@@ -221,6 +226,11 @@ async function validateInternal(input: ValidateInput): Promise<Report> {
     }
   } else {
     const filesIn = input.files ?? []
+    // push 级容量判定（S3-T8 web-submit 接线）：ref + 计量同时给定才判——pre-receive
+    // 以 refs[].ref 定位（上方），web-submit 以 input.ref 定位；计量缺省不判（惰性输入）
+    if (input.ref !== undefined && (input.pushBytes !== undefined || input.vaultCurrentBytes !== undefined)) {
+      topIssues.push(...checkPushLimits([input.ref], input.pushBytes ?? 0, input.vaultCurrentBytes ?? 0, cfg))
+    }
     // E-PATH-004 基线（S3-T7）：候选提交全 tree 路径给定时按其判定（变更 ⊆ 候选
     // tree，并集去重；同路径重复不构成冲突）；缺省回退变更集内比对（既有语义）
     const conflictBase = input.treePaths === undefined

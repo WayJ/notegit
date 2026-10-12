@@ -2,7 +2,8 @@
  * 出厂迁移列表（机制先行；内容随 S2-T2…T7 逐步落地）。
  * DDL 唯一来源是 docs/contracts/storage-model.md 的 -- @schema 块（D6 只读纪律）；
  * S2-T1 只带空基线；S2-T2 落 v2（employees/one_time_tokens）；S2-T4 落 v4（credentials）；
- * S2-T6 落 v5（vaults/vault_members）。v3 为 S2-T3（sessions）；0006+ 为后续任务预留。
+ * S2-T6 落 v5（vaults/vault_members）；v3 为 S2-T3（sessions）；v6 为 S2-T7（audit_events）；
+ * v7 为 S3-T8（app_settings）。后续版本按任务 append。
  */
 export interface Migration {
   readonly version: number;
@@ -162,6 +163,24 @@ CREATE TABLE audit_events (
       `CREATE INDEX idx_audit_vault_time ON audit_events(vault_id, occurred_at);   -- 依据：架构 §4.4 按库/时间查询（api.md §8 审计查询）`,
       `CREATE INDEX idx_audit_employee_time ON audit_events(employee_id, occurred_at);  -- 依据：按主体检索`,
       `CREATE INDEX idx_audit_open ON audit_events(status) WHERE status IN ('pending','unresolved');  -- 依据：backup-recovery §4 步骤 2 排空检查 / §7 步骤 7 恢复对账（部分索引，行数≈在途写数）`,
+    ],
+  },
+  {
+    // S3-T8（迁移 0007，本任务独占）：app_settings（运行时管理配置——键名即
+    // validation-defaults.json 配置键）。DDL 逐字取自 storage-model.md §3.10 的
+    // -- @schema 块（D6 只读纪律）；0006 之后 append（迁移独占约束同前任务）。
+    version: 7,
+    description: 'S3-T8: app_settings — runtime admin config keyed by validation-defaults.json keys (storage-model §3.10; validation.md §5.1/§7.3-4)',
+    statements: [
+      `-- 管理员可配置项的存储（T5 建议）：键名即 validation-defaults.json 的配置键
+-- （validation.md §5.1），缺行 = 用默认值；配置 ≠ 规则版本（validation.md §7.3-4），
+-- 变更走管理端点并记审计（api.md）。静态部署配置仍在 /data/config/（backup-recovery §2）。
+CREATE TABLE app_settings (
+  key        TEXT    NOT NULL PRIMARY KEY,
+  value      TEXT    NOT NULL,                 -- JSON 值（与 validation-defaults.json 的类型一致）
+  updated_by INTEGER REFERENCES employees(id),
+  updated_at TEXT    NOT NULL
+) STRICT;`,
     ],
   },
 ];
