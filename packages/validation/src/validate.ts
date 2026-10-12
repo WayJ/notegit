@@ -24,6 +24,9 @@ export interface CommitDelta {
   commit: string
   parent: string | null
   changes: FileInput[]
+  /** 本提交全 tree 路径（E-PATH-004 全 tree 基线，S3-T4 扩展输入：命中基线的新增/修改
+   *  路径与库内存量路径的大小写冲突也被拦截；缺省回退变更集内比对——既有语义不变）。 */
+  treePaths?: string[]
 }
 
 export interface RefInput {
@@ -196,7 +199,7 @@ async function validateInternal(input: ValidateInput): Promise<Report> {
     topIssues.push(...checkPushLimits(refsIn.map((r) => r.ref), input.pushBytes ?? 0, input.vaultCurrentBytes ?? 0, cfg))
     for (const refInput of refsIn) {
       for (const delta of refInput.commits) {
-        const conflicts = caseConflictIssues(delta.changes.map((c) => c.path))
+        const conflicts = caseConflictIssues(delta.treePaths ?? delta.changes.map((c) => c.path))
         for (const change of delta.changes) {
           knownPaths.add(change.path)
         }
