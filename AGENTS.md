@@ -9,11 +9,12 @@
 
 ### gates
 
-（2026-10-12 由 S1-T6 实测固化并记录，2026-10-12 master 补登第三条（G3，收口报告裁决）；适用分支 sprint/S1，命令均在仓库根目录运行。完整命令行、退出码与输出摘录见 [docs/s1/gates-evidence.md](docs/s1/gates-evidence.md)。）
+（2026-10-12 由 S1-T6 实测固化并记录，同日 master 补登第三条（G3）与第四条（S2-T1 产品测试，适用分支自 sprint/S2 起）；命令均在仓库根目录运行。完整命令行、退出码与输出摘录见 [docs/s1/gates-evidence.md](docs/s1/gates-evidence.md)。）
 
 - contracts: `python3 docs/contracts/tools/verify_validation_contracts.py` — 统一校验契约自检门禁（依赖 python3 ≥ 3.9 与 jsonschema ≥ 4）。2026-10-12 实测：exit 0，82/82 检查通过。
 - tests: `node --test docs/s1/spikes/git-http-backend/test/route-b.test.mjs` — Git HTTP 接入行为测试（B1–B7，spike 无 npm 依赖、无需 install；实测环境 Node v24.21.0）。2026-10-12 实测：exit 0，7/7 通过。
 - storage: `node --test docs/contracts/tools/ddl_smoke.test.mjs` — 存储模型 DDL 冒烟（S1-T5 交付，node:sqlite 真实建表与约束断言；无 npm 依赖）。2026-10-12 master 在 sprint/S1 合并态实测：exit 0，14/14 通过。
+- product: `npm ci --no-audit --no-fund && npm test` — 产品测试套件（tsc --noEmit + node --test：pragma 断言、迁移重入、路由 inject；S2-T1 起生效，随任务增长）。2026-10-12 master 在 sprint/S2 合并态 @ 25dd001 实测：exit 0，14/14 通过。
 
 gates 通过仅证明上述检查命令真实可运行且当前通过；验收要求仍来自 epic 的 Definition of Done，不得以 gates 通过宣称 E1 DoD 完成（DoD 证据在对应 sprint 验收时产生）。
 
