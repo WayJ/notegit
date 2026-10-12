@@ -5,7 +5,8 @@
   "description": "Notegit monorepo root (server app, shared validation package, CLI); bare name 'notegit' is reserved for the S6 CLI package",
   "workspaces": [
     "server",
-    "packages/*"
+    "packages/*",
+    "cli"
   ],
   "scripts": {
     "test": "npm test --workspaces --if-present"
