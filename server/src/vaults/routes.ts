@@ -96,11 +96,12 @@ export const vaultsPlugin: FastifyPluginAsync<VaultsPluginOptions> = async (
     reply.send(err);
   });
 
-  // 建库：任意 active 员工（认证层逐请求保证 active）；创建者自动 admin（api.md §5）
+  // 建库：任意 active 员工（认证层逐请求保证 active）；创建者自动 admin（api.md §5）。
+  // S3-T1：经 createVaultWithRepo——行事务 + bare 仓库 init（失败补偿回滚，无孤儿配置行）
   instance.post('/api/v1/vaults', async (request, reply) => {
     const auth = await requireAuth(request, reply);
     if (!auth) return reply;
-    const vault = svc.createVault((request.body ?? {}) as Record<string, unknown>, {
+    const vault = await svc.createVaultWithRepo((request.body ?? {}) as Record<string, unknown>, {
       employeeId: auth.subject.employee_id,
       entry: auth.entry,
       carrierRef: auth.carrierRef,

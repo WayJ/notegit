@@ -60,6 +60,7 @@ export async function startApp(opts: StartOptions = {}): Promise<StartedApp> {
       db,
       pepper,
       bootstrapTokenFile,
+      dataDir, // S3-T1：建库端点真实 init bare 于 <dataDir>/git/<id>.git
       authenticateRequest: opts.authenticateRequest,
       hashPassword: opts.hashPassword,
     });

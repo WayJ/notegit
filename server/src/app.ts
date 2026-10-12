@@ -13,6 +13,7 @@ import { credentialsPlugin } from './credentials/routes.ts';
 import { createDbMembershipSource } from './vaults/membership.ts';
 import { VaultService } from './vaults/service.ts';
 import { vaultsPlugin } from './vaults/routes.ts';
+import { createVaultRepoOps } from './gitrepo/lifecycle.ts';
 import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
 import { registerMaintenanceRoutes } from './maintenance/routes.ts';
 import { registerWebRoutes } from './web/routes.ts';
@@ -45,6 +46,9 @@ export interface AppDeps {
   readonly hashPassword?: PasswordHasher;
   readonly credentials?: CredentialsOptions;
   readonly logger?: FastifyServerOptions['logger'];
+  /** 数据目录（S3-T1）：注入后建库端点真实 init bare 于 <dataDir>/git/<id>.git；
+   *  缺省 = S2 测试形态（仅建行）。生产装配（main.ts）恒传入。 */
+  readonly dataDir?: string;
 }
 
 /** 已填默认值的依赖，注册路由用。 */
@@ -138,9 +142,9 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     });
     // S2-T6 库与成员域路由（api.md §5）：授权经共用 authorize（auth/lifecycle.ts ×
     // vaults/membership.ts 真实表 MembershipSource）——Web/API 入口共用，Git 入口
-    // （S3）消费同一源与组件
+    // （S3）消费同一源与组件。S3-T1：dataDir 注入时挂真实 bare 仓库生命周期
     app.register(vaultsPlugin, {
-      service: new VaultService({ db: wired.db }),
+      service: new VaultService({ db: wired.db, ...(deps.dataDir ? { repoOps: createVaultRepoOps(deps.dataDir) } : {}) }),
       authenticateRequest: wired.authenticateRequest,
       membershipSource: createDbMembershipSource(wired.db),
     });
