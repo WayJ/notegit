@@ -145,6 +145,11 @@ test('/admin 管理员：200，含员工管理/邀请/建库/成员角色/维护
     for (const ep of endpoints) {
       assert.ok(res.body.includes(ep), `管理页脚本应调用 ${ep}`);
     }
+    // 一次性令牌区分离（评审修正）：邀请与重置各用独立展示区，避免互相覆盖未交付明文
+    assert.ok(res.body.includes('id="invite-token"'), '邀请令牌独立展示区');
+    assert.ok(res.body.includes('id="reset-token"'), '重置令牌独立展示区');
+    // 员工列表分页可达（评审修正）：默认页 50 条之外可继续加载
+    assert.ok(res.body.includes('加载更多'), '员工列表分页控件');
   } finally {
     await h.close();
   }

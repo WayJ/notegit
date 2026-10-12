@@ -9,7 +9,7 @@ import { migrate } from '../src/db/migrate.ts';
 import { MIGRATIONS } from '../src/db/migrations.ts';
 import { loadOrCreatePepper } from '../src/bootstrap/pepper.ts';
 import { ensureBootstrapToken } from '../src/bootstrap/token.ts';
-import { FIXTURE_DDL, dumpAllText } from './credentials-fixtures.ts';
+import { FIXTURE_DDL, dumpAllText, addVault } from './credentials-fixtures.ts';
 import { buildApp } from '../src/app.ts';
 
 // S2-T8 关键流程 e2e（breakdown §2.1 S2-T8 完成标准「管理员全流程可用：
@@ -173,9 +173,8 @@ test('e2e：邀请→员工登录→建库→授权→凭据创建（管理员�
     assert.equal(me.statusCode, 200);
     const inScope = await h.app.inject({ method: 'GET', url: '/api/v1/vaults/team-kb', headers: bearer });
     assert.equal(inScope.statusCode, 200);
-    h.db.prepare(
-      `INSERT INTO vaults (slug, name, created_by, created_at) VALUES ('other-kb', 'Other', ?, ?)`,
-    ).run(1, new Date().toISOString());
+    // 陷阱库：alice 无成员关系（fixtures.addVault 直插——越权 404 读路径专用，无仓库面）
+    addVault(h.db, 'other-kb', 1);
     const outScope = await h.app.inject({ method: 'GET', url: '/api/v1/vaults/other-kb', headers: bearer });
     assert.equal(outScope.statusCode, 404, '越出 scope 清单与无权库同 404（D-IC-06）');
 

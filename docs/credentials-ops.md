@@ -13,7 +13,7 @@
 
 | 凭据 | 形态 | 明文出现次数 | 失效即阻断 |
 |---|---|---|---|
-| 员工访问凭据（Agent/CLI 用） | `ngt_` + 43 字符随机部；`Authorization: Bearer` 或 Git HTTP Basic 口令 | **仅创建响应一次**；此后界面/接口只显示 `ngt_ab…wxyz` 形态脱敏 hint（identity §3.1） | 过期/撤销/账号停用下一请求 401（E-AUTH-002/003/004） |
+| 员工访问凭据（Agent/CLI 用） | `ngt_` + 43 字符随机部；`Authorization: Bearer`（Git HTTP Basic 口令形态随 S3 接入） | **仅创建响应一次**；此后界面/接口只显示 `ngt_ab…wxyz` 形态脱敏 hint（identity §3.1） | 过期/撤销/账号停用下一请求 401（E-AUTH-002/003/004） |
 | Web 会话 | Cookie `ngt_sid`（HttpOnly; Secure; SameSite=Lax；服务端会话表） | 不适用（Cookie 由浏览器持有） | 过期/账号停用/口令重置后失效；idle 7 天滑动、absolute 30 天（identity §4） |
 | 一次性令牌（K5） | 43 字符随机串（bootstrap 24h / 邀请与口令重置 30 分钟，单次） | **仅签发响应一次**（邀请与重置在管理页展示一次） | 已用/过期即失效，不可重放 |
 
@@ -58,6 +58,8 @@ openssl rand -hex 32
 ```
 
 然后重启应用（`docker restart <container>` 或等价方式）。启动后：新 HMAC 用 active（v2）计算；存量凭据/会话哈希（`hmacv1$…` / 旧 sid_hash）按内嵌版本选 **retired 键校验**。
+
+> **注意（重启即失效的一次性令牌）**：K5 一次性令牌（邀请、口令重置、bootstrap）**只以 active 键校验、不消费 retired 键**——轮换重启的瞬间，所有未消费的一次性令牌立即失效，需要重新发起（重新邀请/重置）。K5 本身短时效（30 分钟 / bootstrap 24 小时）且单次使用（identity §6.1「天然轮换」），不参与 rehash-on-use 迁移。安排轮换窗口时避开有进行中邀请/重置令牌的时段即可。
 
 **步骤 3 —— 验证 rehash-on-use**（identity §6.2 步骤 2「对用户透明」的实证）：
 
@@ -113,6 +115,7 @@ openssl rand -hex 32
 
 ### 5.3 与实现的差距（如实）
 
+- **K5 一次性令牌不消费 retired 键**（§3 注意框）：轮换重启即作废全部未消费的邀请/重置/bootstrap 令牌，须重新发起；token 与 Web 会话则经 rehash-on-use 平滑迁移。
 - `notegit admin recover` 命令名已定稿（identity §7.2 遗留项，S2-T3 记录），**命令本体尚未实现**——随 S8 容器发行/运维任务落地；在此之前，主机侧等价兜底是直接访问数据卷（能访问部署主机/数据卷者本已等同完全控制实例，identity §7.2 合理性边界）。
 - pepper 轮换/retired 移除目前是**主机侧文件操作**：契约审计 kind `keys.pepper_rotate` / `keys.pepper_prune` 已注册（storage-model §5），但应用侧无 pepper 版本追踪，**当前不产生审计行**——挂账至运维工具化（S8）。
 - 宽限期 30 天是操作纪律（identity §6.2 建议值），**当前实现无可配置项**；retired 条目的移除由管理员手动执行（§3 步骤 4）。

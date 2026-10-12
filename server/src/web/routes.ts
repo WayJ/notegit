@@ -30,8 +30,9 @@ function html(reply: FastifyReply, body: string): FastifyReply {
 export function registerWebRoutes(app: FastifyInstance, opts: WebRoutesOptions): void {
   app.get('/login', async (_req, reply) => html(reply, loginPage()));
 
-  /** 页面认证：成功返回主体；未认证 302 /login（已回复返回 null）。
-   *  停用账号等四状态在页面入口一律 302（会话载体失败由缝清 Cookie——「被登出」）。 */
+  /** 页面认证：成功返回主体；未认证 302 /login（已回复返回 null）。四状态失败
+   *  （过期/停用等）同样 302 引导到登录页；失效 Cookie 由登录重发覆盖（页面路径
+   *  不走 rejectAuth，故不清 Cookie——Cookie 已不可用，无安全影响）。 */
   async function requirePageUser(req: FastifyRequest, reply: FastifyReply): Promise<AuthSuccess | null> {
     const outcome = await opts.authenticateRequest(req);
     if (outcome.ok) return outcome;

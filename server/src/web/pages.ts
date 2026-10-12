@@ -110,6 +110,7 @@ export function adminPage(): string {
   <thead><tr><th>用户名</th><th>显示名</th><th>状态</th><th>实例管理员</th><th>创建时间</th><th>操作</th></tr></thead>
   <tbody></tbody>
 </table>
+<p><button id="employees-more" type="button" hidden>加载更多</button></p>
 <p><output id="employees-msg"></output></p>
 
 <h2>邀请创建</h2>
@@ -142,6 +143,8 @@ export function adminPage(): string {
   <button type="submit">授权 / 改角色</button>
 </form>
 <p><output id="member-msg"></output></p>
+<p>重置口令的一次性令牌（明文仅此一次，独立于邀请令牌展示）：</p>
+<pre id="reset-token"></pre>
 
 <h2>维护模式</h2>
 <p><button id="maint-on" type="button">开启维护模式</button> <button id="maint-off" type="button">关闭维护模式</button></p>
@@ -149,14 +152,21 @@ export function adminPage(): string {
 <p><output id="maint-msg"></output></p>
 `, `${FETCH_HELPER}
 
-// —— 员工管理：列表 + 停用/启用 + 实例管理员开关 + 重置口令 ——
+// —— 员工管理：列表（分页 limit=50 + cursor「加载更多」）+ 停用/启用 + 实例管理员开关 + 重置口令 ——
 
-async function loadEmployees() {
+let employeesCursor = null;
+async function loadEmployees(append) {
   const tbody = document.querySelector('#employees-table tbody');
-  tbody.textContent = '';
+  if (!append) {
+    tbody.textContent = '';
+    employeesCursor = null;
+  }
   try {
-    const { employees } = await api('GET', '/api/v1/admin/employees');
-    for (const e of employees) {
+    const url = employeesCursor === null
+      ? '/api/v1/admin/employees'
+      : '/api/v1/admin/employees?cursor=' + encodeURIComponent(employeesCursor);
+    const page = await api('GET', url);
+    for (const e of page.employees) {
       const tr = document.createElement('tr');
       const cells = [e.username, e.display_name, e.active ? '在岗' : '已停用',
         e.is_instance_admin ? '是' : '否', e.created_at];
@@ -173,7 +183,7 @@ async function loadEmployees() {
         try {
           await api('PATCH', '/api/v1/admin/employees/' + encodeURIComponent(e.username),
             { active: !e.active });
-          await loadEmployees();
+          await loadEmployees(false);
         } catch (err) { show(document.getElementById('employees-msg'), err.message); }
       });
       td.appendChild(toggle);
@@ -184,9 +194,10 @@ async function loadEmployees() {
         try {
           const r = await api('POST',
             '/api/v1/admin/employees/' + encodeURIComponent(e.username) + '/password-reset');
-          document.getElementById('invite-token').textContent = r.password_reset_token || '';
+          // 独立展示区（不覆盖尚未交付的邀请令牌——两者明文都仅此一次，覆盖即丢失）
+          document.getElementById('reset-token').textContent = r.password_reset_token || '';
           show(document.getElementById('employees-msg'),
-            e.username + ' 的重置令牌已生成（30 分钟内单次有效，见上方一次性令牌区）');
+            e.username + ' 的重置令牌已生成（30 分钟内单次有效，见下方重置令牌区）');
         } catch (err) { show(document.getElementById('employees-msg'), err.message); }
       });
       td.appendChild(reset);
@@ -198,7 +209,7 @@ async function loadEmployees() {
           try {
             await api('PATCH', '/api/v1/admin/employees/' + encodeURIComponent(e.username),
               { active: e.active, is_instance_admin: true });
-            await loadEmployees();
+            await loadEmployees(false);
           } catch (err) { show(document.getElementById('employees-msg'), err.message); }
         });
         td.appendChild(promote);
@@ -206,12 +217,17 @@ async function loadEmployees() {
       tr.appendChild(td);
       tbody.appendChild(tr);
     }
-    show(document.getElementById('employees-msg'), '共 ' + employees.length + ' 名员工');
+    employeesCursor = page.next_cursor;
+    document.getElementById('employees-more').hidden = employeesCursor === null;
+    show(document.getElementById('employees-msg'), append
+      ? '已追加 ' + page.employees.length + ' 名（继续点「加载更多」翻页）'
+      : '本页 ' + page.employees.length + ' 名员工' + (employeesCursor ? '（还有更多）' : ''));
   } catch (err) {
     show(document.getElementById('employees-msg'), '加载失败：' + err.message);
   }
 }
-loadEmployees();
+loadEmployees(false);
+document.getElementById('employees-more').addEventListener('click', () => loadEmployees(true));
 
 document.getElementById('invite-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
