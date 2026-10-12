@@ -1,0 +1,20 @@
+{
+  "name": "notegit-server",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Notegit Fastify v5 server (D10: Node 24 + TypeScript + node:sqlite)",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "test": "tsc --noEmit && node --test"
+  },
+  "dependencies": {
+    "fastify": "5.12.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}
