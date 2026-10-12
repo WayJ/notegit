@@ -10,7 +10,8 @@ import path from 'node:path';
 
 const SRC_ROOT = path.resolve(import.meta.dirname, '../src');
 
-/** 权限判定面（identity §5.1 两层检查的实现模块）：缓存禁区的核心 */
+/** 权限判定面（identity §5.1 两层检查的实现模块）：缓存禁区的核心。
+ *  S2-T6 起 vaults/membership.ts（MembershipSource 真实表实现）属判定面。 */
 const DECISION_MODULES = [
   'auth/sessions.ts',
   'auth/subject.ts',
@@ -18,10 +19,11 @@ const DECISION_MODULES = [
   'auth/csrf.ts',
   'credentials/service.ts',
   'credentials/token.ts',
+  'vaults/membership.ts',
 ] as const;
 
-/** 模块级可变容器扫描范围（判定面之外的身份/凭据/引导域一并纳入） */
-const SCANNED_DIRS = ['auth', 'credentials', 'bootstrap', 'invites', 'db'] as const;
+/** 模块级可变容器扫描范围（判定面之外的身份/凭据/引导/库域一并纳入） */
+const SCANNED_DIRS = ['auth', 'credentials', 'bootstrap', 'invites', 'db', 'vaults'] as const;
 
 function readSrc(rel: string): string {
   return readFileSync(path.join(SRC_ROOT, rel), 'utf8');

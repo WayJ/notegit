@@ -10,6 +10,9 @@ import { csrfGuard } from './auth/csrf.ts';
 import { hashPassword as defaultHashPassword } from './auth/password.ts';
 import { CredentialsService } from './credentials/service.ts';
 import { credentialsPlugin } from './credentials/routes.ts';
+import { createDbMembershipSource } from './vaults/membership.ts';
+import { VaultService } from './vaults/service.ts';
+import { vaultsPlugin } from './vaults/routes.ts';
 
 /** 认证主体（identity §1：认证主体 = 员工账号）。 */
 export interface Subject {
@@ -114,6 +117,14 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       db: wired.db,
       service: credentialsService,
       authenticateRequest: wired.authenticateRequest,
+    });
+    // S2-T6 库与成员域路由（api.md §5）：授权经共用 authorize（auth/lifecycle.ts ×
+    // vaults/membership.ts 真实表 MembershipSource）——Web/API 入口共用，Git 入口
+    // （S3）消费同一源与组件
+    app.register(vaultsPlugin, {
+      service: new VaultService({ db: wired.db }),
+      authenticateRequest: wired.authenticateRequest,
+      membershipSource: createDbMembershipSource(wired.db),
     });
   }
   return app;

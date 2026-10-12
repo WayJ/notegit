@@ -1,8 +1,8 @@
 /**
  * 出厂迁移列表（机制先行；内容随 S2-T2…T7 逐步落地）。
  * DDL 唯一来源是 docs/contracts/storage-model.md 的 -- @schema 块（D6 只读纪律）；
- * S2-T1 只带空基线；S2-T2 落 v2（employees/one_time_tokens）；S2-T4 落 v4（credentials）。
- * v3 为 S2-T3 预留（并行任务独占版本号），并入时插于 2 与 4 之间。
+ * S2-T1 只带空基线；S2-T2 落 v2（employees/one_time_tokens）；S2-T4 落 v4（credentials）；
+ * S2-T6 落 v5（vaults/vault_members）。v3 为 S2-T3（sessions）；0006+ 为后续任务预留。
  */
 export interface Migration {
   readonly version: number;
@@ -98,6 +98,38 @@ CREATE TABLE credentials (
   last_used_at TEXT                            -- 依据：identity §3.3 观测字段，≥60 秒节流批量写，不参与任何授权判断
 ) STRICT;`,
       `CREATE INDEX idx_credentials_employee ON credentials(employee_id);  -- 依据：identity §3.5 每员工上限（默认 20，应用层）与员工凭据列表查询`,
+    ],
+  },
+  {
+    // DDL 来源：storage-model.md §3.5/§3.6 `-- @schema vaults`/`-- @schema vault_members`
+    // 块逐字迁移（防漂移测试对照原文）；schema_version 引导行剔除（runner 持有，
+    // architecture-notes §3）。版本号 0005 为 S2-T6 独占（仅 append 注册）。
+    version: 5,
+    description: 'S2-T6: vaults + vault_members — slug 唯一/三档角色/PK 防重复授权 (架构 §4.2/§4.3/§7.2; storage-model §3.5/§3.6)',
+    statements: [
+      `-- 库 = Git 仓库 = 内容访问权限最小单位（架构 §2/§4.2）。新库默认私有、创建者为库管理员
+-- （成员行见 3.6）。仓库路径 /data/git/<vault-id>.git 由稳定 ID 映射（架构 §3.2/§9）。
+CREATE TABLE vaults (
+  id              INTEGER NOT NULL PRIMARY KEY,  -- 依据：架构 §7.2 内部库 ID 稳定；改 slug 不变
+  slug            TEXT    NOT NULL UNIQUE,       -- 依据：架构 §7.2 slug 实例内唯一；可改名（CLI 提示映射变化），格式校验在应用层（对齐 validation.md §4.1 字符集精神）
+  name            TEXT    NOT NULL,
+  default_branch  TEXT    NOT NULL DEFAULT 'main',  -- 依据：架构 §2 已发布知识以服务端默认分支为准，初始名 main
+  main_admin_only INTEGER NOT NULL DEFAULT 0 CHECK (main_admin_only IN (0,1)),  -- 依据：架构 §4.3 可配置 main 仅由库管理员写入（默认关）
+  created_by      INTEGER NOT NULL REFERENCES employees(id),  -- 依据：架构 §4.2 创建者为库管理员
+  created_at      TEXT    NOT NULL
+) STRICT;`,
+      `-- 三角色（架构 §4.2）：reader 只读；editor 可 push（受分支规则约束）；admin 兼管理。
+-- 授权层实时查本表（identity §5.1 第 2 层，无缓存）；撤权 = DELETE 行（identity §5.2 四状态之一）。
+CREATE TABLE vault_members (
+  vault_id    INTEGER NOT NULL REFERENCES vaults(id),
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  role        TEXT    NOT NULL CHECK (role IN ('reader','editor','admin')),  -- 依据：架构 §4.2 角色表
+  granted_by  INTEGER NOT NULL REFERENCES employees(id),
+  granted_at  TEXT    NOT NULL,
+  PRIMARY KEY (vault_id, employee_id)          -- 依据：架构 §4.2 成员权限显式授予（一员工一库至多一行）
+) STRICT;
+
+CREATE INDEX idx_vault_members_employee ON vault_members(employee_id);  -- 依据：架构 §4.2「我的库」列表/搜索过滤（未授权库不进列表）`,
     ],
   },
 ];

@@ -14,12 +14,13 @@ import {
   authorize,
   reauthorizeAtExecutionPoint,
   type MembershipSource,
-  type MembershipLookup,
 } from '../src/auth/lifecycle.ts';
+import { createDbMembershipSource } from '../src/vaults/membership.ts';
 import { newDb } from './credentials-fixtures.ts';
 
 // S2-T5：identity §5.2 后果表 8 组用例（4 状态 × 2 入口）逐一断言 + §5.3 边界 +
-// 授权层接口契约（mock 成员关系源，T6 接真实 vaults/vault_members 表）。
+// 授权层经真实表源（S2-T6 落地 vaults/vault_members 迁移与 membership.ts，
+// 原 mock 成员关系源已换真实表——撤权 = DELETE 成员行，下一 lookup 生效）。
 // - Web 入口 = ngt_sid 会话 Cookie（经 GET /api/v1/me 呈现）；
 // - Git/API 入口 = Authorization: Bearer ngt_…（经 GET /api/v1/credentials 呈现）；
 // - 撤权行经 authorize 缝断言（clone/refs 发现/对象读 = read；push = write）。
@@ -35,8 +36,8 @@ interface Harness {
 }
 
 async function harness(): Promise<Harness> {
-  // employees/sessions/credentials 由真实迁移建立；vaults/vault_members/audit_events
-  // 属 S2-T6/T7，用 fixtures 的 IF NOT EXISTS 形态 DDL 供审计与 scope 断言（T4 同款）。
+  // employees/sessions/credentials/vaults/vault_members 由真实迁移建立（0005 随
+  // S2-T6 落地）；audit_events 属 S2-T7，fixtures 的 IF NOT EXISTS DDL 供其先行（T4 同款）。
   const db = newDb();
   const pepper = { active: { version: 1, key: randomBytes(32) }, retired: [] as never[] };
   const seed = new CredentialsService({ db, pepper });
@@ -91,21 +92,22 @@ function errOf(res: { json(): unknown }): { code?: string; details?: { reason?: 
   return ((res.json() as { error?: Record<string, unknown> }).error ?? {}) as { code?: string; details?: { reason?: string } };
 }
 
-/** 授权层 mock 成员关系源（identity §5.1 第 2 层的接口化；T6 以 authz.role 规范查询实现） */
-function mockSource(rows: Array<{ employeeId: number; slug: string; vaultId: number; role: 'reader' | 'editor' | 'admin' }>): {
+/** 授权层真实表源（identity §5.1 第 2 层；S2-T6 起以 authz.role 规范查询实现，
+ *  mock 已换真实 vaults/vault_members 表——撤权 = DELETE 成员行） */
+function realSource(h: Harness, rows: Array<{ employeeId: number; slug: string; role: 'reader' | 'editor' | 'admin' }>): {
   source: MembershipSource;
   revoke(employeeId: number, slug: string): void;
 } {
-  const map = new Map<string, MembershipLookup>();
-  for (const r of rows) map.set(`${r.employeeId}\u0000${r.slug}`, { vaultId: r.vaultId, role: r.role });
+  const now = new Date().toISOString();
+  for (const r of rows) {
+    h.db.prepare(`INSERT INTO vaults (slug, name, created_by, created_at) VALUES (?, ?, ?, ?)`).run(r.slug, r.slug, r.employeeId, now);
+    const vaultId = (h.db.prepare('SELECT id FROM vaults WHERE slug = ?').get(r.slug) as { id: number }).id;
+    h.db.prepare(`INSERT INTO vault_members (vault_id, employee_id, role, granted_by, granted_at) VALUES (?, ?, ?, ?, ?)`).run(vaultId, r.employeeId, r.role, r.employeeId, now);
+  }
   return {
-    source: {
-      lookup(slug, employeeId) {
-        return map.get(`${employeeId}\u0000${slug}`);
-      },
-    },
+    source: createDbMembershipSource(h.db),
     revoke(employeeId, slug) {
-      map.delete(`${employeeId}\u0000${slug}`);
+      h.db.prepare(`DELETE FROM vault_members WHERE vault_id = (SELECT id FROM vaults WHERE slug = ?) AND employee_id = ?`).run(slug, employeeId);
     },
   };
 }
@@ -226,9 +228,9 @@ test('⑦ 撤权 × Web 会话：该库从可见集消失、直接访问 not_fou
   const h = await harness();
   try {
     const alice = h.employee('alice');
-    const { source, revoke } = mockSource([
-      { employeeId: alice, slug: 'alpha', vaultId: 1, role: 'editor' },
-      { employeeId: alice, slug: 'beta', vaultId: 2, role: 'reader' },
+    const { source, revoke } = realSource(h, [
+      { employeeId: alice, slug: 'alpha', role: 'editor' },
+      { employeeId: alice, slug: 'beta', role: 'reader' },
     ]);
     // 撤权前：两库均可见（列表 = 对每个库实时查权限的推导）
     const visible = (['alpha', 'beta'] as const).map((slug) => authorize(source, alice, slug, 'read').allowed);
@@ -251,7 +253,7 @@ test('⑧ 撤权 × Git/API token：clone（refs 发现）、fetch（对象读�
   const h = await harness();
   try {
     const alice = h.employee('alice');
-    const { source, revoke } = mockSource([{ employeeId: alice, slug: 'alpha', vaultId: 1, role: 'editor' }]);
+    const { source, revoke } = realSource(h, [{ employeeId: alice, slug: 'alpha', role: 'editor' }]);
     assert.equal(authorize(source, alice, 'alpha', 'write').allowed, true, '前置：撤权前可 push');
     revoke(alice, 'alpha');
     const ghost = authorize(source, alice, 'no-such-vault', 'read');
@@ -271,7 +273,7 @@ test('⑨ 在途操作按起点放行：起点通过的授权在其操作期间�
   const h = await harness();
   try {
     const alice = h.employee('alice');
-    const { source, revoke } = mockSource([{ employeeId: alice, slug: 'alpha', vaultId: 1, role: 'editor' }]);
+    const { source, revoke } = realSource(h, [{ employeeId: alice, slug: 'alpha', role: 'editor' }]);
     const atStart = authorize(source, alice, 'alpha', 'read'); // 在途操作的起点授权
     revoke(alice, 'alpha');
     // 起点判定不因后续撤权被追溯改写（操作按其认证与授权通过时刻放行完成，identity §5.3）
@@ -287,7 +289,7 @@ test('⑩ 执行点复查钩子：撤权发生在检查后、执行点前 → �
   const h = await harness();
   try {
     const alice = h.employee('alice');
-    const { source, revoke } = mockSource([{ employeeId: alice, slug: 'alpha', vaultId: 1, role: 'editor' }]);
+    const { source, revoke } = realSource(h, [{ employeeId: alice, slug: 'alpha', role: 'editor' }]);
     assert.equal(authorize(source, alice, 'alpha', 'write').allowed, true, '前置：起点检查通过');
     revoke(alice, 'alpha');
     // identity §5.2 行 4：在途 push 在执行点复查时被拒（并记审计 rejected——随 S2-T7）
@@ -301,10 +303,10 @@ test('⑪ 授权层角色与 scope 语义：reader 读允许/写 forbidden（403
   const h = await harness();
   try {
     const alice = h.employee('alice');
-    const { source } = mockSource([
-      { employeeId: alice, slug: 'alpha', vaultId: 1, role: 'reader' },
-      { employeeId: alice, slug: 'beta', vaultId: 2, role: 'editor' },
-      { employeeId: alice, slug: 'gamma', vaultId: 3, role: 'admin' },
+    const { source } = realSource(h, [
+      { employeeId: alice, slug: 'alpha', role: 'reader' },
+      { employeeId: alice, slug: 'beta', role: 'editor' },
+      { employeeId: alice, slug: 'gamma', role: 'admin' },
     ]);
     assert.deepEqual(authorize(source, alice, 'alpha', 'read'), { allowed: true, role: 'reader', access: 'read' });
     assert.deepEqual(authorize(source, alice, 'alpha', 'write'), { allowed: false, reason: 'forbidden' });
