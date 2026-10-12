@@ -9,10 +9,12 @@
 
 ### gates
 
-- contracts: 未配置；确定技术栈后记录实际可运行的契约校验命令。
-- tests: 未配置；建立实现与验证环境后记录实际可运行的测试命令。
+（2026-10-12 由 S1-T6 实测固化并记录；适用分支 sprint/S1，两条命令均在仓库根目录运行。完整命令行、退出码与输出摘录见 [docs/s1/gates-evidence.md](docs/s1/gates-evidence.md)。）
 
-上述条目是待配置说明，不是 shell 命令。当前只有规划文档，不得据此宣称实现检查通过。验收要求来自 epic 的 Definition of Done，不能用未配置的 gates 代替验收证据。
+- contracts: `python3 docs/contracts/tools/verify_validation_contracts.py` — 统一校验契约自检门禁（依赖 python3 ≥ 3.9 与 jsonschema ≥ 4）。2026-10-12 实测：exit 0，82/82 检查通过。
+- tests: `node --test docs/s1/spikes/git-http-backend/test/route-b.test.mjs` — Git HTTP 接入行为测试（B1–B7，spike 无 npm 依赖、无需 install；实测环境 Node v24.21.0）。2026-10-12 实测：exit 0，7/7 通过。
+
+gates 通过仅证明上述检查命令真实可运行且当前通过；验收要求仍来自 epic 的 Definition of Done，不得以 gates 通过宣称 E1 DoD 完成（DoD 证据在对应 sprint 验收时产生）。
 
 ### doc_sync_map
 
