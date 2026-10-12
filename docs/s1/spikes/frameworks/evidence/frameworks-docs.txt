@@ -1,0 +1,121 @@
+# Framework comparison — official docs & registry evidence (Task 3)
+# Collected 2026-10-12. Pages fetched via webReader (WebFetch was blocked by network
+# policy for fastify.dev / expressjs.com / nestjs.com — noted below).
+# All quotes verbatim from the fetched page text; npm numbers from registry APIs.
+
+## 1. Middleware / request-lifecycle model
+
+### Fastify (v5) — hooks, not middleware
+Source: https://fastify.dev/docs/latest/Reference/Hooks/ (fetched OK)
+- Request lifecycle hooks (verbatim list from the page): onRequest, preParsing,
+  preValidation, preHandler, preSerialization, onError, onSend, onResponse,
+  onTimeout, onRequestAbort.
+- Application hooks: onRoute, onRegister, onReady, onClose, preClose, onError.
+- Docs: "Hooks are registered with the fastify.addHook API and allow you to listen
+  to specific events in the application or request/response lifecycle" and "Fastify
+  allows you to add custom properties... within encapsulated scopes" — per-plugin
+  encapsulation contexts rather than a flat global middleware stack.
+- Route-level hooks supported (per-route addHook options).
+- TypeScript-first: docs show module augmentation for a custom `authenticatedUser`
+  request property (declare module 'fastify' { interface FastifyRequest {
+  authenticatedUser?: ... } }) — typed request decoration for auth context.
+- Raw-body/streaming relevance (verified in spike code + local types):
+  addContentTypeParser('*') with a (req, payload, done) => done(null, payload)
+  handler forwards the raw stream untouched (no parseAs); used by
+  fastify-git.mjs to pipe the git pack request into the CGI child.
+  Local types: node_modules/fastify/types/content-type-parser.d.ts —
+  FastifyContentTypeParser takes `payload: RawRequest` (the raw stream).
+
+### Express (v5) — middleware stack
+Source: https://expressjs.com/en/guide/using-middleware.html (fetched OK)
+- Verbatim: "Express is a routing and middleware web framework that has minimal
+  functionality of its own: An Express application is essentially a series of
+  middleware function calls."
+- Middleware forms: application-level (app.use), router-level, error-handling
+  (4-arg signature (err, req, res, next)), built-in, third-party.
+- Flat global ordering (no encapsulation scopes): middleware order = registration
+  order across the whole app.
+- Express 5 body parsing: NOT included by default (verified in spike — express-git.mjs
+  pipes req directly; express@5 deps do not include body-parser).
+- Error-handling middleware signature verbatim from guide: "Error-handling
+  middleware ... in any other middleware with an extra err parameter as
+  (err, req, res, next)".
+
+### NestJS — guards/interceptors over an HTTP platform adapter
+Source: https://docs.nestjs.com (pages are a JS-rendered SPA — webReader could not
+extract body text; fetched but content not retrievable. Facts below cited from
+npm registry metadata fetched 2026-10-12, which is authoritative for packaging
+facts, plus docs URLs for concepts):
+- @nestjs/core latest 12.1.3; runtime deps: uid, tslib, iterare, path-to-regexp,
+  fast-safe-stringify — i.e. NO HTTP server of its own; the HTTP layer comes from
+  a platform adapter (@nestjs/platform-express default, @nestjs/platform-fastify
+  optional). A git-CGI streaming route would still ride the underlying
+  platform's req/res.
+- Auth model concept references (URLs verified to exist, content not quoted):
+  https://docs.nestjs.com/guards (Guards — role/permission authorization),
+  https://docs.nestjs.com/fundamentals/testing (@nestjs/testing Test.createTestingModule),
+  https://docs.nestjs.com/security/authentication.
+- Extra abstraction layer to learn/maintain vs the two others (DI modules,
+  decorators, adapters) — evaluation judgment, not a quote.
+
+## 2. Auth integration
+
+- Fastify: lifecycle hooks + typed request decorators (see §1 Fastify) +
+  official plugin @fastify/auth (composable auth strategies):
+  https://fastify.dev/docs/latest/Reference/Middleware/ (docs note: "Fastify is
+  not middleware-based... does not support Connect middleware out of the box";
+  official guidance is hooks/decorators + @fastify/cookie/@fastify/session etc.)
+- Express: de-facto standard is Passport strategies as middleware
+  (https://expressjs.com/en/guide/using-middleware.html third-party section;
+  https://www.passportjs.org/). Session middleware (express-session) same model.
+- NestJS: Guards + Passport integration + DI (docs URLs in §1).
+
+## 3. Testing ecosystem
+
+- Fastify: built-in `inject()` fake-injection — no socket needed; implementation
+  is light-my-request, which ships as a direct dependency of fastify itself
+  (locally verified: node_modules/light-my-request@6.8.0 present via fastify;
+  fastify package.json dependencies include light-my-request: true).
+  Docs: https://fastify.dev/docs/latest/Reference/Testing/
+- Express: no built-in test harness; ecosystem standard is supertest (spins a
+  real listening server per request): https://github.com/ladjs/supertest
+- NestJS: @nestjs/testing Test.createTestingModule (docs URL §1).
+
+## 4. Official / measured performance signals
+
+- Fastify official benchmarks page (https://fastify.dev/benchmarks/, fetched,
+  page header "Updated 2026-09-02"): Fastify 97,595 req/s vs Express 59,651
+  req/s (1.6x), latency 9.73 ms vs 16.25 ms — their own benchmark, page states
+  results are illustrative of framework overhead, not application throughput.
+- Our own indicative hello-world autocannon run (M4, 50 conns, 3 s, see
+  evidence/frameworks-bench.txt): node:http 52,304 rps; fastify 52,400 rps
+  (≈ baseline); express 37,061 rps (1.4x slower than fastify/baseline).
+  Machine: Apple M4 / 16 GB, Node v24.21.0. THROWAWAY, indicative only.
+- Git-route throughput is dominated by git http-backend child-process work
+  (clone ≈197 ms per route-B spike), so framework routing overhead is
+  secondary here (see docs/s1/spikes/git-http-backend/evidence/route-b-perf.txt).
+
+## 5. Registry facts (fetched 2026-10-12)
+
+registry.npmjs.org dist-tags.latest + api.npmjs.org/downloads/point/last-week:
+- fastify: latest 5.12.5, weekly downloads 15,439,610
+- express: latest 5.3.0, weekly downloads 144,987,450
+- @nestjs/core: latest 12.1.3, weekly downloads 16,532,253
+
+## 6. Throughput of evidence
+
+| dimension | Fastify | Express | NestJS |
+|---|---|---|---|
+| middleware/lifecycle model | hooks+encapsulation (docs fetched) | flat middleware chain (docs fetched) | guards/interceptors over platform adapter (registry-verified packaging; docs SPA not extractable) |
+| auth integration | hooks+decorators+@fastify/auth | passport/express-session middleware | guards+DI+passport integration |
+| testing | inject()/light-my-request built-in | supertest (external, real socket) | @nestjs/testing DI test module |
+| own perf | 97,595 rps official / 52,400 rps our bench | 59,651 rps official / 37,061 rps our bench | n/a (rides express or fastify adapter) |
+| streaming git route (spike) | YES — content-type pass-through + reply.hijack (streaming.test.mjs) | YES — raw req stream by default in v5 (streaming.test.mjs) | not tested (would wrap one of the above) |
+
+Conclusion input for selection.md: all three can host the app; Fastify gives the
+best combination of (a) streaming route verified in this spike, (b) built-in
+inject testing without sockets, (c) typed request decoration for per-request
+auth context, (d) routing overhead ≈ baseline in our indicative bench. Express
+is the fallback (bigger ecosystem, simpler model, slower). NestJS adds a DI
+abstraction layer without adding anything this single-container service needs;
+its docs pages could not be quoted (SPA) — treated as a con for auditability.

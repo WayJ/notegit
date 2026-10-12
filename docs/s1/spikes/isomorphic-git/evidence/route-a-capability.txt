@@ -1,0 +1,33 @@
+# Route A capability & gap evidence — isomorphic-git 1.44.1 (THROWAWAY spike)
+date: 2026-10-12
+Method: npm install isomorphic-git@1.44.1; dump exports; implement minimal smart-HTTP v0
+server using ONLY public APIs; drive it with native git 2.50.1 client (tests A1-A7 in test/route-a.test.mjs).
+
+## Public API surface relevant to serving (exports dump, sorted, abridged)
+clone fetch push pull ... packObjects indexPack readObject writeObject readTree writeTree
+readCommit readBlob writeBlob readTag writeTag writeRef deleteRef resolveRef listRefs
+listBranches isDescendent init log walk ...
+
+## Confirmed achievable with public APIs (test evidence A1-A7, all green)
+- serve ref advertisement (GET info/refs)  -> manual pkt-line + listRefs(filepath:'refs/heads') + resolveRef per ref
+- serve clone/fetch (POST upload-pack)     -> manual want/have parse + closure walk + packObjects({oids, write:true})
+- receive push (POST receive-pack)         -> manual command parse + indexPack({dir, gitdir, filepath:'objects/pack/<x>.pack'}) + writeRef/deleteRef
+- non-FF rejection                         -> old-oid match + isDescendent()
+- per-ref authorization                    -> in-process policy on parsed commands (no hook process needed)
+- per-commit receive validation            -> readCommit walk + MANUAL recursive tree diff (flattenTree helper; readTree is single-level)
+- multi-ref atomicity                      -> validate all commands, then writeRef all
+
+## Gaps & sharp edges found while implementing (each cost debugging time; see git history of this spike)
+1. No server API at all: pkt-line codec, request parsing, advertisement, report-status all hand-written (~250 lines server.mjs).
+2. indexPack filepath semantics undocumented for bare repos: requires dir + 'objects/pack/<name>.pack' relative path; wrong form crashes with opaque 'Cannot read properties of null (reading slice)'.
+3. readTree is single-level; nested paths invisible unless manually recursed (A5 initially passed bad content for exactly this reason).
+4. listRefs returns relative names and requires filepath param; no advertised-refs helper.
+5. Wire protocol drift must be tracked manually: git 2.50 client sends delete commands as shorthand ':refs/heads/main' (no oids) once server advertises delete-refs; a parser handling only '<old> <new> <ref>' silently drops deletes.
+6. Caps negotiation is load-bearing: without advertising delete-refs the client aborts push locally ('remote rejected' with NO POST — misleading); advertising side-band-64k without implementing band framing causes 'protocol error: bad band #117'.
+7. Serving path re-packs via full closure walk: no delta negotiation/thin-pack handling; no protocol v2; no side-band progress to client.
+8. Quarantine is DIY: pack indexed under quarantine-*.pack name; no atomic objects-dir migration like native receive-pack; concurrent readers may see half-written state if naively renamed.
+9. Perf/memory (evidence/route-a-perf.txt): clone median 604ms vs 197ms route B (3.1x); RSS 318MB vs 115MB (2.8x) after same load.
+
+## Docs references
+- isomorphic-git docs: https://isomorphic-git.org/docs/en/ (API list; no server-side guide)
+- git protocol caps: https://git-scm.com/docs/gitprotocol-pack / gitprotocol-v2

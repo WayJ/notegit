@@ -1,0 +1,14 @@
+To /var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/spike-fw-fastify-bEcvA0/vaults/v001.git
+ * [new branch]      main -> main
+To /var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/spike-fw-express-heXeaH/vaults/v001.git
+ * [new branch]      main -> main
+✔ fastify v5 can host git smart-HTTP: clone + push stream through to http-backend CGI (458.201291ms)
+✔ express v5 can host git smart-HTTP: clone + push stream through to http-backend CGI (405.505166ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 998.41375

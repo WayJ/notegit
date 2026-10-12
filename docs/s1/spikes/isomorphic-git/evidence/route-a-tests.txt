@@ -1,0 +1,17 @@
+To /var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/spike-a-5Polze/vaults/v001.git
+ * [new branch]      main -> main
+✔ A1: native git client can clone from isomorphic-git smart-HTTP server (81.216ms)
+✔ A2: authenticated fast-forward push is accepted (indexPack + writeRef) (131.923709ms)
+✔ A3: force-push (non-fast-forward) is rejected; server ref unchanged (194.87875ms)
+✔ A4: per-ref authorization — bob cannot write main, can write feature/*; main delete forbidden (367.408458ms)
+✔ A5: per-commit receive validation rejects "commit bad file then delete it" range push (153.938458ms)
+✔ A6: one push carrying a good ref and a bad ref is rejected atomically — no ref updated (201.17ms)
+✔ A7: unauthenticated ref discovery is rejected with 401 (5.473083ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1320.336458

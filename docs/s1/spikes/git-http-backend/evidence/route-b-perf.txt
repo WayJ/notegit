@@ -1,0 +1,12 @@
+# Route B (git http-backend CGI wrap) — indicative perf evidence (THROWAWAY spike)
+date: 2026-10-12T13:07:16.152Z
+machine: Apple M4, 16 GB RAM, macOS, loopback HTTP (no TLS)
+repo: 501 md files (~8KB each, ~4.1MB content), 21+ commits, bare size: 2.7M	/var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/spike-b-perf-b1uxuk/vaults/v001.git
+node: v24.21.0, git: git version 2.50.1 (Apple Git-155)
+NOTE: 数字为指示性（单机回环、无 TLS、无并发），用于量级对比而非容量承诺。
+
+full clone (cold, no local cache), 5 runs: 197 / 196 / 195 / 198 / 199 ms -> median 197 ms
+push 1 small md commit,     5 runs: 162 / 166 / 164 / 153 / 149 ms -> median 162 ms
+push 100 x 8KB md commit,   3 runs: 238 / 233 / 241 ms -> median 238 ms
+no-op fetch,                5 runs: 76 / 76 / 72 / 75 / 74 ms -> median 75 ms
+server node process RSS after above load: 117424 KB (114.7 MB)

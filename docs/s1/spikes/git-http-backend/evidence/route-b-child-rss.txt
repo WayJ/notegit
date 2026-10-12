@@ -1,0 +1,12 @@
+# Route B — git child-process peak RSS during HTTP clone (THROWAWAY spike)
+date: 2026-10-12T14:03:23.542Z
+machine: Apple M4, 16 GB RAM, macOS, loopback; node v24.21.0
+repo: 501 md files ~8KB each (~4.1MB), same generator as route-b-perf.txt
+clone wall time: 503 ms (sampling every 5ms via ps)
+peak RSS node : 104.5 MB
+peak RSS /Library/Developer/CommandLineTools/usr/libexec/git-core/git : 7.7 MB
+peak RSS /Library/Developer/CommandLineTools/usr/bin/git : 5.2 MB
+peak RSS /Library/Developer/CommandLineTools/usr/libexec/git-core/git-http-backend : 3.9 MB
+peak RSS <defunct> : 0.0 MB
+processes seen: node | /Library/Developer/CommandLineTools/usr/bin/git | <defunct> | /Library/Developer/CommandLineTools/usr/libexec/git-core/git-http-backend | /Library/Developer/CommandLineTools/usr/libexec/git-core/git
+NOTE: 指示性单机测量；进程存活仅数十至数百毫秒，ps 采样可能略低于真实峰值。
