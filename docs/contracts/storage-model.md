@@ -322,6 +322,11 @@ ORDER BY occurred_at, id;
 
 认证失败不逐条入审计（identity §8），以失败计数指标呈现——计数为进程内运行态，不落库。
 
+| `vault.delete` | 直接终态 | 是（库行删除后历史行解除挂靠） | 架构 §4.2；backup-recovery §5 不变量 3 |
+| `config.update` | 直接终态 | 否 | storage-model §3.10（变更走管理端点并记审计）；validation §5.1 |
+
+（2026-10-13 ADR D12 追加两行。）
+
 ## 6. 跨存储一致性与发布审计模式
 
 审计与 Git 引用更新**不能假设跨存储原子提交**（架构 §4.4）：

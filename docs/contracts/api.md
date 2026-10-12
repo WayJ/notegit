@@ -136,6 +136,25 @@
 - 成功：204（令牌单次失效；该账号会话全部失效）；审计 `employee.password_reset`（detail 记来源）。
 - 错误：401 E-AUTH-001（令牌无效/过期/已用）；422 E-AUTH-008。
 
+
+### 3.3 维护模式生命周期（实例管理员；backup-recovery §3）
+
+- **POST /api/v1/admin/maintenance**（写；运行态写入——闸门 allowlist 放行自身）：开启维护模式。成功 **204**；幂等（已开启仍 204，不重复记审计）；状态迁移发生时记 `maintenance.enable` 审计行（storage-model §5：运行态写入，不入备份一致性集合）。
+- **DELETE /api/v1/admin/maintenance**（写；运行态写入）：关闭。成功 **204**（同幂等与审计语义；维护期间可关闭）；记 `maintenance.disable`。
+- **GET /api/v1/admin/maintenance**：200 `{maintenance: true|false}`（当前状态查询；只读）。
+- 错误：401（§1 通用）；403 E-AUTHZ-001（非实例管理员）。
+- 开启后的全局效果（写端点 503 E-MAINT-001、receive-pack 403、读与登录放行）见 §1，本节不重复。（2026-10-13 ADR D12 补录；实现自 S2-T7。）
+
+
+### 3.4 实例配置（app_settings；实例管理员）
+
+配置键全集与值域以 [validation-defaults.json](validation-defaults.json) 为唯一源（validation.md §5.1）；变更**热生效**（下一校验请求即用新值）。缺行 = 契约默认值。
+
+- **GET /api/v1/admin/config**：200 `{settings: [{key, value, updated_at}]}`（全部已写行；不含默认值展开）。
+- **PUT /api/v1/admin/config/{key}**（写）：请求 `{value}`（数值键=安全正整数；清单键=字符串数组，空清单合法收紧）。成功 200 `{key, value, updated_at}`；upsert 语义；审计 `config.update`（detail 记 `{key, old, new}`）。
+- 错误：403 E-AUTHZ-001；404 E-RES-001（键不在注册表）；400/422 E-RES-004/007（值域校验失败）；503 E-MAINT-001。（2026-10-13 ADR D12 定稿；HTTP 挂接待后续任务，写入面已实现自 S3-T8。）
+
+
 ## 4. 访问凭据（ngt_ token）
 
 自助与管理员代管并存（identity §3.5）。明文只在创建响应出现一次；此后任何端点不回显明文，仅 `ngt_` 前缀与末 4 位（identity §3.1）。
@@ -187,6 +206,12 @@
 #### DELETE /api/v1/vaults/{slug}/members/{username}（写；库管理员）
 - 成功：204；**撤权下一请求生效**（该员工此库访问 → 404；在途 push 在执行点复查被拒并记审计，identity §5.2/§5.3）；审计 `member.revoke`。
 - 错误：403 E-AUTHZ-001 / 404 E-RES-001。
+
+
+#### DELETE /api/v1/vaults/{slug}（写；库管理员）
+- 成功：**204**。行侧同灭（vaults 行 + 全部成员行；历史审计行保留、`vault_id` 解除挂靠——storage-model §7「v1 不清理」）；随后删除 bare 仓库目录（幂等）。目录删除失败时行已灭、错误放大；孤儿目录经一致性核对可观测并由 reconcile 处置（backup-recovery §5 不变量 3）。审计 `vault.delete`。slug 随行删除释放，**可复用**（v1 无墓碑）。
+- 错误：403 E-AUTHZ-001（成员但非库管理员）；404 E-RES-001（非成员或不存在）；503 E-MAINT-001。（2026-10-13 ADR D12 定稿；HTTP 挂接待后续任务，服务面已实现自 S3-T1。）
+
 
 ## 6. 内容读取（自 Git 派生，不落库）
 
@@ -337,3 +362,20 @@ src/
 | T6（gates） | `node --test docs/contracts/tools/ddl_smoke.test.mjs`（含本文档 lint）建议登记为 contracts gate（D5 附日期） |
 | S3（发布实现） | §8 共用发布组件为其实施蓝本 |
 | T1/T4 spike | §8.4 引用 docs/s1/spikes/git-http-backend/ 同一规则来源与版本标识（场景 S3 核对） |
+
+## 13. Web 页面路由（非 /api/v1；S4 plan D5 极简形态；2026-10-13 ADR D12 入册）
+
+页面 = 服务端渲染 GET（无前端框架；服务端插值唯一通道 HTML 转义；页面无写操作，全部安全判定在 API 侧端点）。认证：会话 Cookie 经统一缝（identity §5.1）；未认证 302 /login。无权库与不存在一律 404 同页（D-IC-06 页面形态）。GET 免 CSRF。页面 URL 不进 /api/v1 版本化承诺（随产品演进）。
+
+| 路由 | 页面 | 来源 |
+|---|---|---|
+| GET /login | 登录页（提交走 §3 login 端点） | S2-T8 |
+| GET / | 入口页（管理入口仅实例管理员可见） | S2-T8 |
+| GET /admin | 管理页外壳（未认证 302；非实例管理员 403） | S2-T8 |
+| GET /credentials | 员工自助凭据页（数据走 §4） | S2-T8 |
+| GET /vaults | 有权库列表（实时成员关系，与 §5 GET /vaults 同判定面） | S4-T1 |
+| GET /vaults/{slug} | 库根：成员 302 → `/vaults/{slug}/browse`；无权/不存在 404 | S4-T1 |
+| GET /vaults/{slug}/browse[/{path}] | 目录浏览：默认分支实时读 Git tree（每请求无缓存）；条目渲染与 `git ls-tree` 同集同序；面包屑；README.md（大小写不敏感）渲染为目录导航并标注 frontmatter 豁免（架构 §5.2） | S4-T1 |
+| GET /vaults/{slug}/view/{path} | 文件预览占位（元信息 + 如实标注；安全渲染 S4-T2 落地）；目录路径 302 → browse | S4-T1 |
+
+S4-T2 起各任务在本表 append 各自页面行；模块注册单点见 `server/src/web/routes.ts`。
