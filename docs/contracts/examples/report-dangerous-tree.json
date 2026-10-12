@@ -1,0 +1,61 @@
+{
+  "$comment": "示例 3/5：服务端 pre-receive 拒绝危险 tree 条目。架构 §9：第一版禁止符号链接与 submodule，路径检查按 Git tree 条目执行；§5.4：检查每个新引入提交相对父提交的新增/修改文件，拒绝整次 push。",
+  "rulesVersion": "1.0.0-draft.1",
+  "scope": "pre-receive",
+  "result": "fail",
+  "exitCode": 1,
+  "vaultId": "vault-013",
+  "summary": {
+    "filesTotal": 3,
+    "filesPassed": 1,
+    "filesFailed": 2,
+    "errorCount": 2,
+    "warningCount": 0
+  },
+  "refs": [
+    {
+      "ref": "refs/heads/main",
+      "headOld": "5c3f1a2bd8e94f07c1a6b2d3e4f5a6b7c8d9e0f1",
+      "headNew": "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b",
+      "checkedCommits": 2,
+      "outcome": "rejected"
+    }
+  ],
+  "files": [
+    {
+      "path": "docs/finance/evil-link",
+      "status": "fail",
+      "commit": "8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9a",
+      "issues": [
+        {
+          "severity": "error",
+          "code": "E-PATH-002",
+          "rule": "tree.symlink",
+          "message": "docs/finance/evil-link：tree 条目为符号链接（mode 120000）；第一版禁止符号链接，请改为常规文件。",
+          "actual": "mode 120000",
+          "expected": "mode 100644 或 100755"
+        }
+      ]
+    },
+    {
+      "path": "vendor/lib",
+      "status": "fail",
+      "commit": "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b",
+      "issues": [
+        {
+          "severity": "error",
+          "code": "E-PATH-003",
+          "rule": "tree.gitlink",
+          "message": "vendor/lib：tree 条目为 submodule/gitlink（mode 160000）；第一版禁止 submodule，请移除该条目与 .gitmodules。",
+          "actual": "mode 160000"
+        }
+      ]
+    },
+    {
+      "path": "docs/finance/notes.md",
+      "status": "pass",
+      "commit": "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b",
+      "issues": []
+    }
+  ]
+}

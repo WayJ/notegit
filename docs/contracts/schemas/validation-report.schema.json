@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://notegit.local/contracts/schemas/validation-report.schema.json",
+  "title": "Notegit 校验报告协议",
+  "description": "三端（本地 pre-commit / 服务端 pre-receive / 网页提交）共用的校验结果机器可读形状（架构 §5.3/§5.4）。支持 --json 输出；一次提交/推送的逐文件 pass/fail 可表达『部分文件通过、部分失败』；push 场景 refs 全有或全无。",
+  "$comment": "$id 占位域名同 frontmatter.schema.json。result 语义：pass=通过（可含 warning，exitCode 0）；fail=存在 error 级问题（exitCode 1）；error=校验未能完成（运行时错误，exitCode 2，服务端 fail-closed 拒绝）。",
+  "type": "object",
+  "required": ["rulesVersion", "scope", "result", "exitCode", "summary", "files"],
+  "properties": {
+    "rulesVersion": {
+      "$comment": "必与 docs/contracts/rules-version.json 一致；服务端为权威版本（架构 §5.4）",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+    },
+    "scope": {
+      "enum": ["pre-commit", "pre-receive", "web-submit"],
+      "$comment": "三端校验对象与失败行为见架构 §5.4 表"
+    },
+    "result": {"enum": ["pass", "fail", "error"]},
+    "exitCode": {
+      "$comment": "0=通过（可含 warning）、1=校验错误、2=运行错误（架构 §5.4）",
+      "enum": [0, 1, 2]
+    },
+    "vaultId": {
+      "$comment": "可选；库稳定 ID（架构 §3.1，路径由数据库映射，不拼接用户输入）",
+      "type": "string"
+    },
+    "commit": {
+      "$comment": "可选；本次被校验的（候选）提交 ID。pre-commit 场景提交尚未生成，可省略",
+      "type": "string"
+    },
+    "issues": {
+      "$comment": "可选；运行级问题（如校验超时/内部错误），不在任何具体文件上",
+      "type": "array",
+      "items": {"$ref": "#/$defs/issue"}
+    },
+    "notices": {
+      "$comment": "可选；通知级信息（N- 码），如客户端规则过期提示（架构 §5.4）",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {"type": "string", "pattern": "^N-[A-Z]+-\\d{3}$"},
+          "message": {"type": "string"}
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["filesTotal", "filesPassed", "filesFailed", "errorCount", "warningCount"],
+      "properties": {
+        "filesTotal": {"type": "integer", "minimum": 0},
+        "filesPassed": {"type": "integer", "minimum": 0},
+        "filesFailed": {"type": "integer", "minimum": 0},
+        "errorCount": {
+          "$comment": "error 级 issue 总数（含运行级 issues）",
+          "type": "integer", "minimum": 0
+        },
+        "warningCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "status", "issues"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "status": {"enum": ["pass", "fail"]},
+          "commit": {
+            "$comment": "可选；引入该文件问题的新提交 ID（服务端逐提交对比父提交检查，架构 §5.4）",
+            "type": "string"
+          },
+          "exempt": {
+            "$comment": "可选；true=README 等豁免 frontmatter 的文件（架构 §5.2），仍受路径/类型/容量规则",
+            "type": "boolean"
+          },
+          "issues": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/issue"}
+          }
+        }
+      }
+    },
+    "refs": {
+      "$comment": "scope=pre-receive 时必填。一次 push 的所有 ref 先统一检查、通过后才允许更新（架构 §5.4）；result=fail|error ⇒ 所有 outcome=rejected（全有或全无；审计按实际更新结果核对）",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref", "headOld", "headNew", "checkedCommits", "outcome"],
+        "properties": {
+          "ref": {"type": "string", "pattern": "^refs/"},
+          "headOld": {
+            "$comment": "更新前 commit；新库根提交场景为 null",
+            "type": ["string", "null"]
+          },
+          "headNew": {"type": ["string", "null"]},
+          "checkedCommits": {
+            "$comment": "该 ref 新引入并逐一检查的提交数（合并提交按父提交比较，架构 §5.4）",
+            "type": "integer", "minimum": 0
+          },
+          "outcome": {"enum": ["accepted", "rejected"]}
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"result": {"const": "pass"}}, "required": ["result"]},
+      "then": {"properties": {"exitCode": {"const": 0}}}
+    },
+    {
+      "if": {"properties": {"result": {"const": "fail"}}, "required": ["result"]},
+      "then": {"properties": {"exitCode": {"const": 1}}}
+    },
+    {
+      "if": {"properties": {"result": {"const": "error"}}, "required": ["result"]},
+      "then": {"properties": {"exitCode": {"const": 2}}}
+    },
+    {
+      "if": {"properties": {"scope": {"const": "pre-receive"}}, "required": ["scope"]},
+      "then": {"required": ["refs"]}
+    }
+  ],
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "required": ["severity", "code", "rule", "message"],
+      "properties": {
+        "severity": {"enum": ["error", "warning", "info"]},
+        "code": {
+          "$comment": "注册表见 validation.md §6",
+          "type": "string",
+          "pattern": "^(E|W|N)-[A-Z]+-\\d{3}$"
+        },
+        "rule": {
+          "$comment": "注册表 rule id（稳定标识），如 frontmatter.title_required",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "人可读消息，含文件、规则与修正提示（架构 §5.4 本地 hook 失败行为）",
+          "type": "string"
+        },
+        "line": {
+          "$comment": "可选；知识文档内 1 起始行号（frontmatter 区或链接所在行）",
+          "type": "integer", "minimum": 1
+        },
+        "field": {"type": "string"},
+        "actual": {"type": ["string", "integer", "number", "array"]},
+        "expected": {"type": ["string", "integer", "number", "array"]},
+        "limit": {
+          "$comment": "可选；对应限制值（整数）或配置键（字符串）",
+          "type": ["string", "integer"]
+        }
+      }
+    }
+  }
+}

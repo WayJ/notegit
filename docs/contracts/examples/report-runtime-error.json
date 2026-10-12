@@ -1,0 +1,34 @@
+{
+  "$comment": "示例 5/5：服务端 pre-receive 运行错误（校验超时）——result=error、退出码 2（架构 §5.4：0=通过、1=校验错误、2=运行错误）。运行级问题不落在具体文件上，置于顶层 issues；服务端 fail-closed：refs 全部 rejected，不做部分接受。",
+  "rulesVersion": "1.0.0-draft.1",
+  "scope": "pre-receive",
+  "result": "error",
+  "exitCode": 2,
+  "vaultId": "vault-013",
+  "summary": {
+    "filesTotal": 0,
+    "filesPassed": 0,
+    "filesFailed": 0,
+    "errorCount": 1,
+    "warningCount": 0
+  },
+  "issues": [
+    {
+      "severity": "error",
+      "code": "E-RUN-001",
+      "rule": "run.timeout",
+      "message": "校验运行超过 10000 ms 未完成（refs/heads/main，新引入 120 个提交）；本次推送被拒绝，可重试或减少单次推送规模。",
+      "limit": "validation.runtime.validationTimeoutMs"
+    }
+  ],
+  "files": [],
+  "refs": [
+    {
+      "ref": "refs/heads/main",
+      "headOld": "5c3f1a2bd8e94f07c1a6b2d3e4f5a6b7c8d9e0f1",
+      "headNew": "1234567890abcdef1234567890abcdef12345678",
+      "checkedCommits": 120,
+      "outcome": "rejected"
+    }
+  ]
+}

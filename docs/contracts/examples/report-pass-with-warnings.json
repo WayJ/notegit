@@ -1,0 +1,42 @@
+{
+  "$comment": "示例 1/5：本地 pre-commit 通过（含 warning）。架构 §5.3：提示但允许提交——owner/description/source 缺失、库内相对链接目标缺失；退出码 0（§5.4）。",
+  "rulesVersion": "1.0.0-draft.1",
+  "scope": "pre-commit",
+  "result": "pass",
+  "exitCode": 0,
+  "summary": {
+    "filesTotal": 2,
+    "filesPassed": 2,
+    "filesFailed": 0,
+    "errorCount": 0,
+    "warningCount": 2
+  },
+  "files": [
+    {
+      "path": "docs/travel/reimburse.md",
+      "status": "pass",
+      "issues": []
+    },
+    {
+      "path": "docs/hr/onboarding.md",
+      "status": "pass",
+      "issues": [
+        {
+          "severity": "warning",
+          "code": "W-FM-101",
+          "rule": "frontmatter.optional_field_missing",
+          "message": "docs/hr/onboarding.md：可选字段 owner 缺失；不影响提交，填写后便于归属与查找。",
+          "field": "owner"
+        },
+        {
+          "severity": "warning",
+          "code": "W-LINK-101",
+          "rule": "link.intra_vault_missing",
+          "message": "docs/hr/onboarding.md：库内相对链接目标 docs/hr/policy/leave.md 不存在；请修正路径或先提交目标文件。",
+          "line": 14,
+          "actual": "docs/hr/policy/leave.md"
+        }
+      ]
+    }
+  ]
+}

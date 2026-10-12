@@ -1,0 +1,60 @@
+{
+  "$comment": "示例 4/5：服务端 pre-receive 多 ref 推送——所有 ref 先统一检查，任何失败则全部拒绝（全有或全无，架构 §5.4）；同时演示客户端规则过期提示（N-UPGRADE-001，§5.4）与逐提交定位（commit 字段）。",
+  "rulesVersion": "1.0.0-draft.1",
+  "scope": "pre-receive",
+  "result": "fail",
+  "exitCode": 1,
+  "vaultId": "vault-013",
+  "notices": [
+    {
+      "code": "N-UPGRADE-001",
+      "message": "客户端本地校验规则为 0.9.0，服务端为 1.0.0-draft.1；请运行 notegit setup 更新 hook 与校验程序。"
+    }
+  ],
+  "summary": {
+    "filesTotal": 2,
+    "filesPassed": 1,
+    "filesFailed": 1,
+    "errorCount": 1,
+    "warningCount": 0
+  },
+  "refs": [
+    {
+      "ref": "refs/heads/main",
+      "headOld": "5c3f1a2bd8e94f07c1a6b2d3e4f5a6b7c8d9e0f1",
+      "headNew": "1f2e3d4c5b6a798877665544332211ffeeddccbba",
+      "checkedCommits": 1,
+      "outcome": "rejected"
+    },
+    {
+      "ref": "refs/heads/feature/travel-policy",
+      "headOld": "aabbccddeeff0011223344556677889900112233",
+      "headNew": "998877665544332211ffeeddccbbaa9988776655",
+      "checkedCommits": 3,
+      "outcome": "rejected"
+    }
+  ],
+  "files": [
+    {
+      "path": "docs/travel/policy/deck.md",
+      "status": "fail",
+      "commit": "1f2e3d4c5b6a798877665544332211ffeeddccbba",
+      "issues": [
+        {
+          "severity": "error",
+          "code": "E-LIMIT-001",
+          "rule": "limit.document_size",
+          "message": "docs/travel/policy/deck.md：文档 2097152 字节超过上限 1048576；请拆分文档或将大内容改为附件。",
+          "actual": 2097152,
+          "limit": "validation.limits.maxDocumentBytes"
+        }
+      ]
+    },
+    {
+      "path": "docs/travel/policy/intro.md",
+      "status": "pass",
+      "commit": "1f2e3d4c5b6a798877665544332211ffeeddccbba",
+      "issues": []
+    }
+  ]
+}
