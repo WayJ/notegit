@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Subject } from '../app.ts';
+import type { PepperFile } from '../bootstrap/pepper.ts';
 import { COOKIE_NAME, readSidCookie, resolveSession } from './subject.ts';
 
 /**
@@ -110,8 +111,9 @@ function authFailureFromError(err: unknown): AuthFailure {
 
 export function createRequestAuthenticator(deps: {
   db: DatabaseSync;
-  /** K1 active 键（会话与 token 的 HMAC 同源，identity §4） */
-  pepper: Uint8Array;
+  /** K1 pepper 版本化文件（会话与 token 的 HMAC 同源，identity §4/§6.2——retired 键
+   *  参与 sid 校验并触发 rehash-on-use；active 键用于新计算） */
+  pepper: PepperFile;
   /** token 载体认证（CredentialsService.authenticate）；缺省 = fail-closed（Bearer → E-AUTH-001） */
   authenticateToken?: (token: string) => TokenAuthResult;
   now?: () => Date;

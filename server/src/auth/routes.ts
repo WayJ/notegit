@@ -5,6 +5,7 @@ import { createRequestAuthenticator, rejectAuth, type AuthSuccess, type RequestA
 import { hashPassword, verifyPassword } from './password.ts';
 import { validateNewPassword, verifyDummy, type PasswordPolicy } from './password-policy.ts';
 import { createLoginBackoff, type LoginBackoffOptions } from './backoff.ts';
+import type { PepperFile } from '../bootstrap/pepper.ts';
 import {
   DEFAULT_SESSION_TIMEOUTS,
   createSession,
@@ -25,8 +26,10 @@ import { recordAuditEvent } from '../audit/audit.ts';
 
 export interface AuthPluginOptions {
   db: DatabaseSync;
-  /** K1 会话 HMAC 键（与 token pepper 同源，identity §4；注入由启动流程统一） */
-  pepper: Uint8Array;
+  /** K1 pepper 版本化文件（会话与 token 的 HMAC 同源，identity §4；S2-T8 起会话校验
+   *  含 retired 键 + rehash-on-use）。新会话/登出删除一律用 active 键（logout 前的
+   *  认证已把 retired 命中的行 rehash 到 active）。 */
+  pepper: PepperFile;
   /** 统一认证缝（S2-T5）：缺省 = 仅会话载体的 fail-closed 缝（Bearer → E-AUTH-001）；
    *  buildApp 注入双载体实现（含 token 四状态映射） */
   authenticateRequest?: RequestAuthenticator;
@@ -110,7 +113,7 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
     }
 
     backoff.recordSuccess(username, ip);
-    const { sid } = createSession(db, row.id, pepper, now(), timeouts);
+    const { sid } = createSession(db, row.id, pepper.active.key, now(), timeouts);
     reply.header('set-cookie', cookieHeader(sid));
     return { username, display_name: row.display_name, is_instance_admin: row.is_instance_admin === 1 };
   });
@@ -122,7 +125,7 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
     if (outcome.carrier !== 'session' || !outcome.session) {
       return sendError(reply, 401, 'E-AUTH-001', '未认证');
     }
-    deleteSessionByHash(db, sidHash(outcome.session.sid, pepper));
+    deleteSessionByHash(db, sidHash(outcome.session.sid, pepper.active.key));
     reply.header('set-cookie', cookieHeader('', true));
     return reply.code(204).send();
   });
