@@ -6,6 +6,7 @@ import { registerBootstrapRoutes } from './bootstrap/routes.ts';
 import { registerInviteRoutes } from './invites/routes.ts';
 import { registerAuth } from './auth/routes.ts';
 import { createRequestAuthenticator, type RequestAuthenticator } from './auth/lifecycle.ts';
+import { csrfGuard } from './auth/csrf.ts';
 import { hashPassword as defaultHashPassword } from './auth/password.ts';
 import { CredentialsService } from './credentials/service.ts';
 import { credentialsPlugin } from './credentials/routes.ts';
@@ -93,6 +94,11 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
         return reply.code(503).send({ error: { code: 'E-AUTH-007', message: '实例未初始化：业务入口不可用，仅 bootstrap 端点开放' } });
       }
     });
+
+    // CSRF 同源校验（identity §4 + api.md §1；E-AUTH-006）：会话 Cookie 认证的
+    // 状态改变请求校验 Origin（缺失回退 Referer）同源；Bearer/头凭据豁免。
+    // 挂在初始化闸门之后（api.md §10 组装序：闸门 → CSRF → 认证 → 路由）。
+    app.addHook('onRequest', csrfGuard);
 
     registerBootstrapRoutes(app, wired);
     registerInviteRoutes(app, wired);
