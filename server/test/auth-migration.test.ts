@@ -54,6 +54,10 @@ test('employees 口令/状态列就位（0002 落地，本任务功能的前提�
 
 test('sessions 约束生效：sid_hash 唯一、FK、STRICT，按账号批量失效索引存在', () => {
   const db = freshDb();
+  db.prepare(
+    `INSERT INTO employees (username, display_name, password_hash, is_instance_admin, active, invited_by, created_at, deactivated_at)
+     VALUES ('u1', 'u1', 'x', 0, 1, NULL, '2026-01-01T00:00:00.000Z', NULL)`,
+  ).run();
   const ins = db.prepare('INSERT INTO sessions (employee_id, sid_hash, created_at, last_seen_at, absolute_expires_at) VALUES (?, ?, ?, ?, ?)');
   ins.run(1, 'aa', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', '2026-02-01T00:00:00.000Z');
   assert.throws(() =>
@@ -63,8 +67,8 @@ test('sessions 约束生效：sid_hash 唯一、FK、STRICT，按账号批量失
     ins.run(999, 'bb', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', '2026-02-01T00:00:00.000Z'),
     /FOREIGN KEY/, 'employee_id 外键');
   assert.throws(() =>
-    ins.run(1, 12345, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', '2026-02-01T00:00:00.000Z'),
-    /non-text value|TEXT/, 'STRICT 类型强制');
+    ins.run('not-a-number', 'cc', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', '2026-02-01T00:00:00.000Z'),
+    /cannot store TEXT value in INTEGER column/, 'STRICT 类型强制（employee_id 拒非整数文本）');
   const idx = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='sessions' AND name='idx_sessions_employee'").get();
   assert.ok(idx, 'idx_sessions_employee 应存在（identity §2 口令重置/停用按账号批量失效）');
   db.close();

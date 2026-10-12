@@ -1,28 +1,23 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
-import {
-  hashPassword,
-  verifyPassword,
-} from './password.ts';
+import type { Subject } from '../app.ts';
+import { hashPassword, verifyPassword } from './password.ts';
 import { validateNewPassword, verifyDummy, type PasswordPolicy } from './password-policy.ts';
 import { createLoginBackoff, type LoginBackoffOptions } from './backoff.ts';
 import {
   DEFAULT_SESSION_TIMEOUTS,
-  authenticateSession,
   createSession,
   deleteSessionByHash,
   deleteSessionsForEmployee,
-  diagnoseSessionFailure,
   sidHash,
-  touchSession,
   type SessionDefaults,
 } from './sessions.ts';
+import { COOKIE_NAME, readSidCookie, resolveSession } from './subject.ts';
 
 /**
  * 认证域路由（api.md §3）：login / logout / me / me/password / PATCH admin employees。
- * 会话认证每请求实时查库（identity §5.1 / D-IC-05，无缓存）。
- * 本插件不接入 buildApp（启动接线 open→pragmas→migrate→listen 属 S2-T2+ 统一启动流程）；
- * 应用组装与 CSRF 全局插件（api.md §1 E-AUTH-006）随后续任务落地。
+ * 会话认证每请求实时查库（identity §5.1 / D-IC-05，无缓存），主体解析与
+ * app.ts 的 SubjectResolver 缝同源（subject.ts）。
  */
 
 export interface AuthPluginOptions {
@@ -35,37 +30,14 @@ export interface AuthPluginOptions {
   passwordPolicy?: PasswordPolicy;
 }
 
-const COOKIE_NAME = 'ngt_sid';
-
 function cookieHeader(sid: string, clear = false): string {
-  const base = clear ? `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0` : `${COOKIE_NAME}=${sid}; Path=/; HttpOnly; Secure; SameSite=Lax`;
-  return base;
+  return clear
+    ? `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
+    : `${COOKIE_NAME}=${sid}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string, details?: Record<string, unknown>): FastifyReply {
   return reply.code(status).send({ error: { code, message, ...(details ? { details } : {}) } });
-}
-
-function readSidCookie(req: FastifyRequest): string | null {
-  const raw = req.headers.cookie;
-  if (!raw) return null;
-  for (const part of raw.split(';')) {
-    const [k, ...v] = part.trim().split('=');
-    if (k === COOKIE_NAME) return v.join('=') || null;
-  }
-  return null;
-}
-
-interface AuthedEmployee {
-  employeeId: number;
-  username: string;
-  isInstanceAdmin: boolean;
-}
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    employee?: AuthedEmployee;
-  }
 }
 
 export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, opts) => {
@@ -75,31 +47,16 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
   const backoff = createLoginBackoff(opts.backoff);
   const timeouts: SessionDefaults = { ...DEFAULT_SESSION_TIMEOUTS, ...opts.session };
 
-  /** 会话认证（identity §5.1 第 1 层）：成功装饰 req.employee，失败直接回复 401。 */
-  async function requireSession(req: FastifyRequest, reply: FastifyReply): Promise<AuthedEmployee | null> {
-    const sid = readSidCookie(req);
-    if (!sid) {
-      sendError(reply, 401, 'E-AUTH-001', '未认证');
-      return null;
-    }
-    const hash = sidHash(sid, pepper);
-    const auth = authenticateSession(db, hash, now(), timeouts.idleTimeoutMs);
-    if (auth) {
-      const row = db.prepare('SELECT username FROM employees WHERE id = ?').get(auth.employeeId) as { username: string } | undefined;
-      touchSession(db, auth.sessionId, now());
-      if (row) {
-        return { employeeId: auth.employeeId, username: row.username, isInstanceAdmin: auth.isInstanceAdmin };
-      }
-    }
-    const failure = diagnoseSessionFailure(db, hash, now(), timeouts.idleTimeoutMs);
-    if (failure === 'account_disabled') {
-      // 停用零延迟（identity §5.2）：下一请求登出——401 E-AUTH-004 + 清 Cookie
-      reply.header('set-cookie', cookieHeader('', true));
+  /** 会话认证：成功得 Subject，失败按原因映射 401 并直接回复。 */
+  async function requireSession(req: FastifyRequest, reply: FastifyReply): Promise<Subject | null> {
+    const r = resolveSession(db, pepper, readSidCookie(req), now(), timeouts.idleTimeoutMs);
+    if (r.ok) return r.subject;
+    reply.header('set-cookie', cookieHeader('', true)); // 登出：清 Cookie（含停用零延迟语义）
+    if (r.reason === 'account_disabled') {
       sendError(reply, 401, 'E-AUTH-004', '账号已停用', { reason: 'account_disabled' });
-      return null;
+    } else {
+      sendError(reply, 401, 'E-AUTH-001', '未认证');
     }
-    reply.header('set-cookie', cookieHeader('', true));
-    sendError(reply, 401, 'E-AUTH-001', '未认证');
     return null;
   }
 
@@ -115,7 +72,7 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
     const nowMs = now().getTime();
     const ip = req.ip;
 
-    // 未初始化（employees 空）→ 503 E-AUTH-007（identity §7.1；完整初始化态门禁属 S2-T2）
+    // 未初始化（employees 空）→ 503 E-AUTH-007（identity §7.1；完整初始化态门禁在 app.ts）
     const employeeCount = (db.prepare('SELECT COUNT(*) AS n FROM employees').get() as { n: number }).n;
     if (employeeCount === 0) {
       return sendError(reply, 503, 'E-AUTH-007', '实例未初始化');
@@ -154,8 +111,8 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
   });
 
   app.post('/api/v1/auth/logout', async (req, reply) => {
-    const employee = await requireSession(req, reply);
-    if (!employee) return reply;
+    const subject = await requireSession(req, reply);
+    if (!subject) return reply;
     const sid = readSidCookie(req);
     if (sid) deleteSessionByHash(db, sidHash(sid, pepper));
     reply.header('set-cookie', cookieHeader('', true));
@@ -163,27 +120,27 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
   });
 
   app.get('/api/v1/me', async (req, reply) => {
-    const employee = await requireSession(req, reply);
-    if (!employee) return reply;
+    const subject = await requireSession(req, reply);
+    if (!subject) return reply;
     const row = db
-      .prepare('SELECT username, display_name, is_instance_admin, active FROM employees WHERE id = ?')
-      .get(employee.employeeId) as { username: string; display_name: string; is_instance_admin: number; active: number };
+      .prepare('SELECT display_name, active FROM employees WHERE id = ?')
+      .get(subject.employee_id) as { display_name: string; active: number };
     return {
-      username: row.username,
+      username: subject.username,
       display_name: row.display_name,
-      is_instance_admin: row.is_instance_admin === 1,
+      is_instance_admin: subject.is_instance_admin,
       active: row.active === 1,
     };
   });
 
   app.post('/api/v1/me/password', async (req, reply) => {
-    const employee = await requireSession(req, reply);
-    if (!employee) return reply;
+    const subject = await requireSession(req, reply);
+    if (!subject) return reply;
     const body = req.body as { current_password?: unknown; new_password?: unknown } | null;
     if (typeof body?.current_password !== 'string' || typeof body?.new_password !== 'string') {
       return sendError(reply, 400, 'E-RES-004', '请求形态错误：需要 current_password 与 new_password');
     }
-    const row = db.prepare('SELECT password_hash FROM employees WHERE id = ?').get(employee.employeeId) as { password_hash: string };
+    const row = db.prepare('SELECT password_hash FROM employees WHERE id = ?').get(subject.employee_id) as { password_hash: string };
     if (!(await verifyPassword(row.password_hash, body.current_password))) {
       return sendError(reply, 401, 'E-AUTH-001', '用户名或口令错误');
     }
@@ -194,16 +151,16 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
     const newHash = await hashPassword(body.new_password);
     // 副作用（identity §2）：该账号全部 Web 会话失效；访问凭据不自动撤销
     //（token 域随 S2-T4 落地，本路径不触碰任何凭据存储——写面断言见 auth-routes.test.ts）。
-    db.prepare('UPDATE employees SET password_hash = ? WHERE id = ?').run(newHash, employee.employeeId);
-    deleteSessionsForEmployee(db, employee.employeeId);
+    db.prepare('UPDATE employees SET password_hash = ? WHERE id = ?').run(newHash, subject.employee_id);
+    deleteSessionsForEmployee(db, subject.employee_id);
     reply.header('set-cookie', cookieHeader('', true));
     return reply.code(204).send();
   });
 
   app.patch('/api/v1/admin/employees/:username', async (req, reply) => {
-    const employee = await requireSession(req, reply);
-    if (!employee) return reply;
-    if (!employee.isInstanceAdmin) {
+    const subject = await requireSession(req, reply);
+    if (!subject) return reply;
+    if (!subject.is_instance_admin) {
       return sendError(reply, 403, 'E-AUTHZ-001', '权限不足：需要实例管理员');
     }
     const { username } = req.params as { username: string };

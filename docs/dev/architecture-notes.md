@@ -77,17 +77,19 @@
 
 **定稿：`notegit admin recover`**（容器 CLI：`docker exec <container> notegit admin recover`）。理由：api.md §3.1 与 identity §7.2 两处契约引用已用此名（契约只读，定稿即消除「待定」标注，零契约变更）；`admin` 命名空间收拢主机侧管理动作；动宾结构直指「管理员锁死恢复」。被拒备选：`notegit admin-recover`（顶层扁平化，弃 admin 分组）、`notegit recover`（语义过宽，易误解为数据恢复）、`notegit admin password-reset`（与 HTTP 端点 `/admin/employees/{u}/password-reset` 的 K5 令牌流程混淆——本命令是主机侧兜底，产生 `admin.host_recovery` 审计）。**命令本体实现按任务定义留 S2-T8 或运维任务。**
 
-### 6.4 迁移 0003 形态与合并注意
+### 6.4 迁移 0003 形态（rebase 后定稿）
 
-T2 未先落 employees 基础表（分支基点 sprint/S2 @ bcb29ca 仅含 T1），故 0003 按 storage-model §3.2 **整表创建** employees（含口令/状态列）+ §3.3 sessions；schema_version 引导块按本文件 §3 剔除。**合并注意（master 汇入 sprint/S2 时）**：若 T2 的 0002 亦含 employees 建表（两处同源同一契约块，去重无损），保留一处建表、另一处移除该语句即可；T2 分支另有 pepper/主启动接线（main.ts），与本分支 `registerAuth` 插件的接线由后续统一启动流程合并。
+实现期间 T2 的 0002（employees + one_time_tokens + schema_version append-only 触发器）先合入 sprint/S2（f98938c），本分支随即 rebase：**0003 定稿为仅 sessions**（storage-model §3.3 @schema 块 + idx_sessions_employee 索引；schema_version 引导块按本文件 §3 剔除）——employees 基础表已由 0002 按同一契约 §3.2 块整表落地（含全部口令/状态列），无需 ALTER 补列，预合并期「谁先落谁建表」的重复建表面在 rebase 中消除（无生产库，安全）。
 
-### 6.5 会话 pepper 注入边界
+### 6.5 会话 pepper 与 SubjectResolver 缝（rebase 后并入 T2 启动接线）
 
-sessions.sid_hash = `HMAC-SHA256(pepper, sid)`（identity §4 / D-IC-03，键与 token K1 同源）。本任务以 `AuthPluginOptions.pepper` 注入取键，**不落地 pepper 文件与版本化列表**（`/data/keys/token-pepper.key`、`hmacv1$` 前缀、§6.2 轮换属 S2-T4 域），避免与 T4 的文件格式决策冲突；启动接线时统一供键。
+- sessions.sid_hash = `HMAC-SHA256(pepper, sid)`（identity §4 / D-IC-03，键与 token K1 同源）。T2 的 pepper 文件（`loadOrCreatePepper`，版本化列表 K1）rebase 后已在本分支：`buildApp(deps)` 取 `deps.pepper.active.key` 同时喂 SubjectResolver 与 `registerAuth` 插件——会话与 token 键同源自该处成立；`hmacv1$` 前缀串与 §6.2 轮换消费仍属 S2-T4/T5。
+- **SubjectResolver 缝由本任务填实**（T2 注释「真实载体解析随 S2-T3 落地」的落点）：默认实现 = `auth/subject.ts` 的 ngt_sid 会话解析（替换 fail-closed 恒 null），T2 的 bootstrap/invites 管理路由与 T3 认证路由共用同一会话存储与判定；注入覆盖保留（测试桩）。缝的返回类型 `Subject | null` 不区分停用原因——T2 路由对停用账号给 401 E-AUTH-001 而非 E-AUTH-004，四状态细分随 S2-T5 统一（该任务本就是四状态×双入口语义）。
+- `buildApp(deps)` 现挂载本域路由（login/logout/me/password/PATCH）；Bearer ngt_ 载体解析随 S2-T4/T5 并入同一缝。
 
 ### 6.6 范围裁剪与移交
 
 1. 审计事件（`employee.password_reset` / `employee.deactivate` / `employee.activate`、登录失败计数指标——identity §8 失败不逐条入审计）挂接待审计基座 S2-T7（audit_events 表未落地，代码内已留注释锚点）。
 2. CSRF 同源校验（api.md §1 `E-AUTH-006`）为全局插件，未随本任务实现；本任务写端点（login/logout/me/password/PATCH）此前依赖 SameSite=Lax 缓解，建议 T5/T7 落全局 onRequest 钩子。
-3. 本插件未接入 `buildApp()`（启动接线 open→pragmas→migrate→listen 属 S2-T2+ 统一启动流程；T2 分支已见 main.ts 雏形，避免并行冲突）。
+3. ~~本插件未接入 `buildApp()`~~（T2 的启动接线 rebase 后已在：`buildApp(deps)` 挂载本域路由并填实 SubjectResolver 默认实现，见 §6.5）。
 4. `PATCH /api/v1/admin/employees/{username}` 已实现 `active` 与 `is_instance_admin` 两字段；未加「最后管理员」保护——api.md 该端点错误列未含此路径，管理员全员锁死以 identity §7.2 主机侧恢复为设计兜底。
