@@ -117,13 +117,14 @@ function seedMember(db, vaultId = 1, employeeId = 1, role = 'editor') {
 function seedCredential(db, id = 1, employeeId = 1, tokenHash = 'hmacv1$aa', extra = {}) {
   db.prepare(
     `INSERT INTO credentials (id, employee_id, name, token_hash, scope_access, scope_vaults,
-       created_at, expires_at, revoked_at)
+       created_at, expires_at, revoked_at, display_hint)
      VALUES (?, ?, '本地 Harness', ?, ?, ?, '2026-10-01T00:00:00.000Z',
-       ?, ?)`
+       ?, ?, ?)`
   ).run(
     id, employeeId, tokenHash,
     extra.scopeAccess ?? 'read_write', extra.scopeVaults ?? '[]',
-    extra.expiresAt ?? '2026-12-01T00:00:00.000Z', extra.revokedAt ?? null
+    extra.expiresAt ?? '2026-12-01T00:00:00.000Z', extra.revokedAt ?? null,
+    extra.displayHint ?? 'ngt_xx…yyyy'  // D11 增补列（master 2026-10-13 同步修 seed）
   );
 }
 

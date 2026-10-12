@@ -117,6 +117,7 @@ CREATE TABLE credentials (
   created_at   TEXT    NOT NULL,
   expires_at   TEXT    NOT NULL,               -- 依据：identity §3.3 到期必填，≤ 实例上限（默认 90 天可配）；认证层逐请求比较
   revoked_at   TEXT,                           -- 依据：identity §3.3 NULL = 未撤销；四状态之一
+  display_hint TEXT    NOT NULL,               -- D11 增补（2026-10-13 ADR）：形如 ngt_ab…wxyz（前 2+末 4），创建时自明文生成；api.md §4 列表响应与 identity §3.1 展示语义所需，HMAC 单向不可反推
   last_used_at TEXT                            -- 依据：identity §3.3 观测字段，≥60 秒节流批量写，不参与任何授权判断
 ) STRICT;
 
