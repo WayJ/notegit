@@ -74,17 +74,20 @@ test('集成：T2 管理员路由经会话 Cookie 解析主体（替换 fail-clo
   db.close();
 });
 
-test('集成：停用后 T2 管理路由同会话下一请求拒绝（零延迟跨路由一致）', async () => {
+test('集成：停用后 T2 管理路由同会话下一请求拒绝（零延迟跨路由一致；E-AUTH-004 精确细分）', async () => {
   const { app, db } = await buildIntegratedApp();
   await seedAdmin(db, 'boss', 1);
   const sid = sidOf(await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'boss', password: 'password-boss' } }));
   db.prepare('UPDATE employees SET active = 0 WHERE username = ?').run('boss');
   const res = await app.inject({
     method: 'POST', url: '/api/v1/admin/employees',
-    headers: { cookie: `ngt_sid=${sid}` },
+    headers: { cookie: `ngt_sid=${sid}`, origin: 'http://localhost' },
     payload: { username: 'newbie', display_name: 'New Bee' },
   });
-  assert.equal(res.statusCode, 401, '停用账号的管理请求应被拒（解析返回 null → 401；reason 细分随 S2-T5）');
+  assert.equal(res.statusCode, 401, '停用账号的管理请求应被拒');
+  const err = res.json() as { error: { code: string; details: { reason: string } } };
+  assert.equal(err.error.code, 'E-AUTH-004', '停用账号应精确 E-AUTH-004（S2-T5 统一缝修复）');
+  assert.equal(err.error.details.reason, 'account_disabled');
   await app.close();
   db.close();
 });

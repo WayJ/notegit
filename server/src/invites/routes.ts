@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { WiredAppDeps } from '../app.ts';
+import { rejectAuth } from '../auth/lifecycle.ts';
 import { createInvite, consumePasswordReset, InviteError } from './invite.ts';
 import { passwordPolicyError } from './passwordPolicy.ts';
 import { TokenError } from '../bootstrap/token.ts';
@@ -8,9 +9,9 @@ import { TokenError } from '../bootstrap/token.ts';
  * POST /api/v1/admin/employees（邀请创建，api.md §3.1，需实例管理员）
  * POST /api/v1/auth/password-reset（公开消费端点，K5 令牌，api.md §3.2）
  *
- * 认证载体解析（ngt_sid Cookie / Bearer ngt_）随 S2-T3/T5 落地：resolveSubject 是
- * fail-closed 的注入缝（默认恒 null → 401），真实解析替换默认值；CSRF 同源校验
- * 仅适用于 Cookie 认证的写请求，随真实载体一并落地（api.md §1）。
+ * 认证经 app.ts 的 authenticateRequest 缝（S2-T5 统一：Bearer/会话双载体，
+ * 四状态精确 401 映射——停用账号 E-AUTH-004，替换 T2 期丢失原因的 SubjectResolver）。
+ * Cookie 认证的写请求另受全局 CSRF 同源校验（auth/csrf.ts，S2-T5 收尾 c）。
  */
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string): FastifyReply {
@@ -19,9 +20,9 @@ function sendError(reply: FastifyReply, status: number, code: string, message: s
 
 export function registerInviteRoutes(app: FastifyInstance, deps: WiredAppDeps): void {
   app.post('/api/v1/admin/employees', async (req, reply) => {
-    const subject = await deps.resolveSubject(req);
-    if (!subject) return sendError(reply, 401, 'E-AUTH-001', '未认证');
-    if (!subject.is_instance_admin) return sendError(reply, 403, 'E-AUTHZ-001', '需要实例管理员身份');
+    const outcome = await deps.authenticateRequest(req);
+    if (!outcome.ok) return rejectAuth(reply, outcome);
+    if (!outcome.subject.is_instance_admin) return sendError(reply, 403, 'E-AUTHZ-001', '需要实例管理员身份');
     const b = (req.body ?? {}) as Record<string, unknown>;
     const username = typeof b.username === 'string' ? b.username.trim() : '';
     const displayName = typeof b.display_name === 'string' ? b.display_name.trim() : '';
@@ -29,7 +30,7 @@ export function registerInviteRoutes(app: FastifyInstance, deps: WiredAppDeps): 
       return sendError(reply, 400, 'E-RES-004', '缺少或非法必填项：username / display_name（1–64 字符）');
     }
     try {
-      const { token } = createInvite(deps.db, deps.pepper, { username, displayName, invitedBy: subject.employee_id }, new Date());
+      const { token } = createInvite(deps.db, deps.pepper, { username, displayName, invitedBy: outcome.subject.employee_id }, new Date());
       // 明文令牌仅此一次（identity §7.2：经企业内渠道交付）
       return reply.code(201).send({ username, password_reset_token: token });
     } catch (err) {

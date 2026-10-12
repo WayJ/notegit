@@ -34,7 +34,11 @@ async function makeInitialized(): Promise<Harness> {
     pepper,
     bootstrapTokenFile: tokenFile,
     hashPassword: async (p) => `stub-hash$${p}`,
-    resolveSubject: async () => subject,
+    // 统一认证缝（S2-T5）：注入桩绕过载体解析（本套件聚焦邀请流程本身）
+    authenticateRequest: () =>
+      subject
+        ? { ok: true, carrier: 'session', subject, carrierRef: 'session:stub', entry: 'web' }
+        : { ok: false, carrier: null, code: 'E-AUTH-001', reason: 'unauthenticated' },
   });
   await app.ready();
   // 先完成 bootstrap 使实例进入已初始化态，并取管理员主体
