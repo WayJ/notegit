@@ -15,6 +15,7 @@ import { VaultService } from './vaults/service.ts';
 import { vaultsPlugin } from './vaults/routes.ts';
 import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
 import { registerMaintenanceRoutes } from './maintenance/routes.ts';
+import { registerWebRoutes } from './web/routes.ts';
 
 /** 认证主体（identity §1：认证主体 = 员工账号）。 */
 export interface Subject {
@@ -73,11 +74,12 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     });
     // 真实载体解析（S2-T5 统一，auth/lifecycle.ts）：Bearer（显式头凭据，优先）+
     // ngt_sid 会话 Cookie；四状态精确映射 E-AUTH-001..004。注入可覆盖（测试用桩）。
+    // pepper 传版本化文件（S2-T8）：会话校验含 retired 键 + rehash-on-use（identity §6.2）。
     const authenticateRequest: RequestAuthenticator =
       deps.authenticateRequest ??
       createRequestAuthenticator({
         db: deps.db,
-        pepper: deps.pepper.active.key,
+        pepper: deps.pepper,
         authenticateToken: (token) => credentialsService.authenticate(token),
       });
     const hashPassword: PasswordHasher = deps.hashPassword ?? defaultHashPassword;
@@ -121,10 +123,11 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       authenticateRequest: wired.authenticateRequest,
     });
     // S2-T3 认证域路由（api.md §3：login/logout/me/password/PATCH admin employees）；
-    // S2-T5 起认证缝统一（/me 与 /me/password 双载体，api.md §3 错误列 001–004）
+    // S2-T5 起认证缝统一（/me 与 /me/password 双载体，api.md §3 错误列 001–004）；
+    // S2-T8 起 pepper 传版本化文件（会话 retired 校验 + rehash-on-use，identity §6.2）
     void app.register(registerAuth, {
       db: deps.db,
-      pepper: deps.pepper.active.key,
+      pepper: deps.pepper,
       authenticateRequest: wired.authenticateRequest,
     });
     // S2-T4 凭据域路由（api.md §4：自助+管理员代管）；S2-T5 起共享服务实例与统一认证缝
@@ -140,6 +143,12 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       service: new VaultService({ db: wired.db }),
       authenticateRequest: wired.authenticateRequest,
       membershipSource: createDbMembershipSource(wired.db),
+    });
+    // S2-T8 最小页面（/login、/、/admin、/credentials——GET 外壳 + 页内 fetch 既有
+    // API 端点；页面无写操作，安全判定全部在 API 侧复用 authorize/管理员门槛）
+    registerWebRoutes(app, {
+      db: wired.db,
+      authenticateRequest: wired.authenticateRequest,
     });
   }
   return app;

@@ -39,16 +39,34 @@ export function createInvite(
       )
       .run(input.username, input.displayName, INVITED_PASSWORD_SENTINEL, input.invitedBy, nowIso);
     const employeeId = Number(ins.lastInsertRowid);
-    const token = randomBytes(32).toString('base64url');
-    db.prepare(
-      "INSERT INTO one_time_tokens (purpose, token_hash, employee_id, expires_at, used_at, created_at) VALUES ('password_reset', ?, ?, ?, NULL, ?)",
-    ).run(hmacTokenHash(pepper, token), employeeId, new Date(now.getTime() + PASSWORD_RESET_TTL_MS).toISOString(), nowIso);
+    const token = issuePasswordResetToken(db, pepper, employeeId, now);
     db.exec('COMMIT');
     return { employeeId, token };
   } catch (err) {
     db.exec('ROLLBACK');
     throw err;
   }
+}
+
+/** 为既有员工签发一次性口令重置令牌（K5：库内哈希+短时效+单次；明文仅随返回值出现一次）。
+ *  S2-T8：管理员管理页「重置口令」消费（api.md §3.1；identity §7.2 普通员工恢复路径）。
+ *  调用方负责事务边界（createInvite 内嵌于建号事务）。 */
+export function issuePasswordResetToken(
+  db: DatabaseSync,
+  pepper: PepperFile,
+  employeeId: number,
+  now: Date,
+): string {
+  const token = randomBytes(32).toString('base64url');
+  db.prepare(
+    "INSERT INTO one_time_tokens (purpose, token_hash, employee_id, expires_at, used_at, created_at) VALUES ('password_reset', ?, ?, ?, NULL, ?)",
+  ).run(
+    hmacTokenHash(pepper, token),
+    employeeId,
+    new Date(now.getTime() + PASSWORD_RESET_TTL_MS).toISOString(),
+    now.toISOString(),
+  );
+  return token;
 }
 
 /** @returns 归属员工 id（审计挂接用，S2-T7：employee.password_reset 记目标员工） */
@@ -71,8 +89,9 @@ export function consumePasswordReset(
     const upd = db.prepare('UPDATE one_time_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL').run(nowIso, row.id);
     if (upd.changes !== 1) throw new TokenError('used');
     db.prepare('UPDATE employees SET password_hash = ? WHERE id = ?').run(input.newPasswordHash, row.employee_id);
-    // 副作用「该账号会话全部失效」（identity §2/§7.2）：sessions 表随 S2-T3 落地，
-    // 届时在此（或会话域）执行 DELETE FROM sessions WHERE employee_id = ?
+    // 副作用「该账号会话全部失效」（identity §2/§7.2；api.md §3.2）——T2 遗留注释的欠账，
+    // S2-T8 随管理员重置流程补齐（token 不自动撤销，identity §1）
+    db.prepare('DELETE FROM sessions WHERE employee_id = ?').run(row.employee_id);
     db.exec('COMMIT');
     return row.employee_id;
   } catch (err) {

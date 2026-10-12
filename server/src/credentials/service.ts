@@ -233,9 +233,10 @@ export class CredentialsService {
 
   /**
    * 认证（identity §5.1 第 1 层）：按 active→retired 顺序以各版本 pepper 计算 HMAC 查表
-   * （§6.2 校验按版本选键；轮换的 rehash-on-use 操作留 S2-T8）。四状态分别映射：
-   * 未提交/未知凭据 E-AUTH-001、过期 E-AUTH-002、撤销 E-AUTH-003、账号停用 E-AUTH-004。
-   * 成功后按 ≥60 秒节流回写 last_used_at（观测字段，不参与任何授权判断）。
+   * （§6.2 校验按版本选键）。命中 retired 键时验证成功后立即以 active 键重算并回写
+   * token_hash（rehash-on-use，identity §6.2 步骤 2；S2-T8 落地——对用户透明）。
+   * 四状态分别映射：未提交/未知凭据 E-AUTH-001、过期 E-AUTH-002、撤销 E-AUTH-003、
+   * 账号停用 E-AUTH-004。成功后按 ≥60 秒节流回写 last_used_at（观测字段，不参与任何授权判断）。
    */
   authenticate(token: string): AuthTokenContext {
     if (typeof token !== 'string' || !token.startsWith('ngt_')) {
@@ -248,6 +249,12 @@ export class CredentialsService {
         | { credential_id: number; employee_id: number; scope_access: ScopeAccess; scope_vaults: string; is_instance_admin: number }
         | undefined;
       if (hit) {
+        // rehash-on-use（identity §6.2 步骤 2）：retired 键命中的存量哈希立即迁移到 active
+        if (key.version !== this.pepper.active.version) {
+          this.db
+            .prepare('UPDATE credentials SET token_hash = ? WHERE id = ?')
+            .run(hashToken(this.pepper.active, token), hit.credential_id);
+        }
         this.touchLastUsed(hit.credential_id);
         return {
           credentialId: hit.credential_id,

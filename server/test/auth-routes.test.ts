@@ -34,7 +34,7 @@ async function buildAuthApp(overrides?: {
   const app = fastify();
   await app.register(registerAuth, {
     db,
-    pepper: randomBytes(32),
+    pepper: { active: { version: 1, key: randomBytes(32) }, retired: [] },
     now: () => new Date(nowMs),
     ...overrides,
   });
@@ -308,7 +308,7 @@ test('完成标准 4 —— 口令变更写面仅 employees/sessions（访问凭
   });
   let nowMs = BASE;
   const app = fastify();
-  await app.register(registerAuth, { db: recordedDb, pepper: randomBytes(32), now: () => new Date(nowMs) });
+  await app.register(registerAuth, { db: recordedDb, pepper: { active: { version: 1, key: randomBytes(32) }, retired: [] }, now: () => new Date(nowMs) });
   const hash = await hashPassword('password-alice-1');
   db.prepare(
     `INSERT INTO employees (username, display_name, password_hash, is_instance_admin, active, invited_by, created_at, deactivated_at)
