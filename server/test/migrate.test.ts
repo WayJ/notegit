@@ -107,19 +107,19 @@ test('守卫：乱序（降序）版本号抛错且不执行任何语句（Revie
   db.close();
 });
 
-test('出厂基线：文件库首迁全量记录，重入 applied=[]（Review Focus 4；S2-T2 起基线含 0002+，按 MIGRATIONS 推导）', async () => {
+test('出厂迁移列表：文件库首迁按序落全部版本（v1 基线 + S2-T4 追加的 v4），重入 applied=[]（Review Focus 4）', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'notegit-mig-'));
   try {
     const db = openDatabase(path.join(dir, 't.sqlite'));
-    const expected = MIGRATIONS.map((m) => m.version);
     const first = migrate(db, MIGRATIONS);
-    assert.deepEqual(first.applied, expected);
+    assert.deepEqual(first.applied, [1, 4]); // v2/v3 属并行任务（S2-T2/T3），并入时插于 1 与 4 之间
     const again = migrate(db, MIGRATIONS);
     assert.deepEqual(again.applied, []);
-    assert.deepEqual(again.skipped, expected);
-    const all = rows(db, 'SELECT version, description FROM schema_version') as { version: number; description: string }[];
-    assert.equal(all.length, expected.length);
-    assert.deepEqual(all.map((r) => r.version), expected);
+    assert.deepEqual(again.skipped, [1, 4]);
+    const all = rows(db, 'SELECT version FROM schema_version ORDER BY version') as { version: number }[];
+    assert.equal(all.length, 2);
+    assert.equal(all[0]?.version, 1);
+    assert.equal(all[1]?.version, 4);
     db.close();
   } finally {
     await rm(dir, { recursive: true, force: true });
