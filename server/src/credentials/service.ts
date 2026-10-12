@@ -115,19 +115,7 @@ export class CredentialsService {
       throw new ApiError(400, 'E-RES-004', '请求形态错误：name 必填且为非空字符串');
     }
     const expiresAt = this.validateExpiresAt(input.expires_at);
-    const scope = this.validateScope(input.scope);
-
-    const activeCount = (
-      this.db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM credentials
-           WHERE employee_id = ? AND revoked_at IS NULL AND expires_at > ?`,
-        )
-        .get(employeeId, this.now()) as { n: number }
-    ).n;
-    if (activeCount >= this.maxCredentials) {
-      throw new ApiError(409, 'E-RES-005', `凭据数量超上限（每员工 ${this.maxCredentials} 条）`);
-    }
+    const scope = this.validateScope(employeeId, input.scope);
 
     const token = generateToken();
     const tokenHash = hashToken(this.pepper.active, token);
@@ -136,6 +124,18 @@ export class CredentialsService {
 
     this.db.exec('BEGIN IMMEDIATE');
     try {
+      // 名额计数在写事务内复查（单进程同步模型下本无窗口；多进程共享库时防超额）
+      const activeCount = (
+        this.db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM credentials
+             WHERE employee_id = ? AND revoked_at IS NULL AND expires_at > ?`,
+          )
+          .get(employeeId, this.now()) as { n: number }
+      ).n;
+      if (activeCount >= this.maxCredentials) {
+        throw new ApiError(409, 'E-RES-005', `凭据数量超上限（每员工 ${this.maxCredentials} 条）`);
+      }
       const info = this.db
         .prepare(
           `INSERT INTO credentials (employee_id, name, token_hash, display_hint, scope_access, scope_vaults, created_at, expires_at)
@@ -297,14 +297,19 @@ export class CredentialsService {
       .run(now, credentialId, threshold);
   }
 
-  /** 到期必填、≤ 实例上限（默认 90 天）、须在未来（identity §3.3；api.md E-RES-004/007） */
+  /**
+   * 到期必填、≤ 实例上限（默认 90 天）、须在未来（identity §3.3；api.md E-RES-004/007）。
+   * 输入宽松解析（Date.parse），但一律归一为规范 UTC ISO 后存储/比较——storage-model §1
+   * 的字典序不变量（`expires_at > ?` 直接字符串比较）依赖此归一，原始串入库会被
+   * "Nov 5, 2026" 类非数字开头串绕过（字典序恒大 → 永不过期）。
+   */
   private validateExpiresAt(input: unknown): string {
     if (typeof input !== 'string' || input.length === 0) {
       throw new ApiError(400, 'E-RES-004', '请求形态错误：expires_at 必填');
     }
     const ts = Date.parse(input);
     if (Number.isNaN(ts)) {
-      throw new ApiError(400, 'E-RES-004', '请求形态错误：expires_at 须为 ISO-8601 时间');
+      throw new ApiError(400, 'E-RES-004', '请求形态错误：expires_at 须为可解析的时间');
     }
     const nowTs = Date.parse(this.now());
     if (ts <= nowTs) {
@@ -313,11 +318,17 @@ export class CredentialsService {
     if (ts > nowTs + this.maxLifetimeMs) {
       throw new ApiError(422, 'E-RES-007', `参数语义不符：expires_at 超实例上限（${this.maxLifetimeMs / 86_400_000} 天）`);
     }
-    return input;
+    return new Date(ts).toISOString();
   }
 
-  /** scope 两维（identity §3.4）：access ∈ {read, read_write}；vaults 为 slug 清单（解析为库 id 存储） */
-  private validateScope(input: unknown): ResolvedScope {
+  /**
+   * scope 两维（identity §3.4）：access ∈ {read, read_write}；vaults 为 slug 清单，仅解析
+   * 员工当前有成员关系的库（scope 只能收窄员工权限，非成员/不存在的 slug 静默剔除且
+   * 响应只回显生效清单——D-IC-06：422-on-unknown 会构成私有库存在性探测口）。
+   * 清单非空而全部未命中 → 统一 422（文案不区分「不存在」与「非成员」，防探测，也防
+   * 「声明收窄、实得空清单=全部有权库」的放大陷阱）。
+   */
+  private validateScope(employeeId: number, input: unknown): ResolvedScope {
     if (input === undefined) return { access: 'read_write', vaultIds: [], slugs: [] };
     if (typeof input !== 'object' || input === null || Array.isArray(input)) {
       throw new ApiError(422, 'E-RES-007', '参数语义不符：scope 须为对象');
@@ -335,18 +346,27 @@ export class CredentialsService {
       throw new ApiError(422, 'E-RES-007', '参数语义不符：scope.vaults 须为 slug 字符串数组');
     }
     const slugs = [...new Set(vaults as string[])];
-    const known = new Map(
-      (this.db.prepare(`SELECT id, slug FROM vaults`).all() as { id: number; slug: string }[]).map((r) => [r.slug, r.id] as const),
-    );
+    const memberVaults = this.db
+      .prepare(
+        `SELECT v.id, v.slug FROM vaults v
+         JOIN vault_members m ON m.vault_id = v.id
+         WHERE m.employee_id = ?`,
+      )
+      .all(employeeId) as { id: number; slug: string }[];
+    const memberBySlug = new Map(memberVaults.map((r) => [r.slug, r.id] as const));
     const vaultIds: number[] = [];
+    const resolvedSlugs: string[] = [];
     for (const slug of slugs) {
-      const id = known.get(slug);
-      if (id === undefined) {
-        throw new ApiError(422, 'E-RES-007', `参数语义不符：scope.vaults 含未知库 ${slug}`);
+      const id = memberBySlug.get(slug);
+      if (id !== undefined) {
+        vaultIds.push(id);
+        resolvedSlugs.push(slug);
       }
-      vaultIds.push(id);
     }
-    return { access, vaultIds, slugs };
+    if (slugs.length > 0 && vaultIds.length === 0) {
+      throw new ApiError(422, 'E-RES-007', '参数语义不符：scope.vaults 未命中任何当前有权库');
+    }
+    return { access, vaultIds, slugs: resolvedSlugs };
   }
 
   /** 审计事件（identity §8；storage-model §5：直接终态、credential_ref 不含 token 材料） */

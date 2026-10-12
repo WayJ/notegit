@@ -54,10 +54,12 @@ export const credentialsPlugin: FastifyPluginAsync<CredentialsPluginOptions> = a
       return;
     }
     const header = request.headers.authorization;
-    if (typeof header !== 'string' || !header.startsWith('Bearer ')) {
+    // RFC 7235：auth scheme 大小写不敏感（bearer/BEARER 同样受理）
+    const m = /^(\w+)\s+(.+)$/.exec(header ?? '');
+    if (!m || m[1]!.toLowerCase() !== 'bearer') {
       throw new ApiError(401, 'E-AUTH-001', '未认证');
     }
-    authUsers.set(request, svc.authenticate(header.slice('Bearer '.length)));
+    authUsers.set(request, svc.authenticate(m[2]!));
   });
 
   instance.setErrorHandler((err: Error & { statusCode?: number }, _request, reply) => {

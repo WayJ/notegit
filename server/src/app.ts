@@ -18,7 +18,8 @@ export interface Subject {
  * 请求 → 认证主体 的解析缝。默认实现 fail-closed（恒 null → 401）：真实载体解析
  * （ngt_sid Cookie / Bearer ngt_，api.md §1）随 S2-T3/T5 落地后替换。凭据域路由在
  * 缝之外自备 Bearer ngt_ 解析（identity §3 的四状态精确 401 映射），并先试本缝——
- * 会话载体落地后 Cookie 认证的凭据自助操作即自动可用。
+ * 会话载体落地后 Cookie 认证的凭据操作还需配套 CSRF 同源校验与审计 entry='web'
+ * 归因（api.md §1；identity §8；S2-T3/T5 对接项）。
  */
 export type SubjectResolver = (req: FastifyRequest) => Subject | null | Promise<Subject | null>;
 

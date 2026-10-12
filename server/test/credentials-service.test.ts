@@ -113,13 +113,59 @@ test('创建校验：expires_at 缺失/不可解析 → 400 E-RES-004；过去/�
   assert.match(ok.token, /^ngt_/);
 });
 
-test('创建校验：scope 非法 → 422 E-RES-007（access 越枚举 / vaults 非数组 / 元素非字符串 / 未知 slug）', () => {
+test('创建校验：scope 非法 → 422 E-RES-007（access 越枚举 / scope 非对象 / vaults 非数组 / 元素非字符串）', () => {
   const s = setup();
   expectApiError(() => s.svc.createCredential(s.bob, { name: 'x', expires_at: inDays(1), scope: { access: 'write' } }), 422, 'E-RES-007');
   expectApiError(() => s.svc.createCredential(s.bob, { name: 'x', expires_at: inDays(1), scope: 'read' }), 422, 'E-RES-007');
   expectApiError(() => s.svc.createCredential(s.bob, { name: 'x', expires_at: inDays(1), scope: { vaults: 'alpha' } }), 422, 'E-RES-007');
   expectApiError(() => s.svc.createCredential(s.bob, { name: 'x', expires_at: inDays(1), scope: { vaults: [42] } }), 422, 'E-RES-007');
+});
+
+test('scope.vaults 只解析当前有权库：非成员/不存在的 slug 静默剔除，且响应只回显生效清单（D-IC-06 无存在性泄露）', () => {
+  const s = setup();
+  addVault(s.db, 'gamma', s.alice); // 存在但 bob 非成员
+  const { record } = s.svc.createCredential(s.bob, {
+    name: 'x',
+    expires_at: inDays(1),
+    scope: { vaults: ['alpha', 'gamma', 'ghost'] },
+  });
+  assert.deepEqual(record.scope_vaults, ['alpha']);
+  const row = s.db.prepare('SELECT scope_vaults FROM credentials WHERE id = ?').get(record.id) as { scope_vaults: string };
+  assert.deepEqual(JSON.parse(row.scope_vaults), [s.alpha]);
+});
+
+test('scope.vaults 全部未命中 → 统一 422（防「声明收窄、实得全部有权库」；不存在与非成员不可区分）', () => {
+  const s = setup();
+  addVault(s.db, 'gamma', s.alice); // bob 非成员
+  // 全部为不存在 slug
   expectApiError(() => s.svc.createCredential(s.bob, { name: 'x', expires_at: inDays(1), scope: { vaults: ['ghost'] } }), 422, 'E-RES-007');
+  // 全部为存在但无成员关系的 slug——两者响应一致，探测者无法区分
+  const e1 = expectApiError(() => s.svc.createCredential(s.bob, { name: 'x', expires_at: inDays(1), scope: { vaults: ['gamma'] } }), 422, 'E-RES-007');
+  const e2 = expectApiError(() => s.svc.createCredential(s.bob, { name: 'x', expires_at: inDays(1), scope: { vaults: ['ghost'] } }), 422, 'E-RES-007');
+  assert.equal(e1.message, e2.message, '不存在库与非成员库的拒绝文案必须一致（不泄露存在性）');
+});
+
+test('到期归一化：宽松/带时区输入一律存为规范 UTC ISO（storage-model §1 字典序不变量）', () => {
+  const s = setup();
+  const target = new Date(Math.floor(Date.now() / 1000) * 1000 + 30 * 86_400_000); // 整秒，toUTCString 可无损往返
+  const lenient = s.svc.createCredential(s.bob, { name: 'x', expires_at: target.toUTCString() }); // 如 "Tue, 14 Oct 2026 …"
+  assert.equal(lenient.record.expires_at, target.toISOString());
+  assert.match(lenient.record.expires_at, /^20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  const offset = s.svc.createCredential(s.bob, { name: 'y', expires_at: target.toISOString().replace('Z', '+00:00') });
+  assert.equal(offset.record.expires_at, target.toISOString());
+  const row = s.db.prepare('SELECT expires_at FROM credentials WHERE id = ?').get(offset.record.id) as { expires_at: string };
+  assert.equal(row.expires_at, target.toISOString(), '库内存储须为规范形态');
+});
+
+test('到期归一化回归：非数字开头的宽松格式凭据在真实到期后 401 E-AUTH-002（防字典序绕过上限）', () => {
+  const base = Date.now();
+  let offsetMs = 0;
+  const s = setup({ now: () => new Date(base + offsetMs).toISOString() });
+  // toUTCString 形如 "Tue, 14 Oct 2026 …"：旧实现按原串存储后，字典序恒大于任何 20xx 串 → 永不过期
+  const expires = new Date(base + 86_400_000).toUTCString();
+  const { token } = s.svc.createCredential(s.bob, { name: 'r', expires_at: expires });
+  offsetMs = 2 * 86_400_000; // 已过解析后的到期时刻
+  expectApiError(() => s.svc.authenticate(token), 401, 'E-AUTH-002');
 });
 
 test('上限：每员工默认 20 条；第 21 条 → 409 E-RES-005；撤销/过期释放名额', () => {

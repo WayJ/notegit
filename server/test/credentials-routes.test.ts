@@ -67,9 +67,10 @@ async function seedToken(ctx: Ctx, employeeId: number): Promise<string> {
   return ctx.seed.createCredential(employeeId, { name: 'seed', expires_at: inDays(30) }).token;
 }
 
-test('未携带/坏 scheme 的 Authorization → 401 E-AUTH-001 信封（api.md §2.1）', async () => {
+test('未携带/坏 scheme 的 Authorization → 401 E-AUTH-001 信封（api.md §2.1）；scheme 大小写不敏感（RFC 7235）', async () => {
   const ctx = await build();
   try {
+    const bobToken = await seedToken(ctx, ctx.bob);
     const none = await ctx.app.inject({ method: 'GET', url: '/api/v1/credentials' });
     assert.equal(none.statusCode, 401);
     const body = none.json() as { error: { code: string; message: string } };
@@ -78,6 +79,9 @@ test('未携带/坏 scheme 的 Authorization → 401 E-AUTH-001 信封（api.md 
     const basic = await ctx.app.inject({ method: 'GET', url: '/api/v1/credentials', headers: { authorization: 'Basic dXNlcjpwdw==' } });
     assert.equal(basic.statusCode, 401);
     assert.equal((basic.json() as { error: { code: string } }).error.code, 'E-AUTH-001');
+
+    const lower = await ctx.app.inject({ method: 'GET', url: '/api/v1/credentials', headers: { authorization: `bearer ${bobToken}` } });
+    assert.equal(lower.statusCode, 200, '小写 bearer scheme 应同样受理（RFC 7235 auth scheme 大小写不敏感）');
   } finally {
     await dispose(ctx);
   }
@@ -190,7 +194,7 @@ test('POST 校验经路由呈现：缺 name 400、超上限 409 E-RES-005、超 
     assert.equal((tooFar.json() as { error: { code: string } }).error.code, 'E-RES-007');
 
     const ghost = await ctx.app.inject({ method: 'POST', url: '/api/v1/credentials', headers: bearer(bobToken), payload: { name: 'x', expires_at: inDays(1), scope: { vaults: ['ghost'] } } });
-    assert.equal(ghost.statusCode, 422);
+    assert.equal(ghost.statusCode, 422); // 全部未命中 → 统一 422（不存在与非成员不可区分，D-IC-06）
     assert.equal((ghost.json() as { error: { code: string } }).error.code, 'E-RES-007');
   } finally {
     await dispose(ctx);
