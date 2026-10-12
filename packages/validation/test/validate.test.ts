@@ -217,6 +217,74 @@ test('knownPaths：库内既有路径并入链接存在性判定', async () => {
   assert.equal(r.summary.warningCount, 0)
 })
 
+// ---- E-PATH-004 全 tree 基线（S3-T3 决策 §9.2.5 → T4 扩展：CommitDelta.treePaths 输入） ----
+
+test('pre-receive treePaths：新增路径与存量 tree 路径大小写冲突 → E-PATH-004（actual=存量路径）', async () => {
+  const r = await validate({
+    scope: 'pre-receive',
+    refs: [
+      {
+        ref: 'refs/heads/main',
+        headOld: 'o',
+        headNew: 'n',
+        commits: [{ commit: 'c1', parent: 'o', changes: [file('docs/a.md')], treePaths: ['README.md', 'Docs/A.md', 'docs/a.md'] }],
+      },
+    ],
+  })
+  assert.equal(r.result, 'fail')
+  const a = r.files.find((f) => f.path === 'docs/a.md')
+  const conflict = a?.issues.find((i) => i.code === 'E-PATH-004')
+  assert.equal(conflict?.actual, 'Docs/A.md')
+})
+
+test('pre-receive treePaths：冲突仅存在于两条未变更路径之间 → 不翻案（存量不产生 issue）', async () => {
+  const r = await validate({
+    scope: 'pre-receive',
+    refs: [
+      {
+        ref: 'refs/heads/main',
+        headOld: 'o',
+        headNew: 'n',
+        commits: [{ commit: 'c1', parent: 'o', changes: [file('docs/ok.md')], treePaths: ['Docs/b.md', 'docs/B.md', 'docs/ok.md'] }],
+      },
+    ],
+  })
+  assert.equal(r.result, 'pass')
+  assert.equal(r.files[0].issues.some((i) => i.code === 'E-PATH-004'), false)
+})
+
+test('pre-receive treePaths：同一提交两条新路径互相冲突 → 双方均获 E-PATH-004（变更集内语义保留）', async () => {
+  const r = await validate({
+    scope: 'pre-receive',
+    refs: [
+      {
+        ref: 'refs/heads/main',
+        headOld: 'o',
+        headNew: 'n',
+        commits: [{ commit: 'c1', parent: 'o', changes: [file('Notes/x.md'), file('notes/X.md')], treePaths: ['Notes/x.md', 'notes/X.md'] }],
+      },
+    ],
+  })
+  assert.equal(r.result, 'fail')
+  assert.equal(r.files.filter((f) => f.issues.some((i) => i.code === 'E-PATH-004')).length, 2)
+})
+
+test('pre-receive treePaths 缺省：不与库内存量比对（回退变更集内比对，既有语义不变）', async () => {
+  // 单条新增路径在输入中无基线可比——treePaths 未提供时判定不得引入任何隐式基线
+  const r = await validate({
+    scope: 'pre-receive',
+    refs: [
+      {
+        ref: 'refs/heads/main',
+        headOld: 'o',
+        headNew: 'n',
+        commits: [{ commit: 'c1', parent: 'o', changes: [file('docs/a.md')] }],
+      },
+    ],
+  })
+  assert.equal(r.result, 'pass')
+})
+
 // ---- 运行时限制（E-RUN-001/E-RUN-002） ----
 
 test('超时：clock 注入越过 validationTimeoutMs → result=error/exitCode 2，顶层 E-RUN-001（ref+limit+limitKey），refs 全拒、files 空', async () => {

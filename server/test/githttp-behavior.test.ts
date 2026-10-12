@@ -254,7 +254,7 @@ test('B4: 逐 ref 授权——main_admin_only 下编辑者拒写默认分支、�
   assert.doesNotMatch(refs2, /refs\/heads\/feature\/x/);
 });
 
-test('B5: 先写坏后删的推送被拒且 ref 不变（占位逐提交校验挡住；正式逐提交校验为 T4）', async () => {
+test('B5: 先写坏后删的推送被拒且 ref 不变（逐提交校验——S3-T4 真实校验器）', async () => {
   // B3 留下本地分叉：先与服务器对齐
   await git(['-C', aliceClone, 'fetch', '-q', 'origin']);
   await git(['-C', aliceClone, 'reset', '--hard', 'origin/main']);

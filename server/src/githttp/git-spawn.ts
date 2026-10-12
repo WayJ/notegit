@@ -12,6 +12,22 @@ export function runGit(
   args: readonly string[],
   options: { cwd?: string; timeoutMs?: number } = {},
 ): Promise<string> {
+  return runGitCollect(args, options).then((chunks) => Buffer.concat(chunks).toString('utf8'))
+}
+
+/** 二进制输出版（S3-T4：blob 字节精确读取——附件按 Uint8Array 进校验，经 utf8
+ *  字符串中转会破坏二进制）。spawn 语义与 runGit 一致（异步强制）。 */
+export function runGitBuffer(
+  args: readonly string[],
+  options: { cwd?: string; timeoutMs?: number } = {},
+): Promise<Buffer> {
+  return runGitCollect(args, options).then((chunks) => Buffer.concat(chunks))
+}
+
+function runGitCollect(
+  args: readonly string[],
+  options: { cwd?: string; timeoutMs?: number },
+): Promise<Buffer[]> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, { cwd: options.cwd });
     const stdout: Buffer[] = [];
@@ -33,7 +49,7 @@ export function runGit(
       settled = true;
       clearTimeout(timer);
       if (code === 0) {
-        resolve(Buffer.concat(stdout).toString('utf8'));
+        resolve(stdout);
         return;
       }
       const tail = Buffer.concat(stderr).toString('utf8').trim().split('\n').slice(-3).join(' | ');
