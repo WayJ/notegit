@@ -16,3 +16,17 @@ export function vaultRepoPath(dataDir: string, vaultId: number): string {
   }
   return path.join(dataDir, 'git', `${vaultId}.git`);
 }
+
+/**
+ * 反向解析（S3-T1）：`<id>.git` 目录名 → vault id，其余名字一律 undefined。
+ * 磁盘命名约定（正向 vaultRepoPath / 反向本函数）唯一来源在本文件——
+ * gitrepo 生命周期与一致性核对经此消费，不在别处再写 `.git` 形态。
+ */
+export function parseVaultRepoDirName(name: string): number | undefined {
+  const m = /^(\d+)\.git$/.exec(name);
+  if (!m) return undefined;
+  const id = Number(m[1]);
+  // 与 vaultRepoPath 同一合法域：0/前导零变形/超 MAX_SAFE_INTEGER 不认
+  if (!Number.isSafeInteger(id) || id <= 0 || m[1].startsWith('0')) return undefined;
+  return id;
+}

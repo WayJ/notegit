@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { VaultRepoOps } from '../gitrepo/lifecycle.ts';
 import type { VaultRole } from '../auth/lifecycle.ts';
 import { ApiError } from '../credentials/service.ts';
 
@@ -74,17 +75,19 @@ function isUniqueViolation(err: unknown): boolean {
 export class VaultService {
   private readonly db: DatabaseSync;
   private readonly now: () => string;
+  private readonly repoOps: VaultRepoOps | undefined;
 
-  constructor(config: { db: DatabaseSync; now?: () => string }) {
+  constructor(config: { db: DatabaseSync; now?: () => string; repoOps?: VaultRepoOps }) {
     this.db = config.db;
     this.now = config.now ?? (() => new Date().toISOString());
+    this.repoOps = config.repoOps;
   }
 
   /**
    * 建库（api.md §5 POST /vaults）：任意 active 员工可建（active 由认证层逐请求
    * 保证）；新库默认私有，创建者自动成为库管理员（架构 §4.2）。vaults 行 +
    * 创建者 vault_members(admin) 行同一事务；slug 冲突 → 409 E-RES-002。
-   * bare 仓库（git init --bare 于 vaultRepoPath 映射路径）随 S3-T1 接入建库流程。
+   * 纯 DB 部分（S2-T6 形态）；bare 仓库初始化经 createVaultWithRepo 挂接（S3-T1）。
    */
   createVault(
     input: { name?: unknown; slug?: unknown },
@@ -116,6 +119,50 @@ export class VaultService {
         throw new ApiError(409, 'E-RES-002', '资源标识已占用：vault slug');
       }
       throw err;
+    }
+  }
+
+  /**
+   * 建库 + bare 仓库初始化（S3-T1；api.md §5「创建 vaults 行 + 成员行 + bare
+   * 仓库 /data/git/<id>.git」）。行事务先行（稳定 ID 是路径的唯一来源），提交后
+   * 异步 init bare；init 失败 → **补偿事务回滚全部行**（无孤儿配置行，backup §5
+   * 不变量 3 的行侧）并放大错误。未注入 repoOps 时退化为纯建行（S2 测试形态）。
+   */
+  async createVaultWithRepo(
+    input: { name?: unknown; slug?: unknown },
+    actor: VaultActor,
+  ): Promise<VaultPublic & { role: 'admin' }> {
+    const vault = this.createVault(input, actor);
+    if (!this.repoOps) return vault;
+    try {
+      await this.repoOps.initBare(vault.id);
+    } catch (err) {
+      // 补偿：先尽力清除半成品目录（无孤儿仓库），再回滚全部行（无孤儿配置行）。
+      // 目录清除尽力而为——失败不掩盖原始错误，残留由一致性核对/reconcile 处置。
+      try {
+        await this.repoOps.remove(vault.id);
+      } catch {
+        // 补偿的补偿：保持原始错误优先
+      }
+      this.undoVaultCreate(vault.id);
+      throw err;
+    }
+    return vault;
+  }
+
+  /** 建库补偿：init bare 失败时撤销本次建库全部行（含 vault.create 审计行——操作未成立不留成功记录） */
+  private undoVaultCreate(vaultId: number): void {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.prepare(`DELETE FROM audit_events WHERE vault_id = ?`).run(vaultId);
+      this.db.prepare(`DELETE FROM vault_members WHERE vault_id = ?`).run(vaultId);
+      this.db.prepare(`DELETE FROM vaults WHERE id = ?`).run(vaultId);
+      this.db.exec('COMMIT');
+    } catch (compErr) {
+      this.db.exec('ROLLBACK');
+      // 补偿失败：行侧孤儿暴露为「缺失目录」——reconcileOrphanRepos/verifyStore
+      // 一致性核对可观测；此处只放大，不掩盖。
+      throw compErr;
     }
   }
 
@@ -280,5 +327,36 @@ export class VaultService {
          VALUES (?, 'employee', ?, ?, ?, ?, ?, 'succeeded', ?)`,
       )
       .run(this.now(), actor.employeeId, actor.carrierRef, actor.entry, eventKind, vaultId, JSON.stringify(detail));
+  }
+
+  /**
+   * 删除库（S3-T1「删除/归档与 DB 映射一致性」：无孤儿仓库、无孤儿配置行，
+   * backup §5 不变量 3）。api.md 尚无删除端点——本方法是服务级能力（管理/
+   * 运维路径）；端点与 `vault.delete` 审计 kind 待契约修订注册（storage-model §5
+   * 注册表为唯一源，不得自行发明）。
+   *
+   * 顺序：行侧先行同灭（历史审计行保留、vault_id 解除挂靠——storage-model §7
+   * 「v1 不清理」；成员行删；映射行删；同一事务），提交后删目录。目录删除失败
+   * → 行已灭、错误放大，残留孤儿目录经 verifyVaultStoreConsistency 可观测、
+   * reconcileOrphanRepos 可处置（补偿+核对语义）。
+   */
+  async deleteVault(slug: string): Promise<void> {
+    const row = this.getVaultRow(slug);
+    if (!row) throw new ApiError(404, 'E-RES-001', '资源不存在或无权访问');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.prepare(`UPDATE audit_events SET vault_id = NULL WHERE vault_id = ?`).run(row.id);
+      this.db.prepare(`DELETE FROM vault_members WHERE vault_id = ?`).run(row.id);
+      const info = this.db.prepare(`DELETE FROM vaults WHERE id = ?`).run(row.id);
+      if (info.changes === 0) {
+        // 读取与事务之间的并发删除竞态：行已不在 → 与不存在同语义
+        throw new ApiError(404, 'E-RES-001', '资源不存在或无权访问');
+      }
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+    if (this.repoOps) await this.repoOps.remove(row.id);
   }
 }
