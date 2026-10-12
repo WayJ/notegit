@@ -6,6 +6,7 @@ import { branchWriteRules } from '../vaults/branch-rules.ts';
 import { createDbMembershipSource } from '../vaults/membership.ts';
 import { parseRemoteUser } from './cgi.ts';
 import { refCommandRejection, type RefCommand } from './ref-rules.ts';
+import { settlePushRejected } from './receive-audit.ts';
 
 /**
  * update hook（S3-T5 写路径执行点复查；identity §5.1 第 3 层 / §5.2 行 4）：
@@ -116,7 +117,7 @@ async function check(): Promise<number> {
     return 1;
   }
 
-  // 审计写入需要读写连接（pre-receive 只读即可，本层拒绝要落审计行）；
+  // 审计写入需要读写连接（S3-T6 起 pre-receive 预记录同为读写连接）；
   // busy_timeout 对齐应用连接（selection §4），避免与应用并发写撞 SQLITE_BUSY
   const db = new DatabaseSync(dbFile);
   try {
@@ -143,8 +144,16 @@ async function check(): Promise<number> {
   }
 }
 
-/** 拒绝审计（vault.push/rejected/entry=git）。审计写失败不改变拒绝本身（fail-closed
- *  于写判定，审计异常走 stderr 运维可见——拒绝已生效，不因审计故障放行）。 */
+/**
+ * 拒绝审计（vault.push/rejected/entry=git）。审计写失败不改变拒绝本身（fail-closed
+ * 于写判定，审计异常走 stderr 运维可见——拒绝已生效，不因审计故障放行）。
+ *
+ * S3-T6 集成裁决（T5 留下的「settle 合并或并存由集成时仲裁」）：HTTP 集成形态经
+ * NOTEGIT_PUSH_ID 关联 pre-receive 预记录的 pending 行——settle 为 rejected
+ * （一行一命令的生命周期，不另起行）；无 pushId 或无预记录行（T5 直调测试形态、
+ * 旁路调用）时回退独立插行，行为与 S3-T5 落地时一致。detail.checkpoint='update'
+ * 两种形态都标记执行点来源。
+ */
 function auditRejection(
   db: DatabaseSync,
   input: {
@@ -155,6 +164,20 @@ function auditRejection(
     reason: string;
   },
 ): void {
+  const pushId = process.env['NOTEGIT_PUSH_ID'];
+  if (pushId !== undefined) {
+    try {
+      const settled = settlePushRejected(db, {
+        pushId,
+        refName: input.cmd.ref,
+        reason: input.reason,
+        detail: { checkpoint: 'update' },
+      });
+      if (settled > 0) return;
+    } catch (err) {
+      console.error(`[notegit update] 预记录清算失败（回退独立插行）：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   try {
     recordAuditEvent(db, {
       occurredAt: new Date().toISOString(), // 服务端时钟（架构 §4.4；hook 即服务端进程）

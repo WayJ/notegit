@@ -169,6 +169,7 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
         membershipSource: createDbMembershipSource(deps.db),
         authenticateToken: (token) => credentialsService.authenticate(token),
         maintenanceGate,
+        db: deps.db, // S3-T6：receive 子进程退出后的中断清扫（pending → 待核对）
       });
     }
   }
