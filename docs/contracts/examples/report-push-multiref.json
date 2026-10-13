@@ -1,6 +1,6 @@
 {
   "$comment": "示例 4/5：服务端 pre-receive 多 ref 推送——所有 ref 先统一检查，任何失败则全部拒绝（全有或全无，架构 §5.4）；同时演示客户端规则过期提示（N-UPGRADE-001，§5.4）与逐提交定位（commit 字段）。",
-  "rulesVersion": "1.0.0-draft.1",
+  "rulesVersion": "1.0.0-draft.2",
   "scope": "pre-receive",
   "result": "fail",
   "exitCode": 1,

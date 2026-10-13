@@ -1,6 +1,6 @@
 {
   "$comment": "示例 5/5：服务端 pre-receive 运行错误（校验超时）——result=error、退出码 2（架构 §5.4：0=通过、1=校验错误、2=运行错误）。运行级问题不落在具体文件上，置于顶层 issues；服务端 fail-closed：refs 全部 rejected，不做部分接受。",
-  "rulesVersion": "1.0.0-draft.1",
+  "rulesVersion": "1.0.0-draft.2",
   "scope": "pre-receive",
   "result": "error",
   "exitCode": 2,
