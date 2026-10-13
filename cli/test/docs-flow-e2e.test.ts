@@ -145,7 +145,7 @@ test('安装：单 tarball 安装后 notegit 可执行，--version 与 --help �
   for (const name of ['login', 'ls', 'lint', 'setup', 'sync']) {
     assert.ok(h.stdout.includes(name), `--help 应列出 ${name}`)
   }
-  assert.ok(h.stdout.includes('S7'), 'sync 占位应标注 S7（文档主线与实现一致的安装态验证）')
+  assert.ok(h.stdout.includes('发现并安全同步知识库到本地'), 'sync 应以实现态出现在命令列表（S7-T1 转正；安装态验证）')
 })
 
 test('登录：login 成功——掩码输出、凭据 0600、helper 注册；全文无明文 token', async () => {

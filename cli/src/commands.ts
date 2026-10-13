@@ -1,6 +1,6 @@
 /**
- * 子命令注册表（S6-T1 骨架）：每命令的帮助文案与交付状态标注。
- * status 同时用于占位执行的 stderr 提示；sync 按 sprint D6 仅占位、真实现属 S7。
+ * 子命令注册表（S6-T1 骨架，随各任务转正）：每命令的帮助文案与交付状态标注。
+ * status 同时用于帮助渲染的「状态」行；未标 implemented 的命令按占位执行（退出码 2）。
  */
 export interface CommandSpec {
   name: string
@@ -67,11 +67,17 @@ export const COMMANDS: Record<string, CommandSpec> = {
   },
   sync: {
     name: 'sync',
-    summary: '发现并安全同步知识库到本地（S7 实现，本 sprint 仅骨架）',
-    status: 'S7 实现（本 sprint 仅骨架——sprint/S6 决策 D6）',
-    usage: 'notegit sync',
-    detail: '按安全策略克隆/快进更新可见库，遇脏工作区、未推送提交、分叉等保留改动并逐库报告。注意：sync 真实现属 S7，本 sprint 不提供。',
-    options: ['-h, --help  输出本帮助'],
+    summary: '发现并安全同步知识库到本地（克隆/快进，不覆盖本地改动）',
+    status: 'S7-T1 交付：六态策略表（新库克隆、干净快进、脏/领先/分叉/他分支跳过）；JSON 报告契约 S7-T3 收口',
+    implemented: true,
+    usage: 'notegit sync [--depth <深度>]',
+    detail: '发现当前员工可见库（GET /api/v1/vaults，Bearer；同 ls），按架构 §7.3 策略表同步到 <本地根目录>/<slug>：无副本 → 完整克隆；干净且位于默认分支 → fetch 后快进（--ff-only 语义）；有未提交修改、领先远端、分叉或位于其他分支 → 跳过并逐库报告（绝不自动 stash/reset/rebase）。浅克隆仅 --depth 显式选项；slug 改名只提示映射变化，不移动本地目录。逐库报告成功/跳过/失败；退出码非零当且仅当有失败（跳过不判失败）。',
+    options: [
+      '--depth <深度>  新库浅克隆（显式选项；缺省完整克隆，不影响已有副本的快进更新）',
+      '凭据面：环境变量 NOTEGIT_SERVER 与 NOTEGIT_TOKEN（同 ls）；Git 传输凭据经 credential helper',
+      '本地根目录：NOTEGIT_LOCAL_ROOT / CLI 配置 / 缺省 ~/knowbase（同 ls 三级解析）',
+      '-h, --help      输出本帮助',
+    ],
   },
 }
 

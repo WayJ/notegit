@@ -3,7 +3,7 @@
 Notegit 知识库系统的员工端命令行工具。与服务端使用同一套内容校验规则（`packages/validation` 单一来源，校验实现内嵌于发行包，S6-T7 三端一致构建断言锁定），凭据不进入仓库或日志。
 
 - 本文与实现同步：每命令节内置 `--help` 原文（`cli/test/docs-consistency.test.ts` 自动抽检文档与 `--help` 一致）；结构化输出样例过 `validation-report.schema.json` 契约校验。
-- 状态约定：**文档只描述已实现行为**。`sync` 为 S7 占位骨架，本文如实标注、不给出可用示例。
+- 状态约定：**文档只描述已实现行为**。
 
 ## 环境要求
 
@@ -49,7 +49,7 @@ notegit setup
 | `notegit ls` | 列出有权访问的知识库、clone URL 与本地状态 | 已实现（S6-T3 交付） |
 | `notegit lint` | 手动校验知识库内容（与服务端同一规则） | 已实现（S6-T4 交付，S6-T7 接线版本探测端点） |
 | `notegit setup` | 在已克隆库中安装/卸载/管理本地校验 hook 与本地根目录 | 已实现（S6-T5/T6 交付） |
-| `notegit sync` | 发现并安全同步知识库到本地（S7 实现，本 sprint 仅骨架） | **S7 实现**（本 sprint 仅骨架，sprint/S6 决策 D6） |
+| `notegit sync` | 发现并安全同步知识库到本地（克隆/快进，不覆盖本地改动） | 已实现（S7-T1 交付；JSON 报告契约 S7-T3 收口） |
 
 退出码契约（全部命令一致）：`0` 成功；`1` 命令失败（校验错误、查询失败等业务性失败）；`2` 用法错误或运行错误。与校验报告协议语义一致（`docs/contracts/validation.md` §6.1）。
 
@@ -180,7 +180,7 @@ handbook           未克隆   reader  main    员工手册
 | `not_cloned` | 本地根目录下无 `<root>/<slug>` 副本 |
 | `cloned` | 本地 head == 默认分支远端 tip |
 | `behind` | 本地 head 是远端 tip 的祖先（落后，可快进） |
-| `unknown` | 无法判定（非 git 目录、远端不可达、本地领先/分叉等；精确六态机属 S7 sync） |
+| `unknown` | 无法判定（非 git 目录、远端不可达、本地领先/分叉等；精确六态见 `notegit sync`，S7-T1） |
 
 本地状态判定会对每库做一次 `git fetch`（取远端 tip，凭据走 login 注册的 helper；token 不进 URL/参数）。
 
@@ -373,28 +373,45 @@ $ notegit setup            # 在已克隆库内
 
 ### notegit sync
 
-`sync` 的安全同步（克隆/快进、脏工作区与未推送提交保护、逐库报告）按规划属 **S7**（sprint/S6 决策 D6）；本版本仅保留命令骨架占位，运行返回退出码 2：
+发现当前员工可见库（`GET /api/v1/vaults`，凭据面同 `ls`），按**架构 §7.3 策略表**同步到 `<本地根目录>/<slug>`（目录三级解析同 `ls`：`NOTEGIT_LOCAL_ROOT` > CLI 配置 > `~/knowbase`）：
+
+| 工作副本状态 | 行为 |
+|---|---|
+| 新库（无本地副本） | 完整克隆（浅克隆仅 `--depth` 显式选项） |
+| 干净且位于默认分支 | `git fetch` 后快进（`--ff-only` 语义；已最新则不动） |
+| 有未提交修改（含未跟踪文件） | 跳过并报告，逐字节保留本地改动 |
+| 领先远端（未推送提交） | 跳过并报告 |
+| 与远端分叉 | 跳过并报告 |
+| 位于其他分支 / 分离头指针 | 跳过并报告 |
+
+**不覆盖红线**：任何情况下不自动 stash / reset / rebase / 覆盖用户修改。slug 改名只提示本地目录映射变化，不移动、不删除目录。逐库报告成功 / 跳过 / 失败；退出码非零当且仅当有失败（跳过不判失败）。当前报告为最小文本行（成功走 stdout、跳过/失败走 stderr + 汇总行）；JSON 输出与逐项契约属 S7-T3。
 
 ```text
 $ notegit sync
-notegit sync: 尚未实现（S7 实现（本 sprint 仅骨架——sprint/S6 决策 D6））
+v-notes：已克隆（HEAD 3f2a1bc）→ /Users/alice/knowbase/v-notes
+v-handbook：已快进 9d81e02 → 4c55b7a
+v-draft：跳过——工作区有未提交修改（含未跟踪文件）；保留本地改动，不自动 stash/reset/rebase
+同步完成：共 3 库（成功 2、跳过 1、失败 0）
 ```
 
-当前更新本地副本请直接使用 git：`git -C ~/knowbase/<slug> pull --ff-only`。
+Git 传输（clone/fetch）走服务端 Smart HTTP，凭据经 `login` 注册的 credential helper（token 不进 URL/参数/日志）。
 
 #### 帮助原文（`notegit sync --help`）
 
 ```text
-notegit sync — 发现并安全同步知识库到本地（S7 实现，本 sprint 仅骨架）
+notegit sync [--depth <深度>] — 发现并安全同步知识库到本地（克隆/快进，不覆盖本地改动）
 
 说明：
-  按安全策略克隆/快进更新可见库，遇脏工作区、未推送提交、分叉等保留改动并逐库报告。注意：sync 真实现属 S7，本 sprint 不提供。
-  状态：尚未实现（S7 实现（本 sprint 仅骨架——sprint/S6 决策 D6））
+  发现当前员工可见库（GET /api/v1/vaults，Bearer；同 ls），按架构 §7.3 策略表同步到 <本地根目录>/<slug>：无副本 → 完整克隆；干净且位于默认分支 → fetch 后快进（--ff-only 语义）；有未提交修改、领先远端、分叉或位于其他分支 → 跳过并逐库报告（绝不自动 stash/reset/rebase）。浅克隆仅 --depth 显式选项；slug 改名只提示映射变化，不移动本地目录。逐库报告成功/跳过/失败；退出码非零当且仅当有失败（跳过不判失败）。
+  状态：已实现（S7-T1 交付：六态策略表（新库克隆、干净快进、脏/领先/分叉/他分支跳过）；JSON 报告契约 S7-T3 收口）
 
 选项：
-  -h, --help  输出本帮助
+  --depth <深度>  新库浅克隆（显式选项；缺省完整克隆，不影响已有副本的快进更新）
+  凭据面：环境变量 NOTEGIT_SERVER 与 NOTEGIT_TOKEN（同 ls）；Git 传输凭据经 credential helper
+  本地根目录：NOTEGIT_LOCAL_ROOT / CLI 配置 / 缺省 ~/knowbase（同 ls 三级解析）
+  -h, --help      输出本帮助
 
-退出码：0 成功；1 命令失败；2 用法/运行错误（占位命令一律退出码 2）
+退出码：0 成功；1 命令失败；2 用法/运行错误
 ```
 
 ---
@@ -419,9 +436,9 @@ notegit sync — 发现并安全同步知识库到本地（S7 实现，本 sprin
 
 | 变量 | 消费命令 | 说明 |
 |---|---|---|
-| `NOTEGIT_TOKEN` | `login`、`ls`、`lint` | 访问令牌（login 的令牌来源之一；ls/lint 凭据面） |
-| `NOTEGIT_SERVER` | `ls`、`lint` | 服务端基址（`https://host[:port]`；lint 仅用于规则版本探测） |
-| `NOTEGIT_LOCAL_ROOT` | `ls`、`setup` | 本地根目录覆盖；优先级：显式参数/环境变量 > CLI 配置（`setup --local-root` 持久化）> 缺省 `~/knowbase` |
+| `NOTEGIT_TOKEN` | `login`、`ls`、`lint`、`sync` | 访问令牌（login 的令牌来源之一；ls/lint/sync 凭据面） |
+| `NOTEGIT_SERVER` | `ls`、`lint`、`sync` | 服务端基址（`https://host[:port]`；lint 仅用于规则版本探测） |
+| `NOTEGIT_LOCAL_ROOT` | `ls`、`setup`、`sync` | 本地根目录覆盖；优先级：显式参数/环境变量 > CLI 配置（`setup --local-root` 持久化）> 缺省 `~/knowbase` |
 | `NOTEGIT_CREDENTIALS_FILE` | `login`、`credential` | 凭据文件路径覆盖（测试隔离用；缺省 `~/.config/notegit/credentials`，尊重 `XDG_CONFIG_HOME`） |
 
 ## 安全边界

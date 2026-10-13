@@ -27,11 +27,22 @@ const REASONS: Record<Exclude<ApiOutcome, 'ok'>, string> = {
   'E-AUTH-004': 'account_disabled',
 }
 
+/** GET /api/v1/vaults 的库列表项（api.md §5，与 cli/src/ls/api.ts 的 VaultSummary 同构）。 */
+export interface MockVault {
+  readonly slug: string
+  readonly name: string
+  readonly role: string
+  readonly default_branch: string
+  readonly main_admin_only: boolean
+}
+
 export interface MockState {
   username: string
   token: string
   apiOutcome: ApiOutcome
   gitBasicAccepted: boolean
+  /** GET /api/v1/vaults 返回面（S7-T1 sync e2e；缺省空列表；可变——测试中改 slug 模拟改名）。 */
+  vaults?: MockVault[]
 }
 
 export interface MockServer {
@@ -46,11 +57,12 @@ function denyBasic(res: http.ServerResponse): void {
   res.end('auth required')
 }
 
-/** 启动模拟服务：GET /api/v1/credentials 走 Bearer；其余路径走 Basic + git http-backend CGI。 */
+/** 启动模拟服务：GET /api/v1/credentials 与 /api/v1/vaults 走 Bearer；其余路径走 Basic + git http-backend CGI。 */
 export function startMockServer(projectRoot: string, state: MockState): Promise<MockServer> {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://notegit-test')
     if (url.pathname === '/api/v1/credentials') return handleApi(req, res, state)
+    if (url.pathname === '/api/v1/vaults') return handleVaults(req, res, state)
     return handleGit(req, res, url, projectRoot, state)
   })
   return new Promise((resolve) => {
@@ -78,6 +90,18 @@ function handleApi(req: http.IncomingMessage, res: http.ServerResponse, state: M
   res.end(JSON.stringify({ error: { code, message: MESSAGES[code as Exclude<ApiOutcome, 'ok'>], details: { reason: REASONS[code as Exclude<ApiOutcome, 'ok'>] } } }))
 }
 
+/** GET /api/v1/vaults（api.md §5 形态；Bearer 认证同 credentials——CLI 发现面）。 */
+function handleVaults(req: http.IncomingMessage, res: http.ServerResponse, state: MockState): void {
+  const auth = String(req.headers['authorization'] ?? '')
+  if (req.method !== 'GET' || state.apiOutcome !== 'ok' || auth !== `Bearer ${state.token}`) {
+    res.writeHead(401, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ error: { code: 'E-AUTH-001', message: '未认证', details: { reason: 'invalid' } } }))
+    return
+  }
+  res.writeHead(200, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ vaults: state.vaults ?? [] }))
+}
+
 function handleGit(req: http.IncomingMessage, res: http.ServerResponse, url: URL, projectRoot: string, state: MockState): void {
   if (!state.gitBasicAccepted) return denyBasic(res)
   const auth = req.headers['authorization']
@@ -88,7 +112,9 @@ function handleGit(req: http.IncomingMessage, res: http.ServerResponse, url: URL
   const pass = decoded.slice(sep + 1)
   if (user !== state.username || pass !== state.token) return denyBasic(res)
 
-  const m = url.pathname.match(/^\/([A-Za-z0-9][A-Za-z0-9-]*?)(?:\.git)?(\/.*)?$/)
+  // S7-T1：接受生产同构的 /git/<slug>[.git] 前缀（server cgi.ts GIT_URL_RE；CLI
+  // cloneUrlOf 生成该形态）；裸根 /<slug>.git 兼容保留（login 集成测试用）。
+  const m = url.pathname.match(/^\/(?:git\/)?([A-Za-z0-9][A-Za-z0-9-]*?)(?:\.git)?(\/.*)?$/)
   if (!m) {
     res.writeHead(404)
     res.end('not found')
