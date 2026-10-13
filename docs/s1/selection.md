@@ -87,7 +87,7 @@
 | 项 | 最低规格 | 推荐规格 | 推导依据 |
 |---|---|---|---|
 | CPU | 1 vCPU | 2 vCPU | Git 请求为子进程+短 CPU 脉冲（clone 197ms/4MB 仓库，实测）；1 vCPU 可运行，2 vCPU 让 Web/Git/校验互不排队 [实测+推断] |
-| 内存 | 512 MB | 1 GB | 服务进程 RSS 实测 114.7MB（负载后）+ 每并发 clone 的 git 子进程链峰值合计 ~17MB 实测（upload-pack 7.7 + http-backend 5.2 + 3.9，`spikes/git-http-backend/evidence/route-b-child-rss.txt`）；512MB 为地板（约 3-4 个并发 clone + 系统），1GB 给更多并发与页缓存余量 [实测] |
+| 内存 | **768 MB** | 1 GB | **S8-T8 修正（2026-10-14 ADR D14）**：全功能服务进程 RSS 基线实测 232–240MB（S7-T8/S8-T8，S2–S6 功能并入后；本节原按 spike 期 114.7MB 推导的 512MB 地板作废）+ 每并发 clone 子进程链 ~17MB × 默认并发上限 8（`git.maxConcurrentChildren`）= 136MB + 系统/页缓存/备份瞬态 ≥100–150MB；512MB 档经 `git.maxConcurrentChildren` 降至 4 可勉强运行但备份窗口紧，不承诺；推荐 1 GB（维持） [实测] |
 | 磁盘（数据卷） | 2 GB | 20 GB | 镜像外数据 = bare 仓库（4.1MB/501 文件实测样本）× 库数 + SQLite 文件（KB–MB 级）+ 备份空间（×2）+ WAL；20GB 覆盖假设容量并留备份窗口 [实测+推断] |
 | 镜像 | `node:24-alpine`（234MB 实测本地）+ `apk add git git-daemon`（git 包 6833 KiB 实测；**git-http-backend 在 Alpine 归属 `git-daemon` 包而非 `git`——容器实测 + pkgs.alpinelinux.org v3.21/v3.22 双验证**）+ better-sqlite3 仅在弃用 node:sqlite 时需要 | 同左 | [实测] db-ops-notes.md；https://pkgs.alpinelinux.org/contents?branch=v3.22&file=git-http-backend |
 | 网络 | 单端口 HTTPS（反向代理终结 TLS 或容器内 TLS，S2 决定） | 同左 | 架构 §10 |

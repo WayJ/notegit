@@ -1,6 +1,6 @@
 {
   "$comment": "示例 3/5：服务端 pre-receive 拒绝危险 tree 条目。架构 §9：第一版禁止符号链接与 submodule，路径检查按 Git tree 条目执行；§5.4：检查每个新引入提交相对父提交的新增/修改文件，拒绝整次 push。",
-  "rulesVersion": "1.0.0-draft.1",
+  "rulesVersion": "1.0.0-draft.2",
   "scope": "pre-receive",
   "result": "fail",
   "exitCode": 1,

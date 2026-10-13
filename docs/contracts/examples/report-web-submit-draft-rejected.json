@@ -1,6 +1,6 @@
 {
   "$comment": "示例 6/6：网页正式提交校验失败——scope=web-submit。架构 §5.4：根据 base commit 构造完整候选提交；失败时不发布、保留草稿和错误提示。README 豁免文件以 exempt=true 标注（架构 §5.2：豁免 frontmatter，仍受路径/类型/容量规则）。无 refs（非 push 场景）。",
-  "rulesVersion": "1.0.0-draft.1",
+  "rulesVersion": "1.0.0-draft.2",
   "scope": "web-submit",
   "result": "fail",
   "exitCode": 1,

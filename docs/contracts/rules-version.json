@@ -1,6 +1,6 @@
 {
   "contract": "notegit-validation",
-  "rulesVersion": "1.0.0-draft.1",
+  "rulesVersion": "1.0.0-draft.2",
   "status": "draft",
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "effectiveDate": "2026-10-12",
@@ -17,6 +17,14 @@
     "defaults": "validation-defaults.json"
   },
   "changelog": [
+    {
+      "version": "1.0.0-draft.2",
+      "date": "2026-10-14",
+      "changes": [
+        "validation.runtime.maxValidationMemoryMb 默认值 256 → 512（B2 运维型）：入口按进程整体 RSS 判定，web-submit 所在 app 进程基线 RSS 实测 232–240MB（S7-T8/S8-T8），256 阈值距基线 <25MB 构成现实误杀风险；512 = 基线 × 2（依据 .agents/notes/2026-10-14-S8-T8-capacity.md）（2026-10-14 ADR D14）",
+        "新增 git.maxConcurrentChildren（B2 运维型，默认 8；git 域新顶层节，不属 validation.* 命名域、不改变内容接受集）：githttp 每请求 http-backend spawn 前 FIFO 排队取槽——排队而非拒绝，git 客户端对等待透明；每链 ~17MB × 8 = 136MB 子进程预算 + 本体 RSS 基线 232–240MB = 368MB ⊂ 768MB 部署地板；只覆盖 githttp 链（依据 .agents/notes/2026-10-14-S8-T8-capacity.md）（2026-10-14 ADR D14）"
+      ]
+    },
     {
       "version": "1.0.0-draft.1",
       "date": "2026-10-12",

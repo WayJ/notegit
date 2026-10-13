@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 契约 | notegit-validation |
-| 规则版本 | **1.0.0-draft.1**（唯一机器来源：[rules-version.json](rules-version.json)；status: draft） |
+| 规则版本 | **1.0.0-draft.2**（唯一机器来源：[rules-version.json](rules-version.json)；status: draft） |
 | 基线 | architecture.md §5、§9（v0.2，2026-10-12）——本文每条规则括注架构条文编号，无编号者标注为 T2 建议 |
 | 任务/问题 | S1-T2（roadmap F05）；Q4 规则版本化、Q7 限制清单 |
 | 机器可读定义 | [schemas/frontmatter.schema.json](schemas/frontmatter.schema.json)、[schemas/validation-report.schema.json](schemas/validation-report.schema.json)、[validation-defaults.json](validation-defaults.json) |
@@ -160,7 +160,7 @@ secret: !exec "rm -rf /"     # 非法：自定义 tag → E-FM-007
 | `validation.exemptions.specialFilePatterns` | [".gitignore", ".gitattributes"] | glob 清单 | 判定型 | 见 §7 B1 | §5.2 特殊/配置文件；默认最小清单（建议） |
 | `validation.runtime.validationTimeoutMs` | 10000 | ms | 运维型 | 见 §7 B2 | §9 时间限制；单次校验运行（建议）；超时→E-RUN-001/退出码 2 |
 | `validation.runtime.maxConcurrentValidations` | 4 | 并发数 | 运维型 | 见 §7 B2 | §9 并发限制；单实例（建议） |
-| `validation.runtime.maxValidationMemoryMb` | 256 | MiB | 运维型 | 见 §7 B2 | §9 内存限制；单次校验（建议） |
+| `validation.runtime.maxValidationMemoryMb` | 512 | MiB | 运维型 | 见 §7 B2 | §9 内存限制；单次校验（建议） |
 
 ### 5.2 类型规则
 
@@ -231,7 +231,7 @@ Schema：[schemas/validation-report.schema.json](schemas/validation-report.schem
 
 ### 7.1 版本号语义
 
-- `rulesVersion` 采用 **SemVer**（`MAJOR.MINOR.PATCH[-prerelease]`）；当前 `1.0.0-draft.1`（status: draft），S3 实现定稿升 `1.0.0`。
+- `rulesVersion` 采用 **SemVer**（`MAJOR.MINOR.PATCH[-prerelease]`）；当前 `1.0.0-draft.2`（status: draft），S3 实现定稿升 `1.0.0`。
 - **唯一机器来源**：[rules-version.json](rules-version.json)（含 changelog）。每次规则变更：升版本号 + changelog 记录（版本、日期、变更点、默认值变更须记**旧值→新值**）。
 - 判定「兼容/破坏」的准绳：**默认配置下的内容接受集**与**协议形状**是否变化。
 
@@ -283,7 +283,7 @@ python3 docs/contracts/tools/verify_validation_contracts.py
 
 - **Q7 校正**：§5.1 全部默认值为建议值，S3 实现期以 Q2 部署规格、S8 以实际基准校正（校正值按 §7.2 定版本级别）。
 - **$id 占位域名**（`notegit.local`）：T1 选型定案后由实现固定真实 $id，保持文件路径与 `rulesVersion` 机制不变（PATCH 级）。
-- **定稿**：S3 实现首版校验通过验收后，`1.0.0-draft.1 → 1.0.0`（status: final），changelog 记录。
+- **定稿**：S3 实现首版校验通过验收后，`1.0.0-draft.2 → 1.0.0`（status: final），changelog 记录。
 - E-LIMIT-004/005 的超限计量精确口径（打包对象字节数 vs 解压字节数）在 S3 实现时确认；`ref` 定位字段已纳入 schema（issue 级）。
 - §3.1/§3.2/§4.1 的版本化常量目前同时存在于 schema 与文档文本，门禁未做两者机器交叉核对——S3 定稿时建议提取常量清单文件或由代码生成文档表，消除该漂移面。
 - 本契约为 S1 草案：**不宣称 E1 DoD（含 DOD-05）完成**；DOD-05 的实证（暂存区/服务端/网页同规则、各绕过路径实测拦截）属 S3/S9 验收。

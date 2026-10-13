@@ -47,7 +47,7 @@
 ```
 
 - `details` 可选，键随码定；`Retry-After` 头仅用于 429。
-- **内容校验失败不是信封**：校验失败的提交/推送请求返回 422，body 直接是 T2 [validation-report.schema.json](schemas/validation-report.schema.json) 报告（`scope` 按入口填 `web-submit`），顶层含 `rulesVersion`——错误码即 T2 注册表（E-FM-*、E-PATH-*、E-LIMIT-* 等），不在本文件重复定义。规则版本唯一机器来源：[rules-version.json](rules-version.json)，当前 **1.0.0-draft.1**。
+- **内容校验失败不是信封**：校验失败的提交/推送请求返回 422，body 直接是 T2 [validation-report.schema.json](schemas/validation-report.schema.json) 报告（`scope` 按入口填 `web-submit`），顶层含 `rulesVersion`——错误码即 T2 注册表（E-FM-*、E-PATH-*、E-LIMIT-* 等），不在本文件重复定义。规则版本唯一机器来源：[rules-version.json](rules-version.json)，当前 **1.0.0-draft.2**。
 
 ### 2.2 两层关系声明（coordinator 2026-10-12 批复边界）
 
@@ -143,7 +143,8 @@
 
 - **POST /api/v1/admin/maintenance**（写；运行态写入——闸门 allowlist 放行自身）：开启维护模式。成功 **204**；幂等（已开启仍 204，不重复记审计）；状态迁移发生时记 `maintenance.enable` 审计行（storage-model §5：运行态写入，不入备份一致性集合）。
 - **DELETE /api/v1/admin/maintenance**（写；运行态写入）：关闭。成功 **204**（同幂等与审计语义；维护期间可关闭）；记 `maintenance.disable`。
-- **GET /api/v1/admin/maintenance**：200 `{maintenance: true|false}`（当前状态查询；只读）。
+- **GET /api/v1/admin/maintenance**（读；实例管理员）：200 `{enabled: boolean, drain: {pending: number}}`。`pending` = storage-model §4 `audit.drain_count` 规范查询（pending|unresolved 在途写计数）——维护关闭时恒为当前计数（通常 0），维护开启时即排空进度。GET 属安全方法，维护中放行（backup-recovery §3 矩阵第 7 行）。
+- `drain.pending` 设计为 S8-T2 指标面（R14）可直接消费的预留字段；T2 若落 `/healthz` 扩展或独立指标端点，建议从此端点/查询取数而不是另建口径。（2026-10-14 ADR D14 补录（M1）；实现自 S8-T3。）
 - 错误：401（§1 通用）；403 E-AUTHZ-001（非实例管理员）。
 - 开启后的全局效果（写端点 503 E-MAINT-001、receive-pack 403、读与登录放行）见 §1，本节不重复。（2026-10-13 ADR D12 补录；实现自 S2-T7。）
 
@@ -162,6 +163,21 @@
 - 用途：CLI/程序化客户端探测服务端规则版本——本地旧于服务端时客户端附 N-UPGRADE-001 提示（validation §6：版本差异本身不构成拒绝理由；服务端为运行时权威）。
 - 成功：200 `{rulesVersion, status}`——值取自 [rules-version.json](rules-version.json) 唯一机器来源（服务端运行时经 notegit-validation 读取，与 pre-receive 同源，不另行复制维护）。
 - 错误：401 E-AUTH-001（§1 通用 401 映射；Bearer/会话双载体）。
+
+
+### 3.8 运维指标（实例管理员；架构 §10 最低清单、R14 方法）
+
+- **GET /api/v1/admin/metrics**（读）：200 单对象——
+  - `disk`：`{wired, data_dir, capacity_bytes, free_bytes, domains: [{name, used_bytes}], watermark: {used_ratio, level, alert, warn_ratio, critical_ratio}}`。分域清单 = backup-recovery §2 四分域（git/db/config/keys）递归字节合计；容量/空闲取 dataDir 所在文件系统 statfs；`level ∈ ok|warn|critical`（默认阈值 0.80/0.90，`used_ratio ≥ critical` 即 critical、`≥ warn` 即 warn；`alert` ⇔ warn/critical）；容量不可知 → `level: unknown` 不告警（不伪造比值）。无 dataDir 接线形态（测试面）`{wired: false}`。
+  - `pushes`：`{failed, unresolved}`——vault.push 终态计数（**审计行为唯一计数来源**，storage-model §5/§6；unresolved 为恢复对账可见性）。
+  - `web_submits`：`{failed}`——vault.web_submit rejected 计数（同上）。
+  - `validation`：`{failed, timing}`——failed = detail.reason='validation' 的拒绝行（push 与 web-submit 两入口通吃）；timing 按 scope 呈现 `{count, p50_ms, p95_ms, max_ms}`（最近邻秩；样本窗口 512/每 scope）。**边界**：pre-receive scope 的校验运行于 hook 子进程，样本不驻留 app 进程——生产形态 timing 只覆盖 web-submit scope（如实呈现，push 侧失败次数走 failed 不受影响）。
+  - `auth_failures`：`{total, by_entry: {api, web, git}, last_at}`——identity §8「认证失败不逐条入审计」的失败计数替代呈现（401 响应归因，E-AUTH-001..004 全集；429 限速与 403 授权拒绝不计）。进程内运行态计数，**重启归零**（如实呈现）。
+  - `backup`：`{wired: true, last_completed_at: string | null}`——完成时间 = 最新 `backup.completed` 成功行的 occurred_at（**以审计行为唯一来源**，与失败计数同一选型，不另立账本）；尚无备份如实 null；R14「备份完成时间可查且正常」即消费本字段；排空超时中止**不写** backup.completed（未完成不记完成时间，可观测面 = CLI 错误输出 + 维护进度端点）。
+- 错误：401（§1 通用）；403 E-AUTHZ-001（非实例管理员）。
+- 审计：只读端点，不记审计行；维护模式读放行（backup-recovery §3 矩阵第 7 行）。
+
+（2026-10-14 ADR D14 入册（metrics 建议稿 C1；`backup` 字段按 backup 建议稿 B4 承 C2 定稿为 `{wired: true, last_completed_at}`）；实现自 S8-T2/T4。）
 
 
 ### 3.5 搜索索引状态与全量重建（实例管理员；架构 §9；backup-recovery §7 步骤 9）
@@ -309,7 +325,7 @@
 - Clone URL：`https://<host>/git/<slug>.git`；端点 `info/refs?service=git-(upload|receive)-pack`、`git-upload-pack`、`git-receive-pack` 由 Fastify 路由组装 CGI 环境转发 `git http-backend`（流式：`reply.hijack()` + content-type 透传，selection.md §3 实测）。
 - **REMOTE_USER 透传**：CGI 层把认证员工标识（+ 凭据 id）注入 `REMOTE_USER`，pre-receive hook 据此取得认证主体（selection.md §2 实测 B4；审计主体不信任 commit author，架构 §4.4）。
 - 认证：401 + `WWW-Authenticate: Basic`；无权/未知库 404（D-IC-06）。读（upload-pack/refs 广告）需 reader+。
-- 拒绝呈现：pre-receive 以 pkt-line 输出首个错误的 `路径:错误码:摘要`（含 `rulesVersion`）到 sideband，report-status 返回 ng；完整报告由客户端 `notegit lint`（本地同规则）获得。维护模式：receive-pack 403。
+- 拒绝呈现：pre-receive 以 pkt-line 输出首个错误的 `路径:错误码:摘要`（含 `rulesVersion`）到 sideband，report-status 返回 ng；完整报告由客户端 `notegit lint`（本地同规则）获得。维护模式：receive-pack 403（先于授权判定、对所有 receive 请求同体——标准 git 客户端不渲染 JSON 信封体，push 403 即「维护中」的可识别信号（E-MAINT-001），经 `GET /api/v1/admin/maintenance` 复核；2026-10-14 ADR D14 补录（M5/M3））。
 - 实现注意：Node 内对自家 HTTP 服务的 git 子命令**必须异步 spawn**（`execFileSync` 阻塞事件循环自死锁，T1 spike 两次踩中实录，selection.md §2）。
 
 ### 8.5 两入口差异点（其余全部共享）
