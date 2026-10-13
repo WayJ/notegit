@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const cliDir = fileURLToPath(new URL('..', import.meta.url))
@@ -17,10 +17,18 @@ interface PackEntry { path: string; mode: number }
 interface PackResult { files: PackEntry[]; entryCount: number }
 
 function npmPackDryRun(): PackResult {
-  // dry-run 前先构建：pack 产物必须含 dist（prepack 在真实 npm pack 时自动构建，dry-run 亦应等价）
-  const b = spawnSync('npm', ['run', 'build'], { cwd: cliDir, encoding: 'utf8' })
-  assert.equal(b.status, 0, `npm run build 应成功，stderr：${b.stderr.slice(0, 500)}`)
-  const r = spawnSync('npm', ['pack', '--dry-run', '--json'], { cwd: cliDir, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+  // S7-T8 选型：不在测试内构建（T4 挂账的并发竞态——node --test 阶段多文件并发，
+  // 本文件曾每次 dry-run 前跑 npm run build，半写 dist 被并发读者（login/sync 系）
+  // 命中即瞬态失败）。构建属 npm test 串行前置相；这里消费已构建的 dist，
+  // --ignore-scripts 跳过 prepack（=npm run build，同源竞态）。备选「构建加文件锁」
+  // 被否决：竞态受害方是并发读者而非构建者，要求全部读者持锁侵入面过大；
+  // 「test 脚本拆分串行相」被否决：源头已无并发构建者，无需新增编排。
+  // 真实发布路径不受影响：npm pack（非 dry-run）照常走 prepack 自动构建。
+  assert.ok(
+    existsSync(new URL('../dist/bin/notegit.js', import.meta.url)),
+    'dist 未构建——pack 清单断言依赖已构建产物；先 `npm run build`（或走 `npm test`，其串行前置相已含构建）',
+  )
+  const r = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: cliDir, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
   assert.equal(r.status, 0, `npm pack --dry-run 应成功，stderr：${r.stderr.slice(0, 500)}`)
   const parsed = JSON.parse(r.stdout) as PackResult[]
   assert.ok(parsed.length > 0, 'npm pack --json 应输出至少一个包条目')
