@@ -5,19 +5,19 @@ import { authorize } from '../../auth/lifecycle.ts';
 import { createDbMembershipSource } from '../../vaults/membership.ts';
 import { VaultService } from '../../vaults/service.ts';
 import { html, sendPageNotFound } from '../page-kit.ts';
-import { vaultListPage, browsePage, browseStatePage, viewPlaceholderPage, browseUrl } from './pages.ts';
-import { readDirTree, readEntryAt, findReadmeEntry, readBlobText, README_RENDER_MAX_BYTES } from './tree.ts';
+import { vaultListPage, browsePage, browseStatePage, browseUrl } from './pages.ts';
+import { readDirTree, findReadmeEntry, readBlobText, README_RENDER_MAX_BYTES } from './tree.ts';
 
 /**
- * S4-T1 浏览族路由（有权库列表 + 目录浏览 + 预览占位）：
+ * S4-T1 浏览族路由（有权库列表 + 目录浏览）：
  *
  * - GET /vaults                        有权库列表（实时查成员关系——与 GET /api/v1/vaults
  *                                      同一判定面 VaultService.listVaults，架构 §4.2）。
  * - GET /vaults/{slug}                 库根 302 → /vaults/{slug}/browse（成员；否则 404）。
  * - GET /vaults/{slug}/browse[/<路径>]  目录浏览（默认分支实时读 Git tree；面包屑/导航；
  *                                      README.md 渲染为目录导航，豁免标注）。
- * - GET /vaults/{slug}/view/<路径>      文件预览占位（富文本安全渲染属 S4-T2，此处只挂
- *                                      路由族与元信息，占位页如实标注）。
+ * - GET /vaults/{slug}/view/<路径>      预览（S4-T2 起由 view/ 模块持有——安全渲染
+ *                                      落地时占位路由迁出本文件，见 web/routes.ts 注册表）。
  *
  * 授权：页面级经共用 authorize（auth/lifecycle.ts × vaults/membership.ts 真实表
  * MembershipSource——与 Web API/Git 三入口同源）；无权与不存在一律 404 同页
@@ -101,22 +101,6 @@ export function registerBrowseRoutes(app: FastifyInstance, opts: BrowseRoutesOpt
   };
   app.get('/vaults/:slug/browse', browseHandler);
   app.get('/vaults/:slug/browse/*', browseHandler);
-
-  // 预览占位：blob → 元信息占位页；tree → 302 目录浏览；其余（缺失/子模块）404
-  app.get('/vaults/:slug/view/*', async (req, reply) => {
-    const { slug } = req.params as { slug: string };
-    const vault = await requireVault(req, reply, slug);
-    if (!vault) return reply;
-    if (opts.dataDir === undefined) {
-      return html(reply, browseStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
-    }
-    const entryPath = (((req.params as Record<string, string>)['*'] ?? '')).replace(/\/+$/, '');
-    const read = await readEntryAt(opts.dataDir, vault.id, vault.defaultBranch, entryPath);
-    if (read.kind === 'ok') {
-      if (read.entry.type === 'tree') return reply.redirect(browseUrl(vault.slug, entryPath), 302);
-      if (read.entry.type === 'commit') return sendPageNotFound(reply); // 子模块不属 v1 页面域
-      return html(reply, viewPlaceholderPage({ vault, entryPath, entry: read.entry }));
-    }
-    return sendPageNotFound(reply);
-  });
+  // GET /vaults/{slug}/view/* —— S4-T2 起由 view/routes.ts 持有（安全渲染接管，
+  // 占位 handler 迁出；本模块只保留目录条目到预览页的链接 viewUrl）。
 }

@@ -114,20 +114,5 @@ export function browseStatePage(vault: { slug: string; name: string }, message: 
   );
 }
 
-/** 预览占位页（S4-T1 只挂路由族与元信息；安全渲染属 S4-T2，如实标注） */
-export function viewPlaceholderPage(input: {
-  vault: { slug: string; name: string };
-  entryPath: string;
-  entry: TreeEntry;
-}): string {
-  const { vault, entryPath, entry } = input;
-  const dirPath = entryPath.includes('/') ? entryPath.slice(0, entryPath.lastIndexOf('/')) : '';
-  return layout(
-    `${entry.name} — ${vault.name}`,
-    `<h1>${escapeHtml(entry.name)}</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, dirPath)} <span aria-hidden="true">›</span> ${escapeHtml(entry.name)}</nav>
-<p>类型：文件 · 大小：${entry.size ?? '?'} 字节</p>
-<p>预览为占位：Markdown 安全渲染（XSS 清理）由后续任务（S4-T2）提供。</p>
-`,
-  );
-}
+// 预览占位页（viewPlaceholderPage）——S4-T2 安全渲染落地时退役，预览页模板
+// 迁至 view/pages.ts（view 路由族归 view/ 模块持有）。

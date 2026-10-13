@@ -377,5 +377,6 @@ src/
 | GET /vaults/{slug} | 库根：成员 302 → `/vaults/{slug}/browse`；无权/不存在 404 | S4-T1 |
 | GET /vaults/{slug}/browse[/{path}] | 目录浏览：默认分支实时读 Git tree（每请求无缓存）；条目渲染与 `git ls-tree` 同集同序；面包屑；README.md（大小写不敏感）渲染为目录导航并标注 frontmatter 豁免（架构 §5.2） | S4-T1 |
 | GET /vaults/{slug}/view/{path} | 文件预览占位（元信息 + 如实标注；安全渲染 S4-T2 落地）；目录路径 302 → browse | S4-T1 |
+| GET /vaults/{slug}/view/{path} | 文件预览（S4-T2 落地，接管上行占位）：`.md` 服务端安全渲染（清理唯一通道：原始 HTML 剥离、URL 协议白名单 http/https/相对/锚点、脚本/事件属性不可达；代码块/行内码不二次渲染；frontmatter 不入正文；剥离如实标注）；非 Markdown 与超上限（1 MiB）仅元信息 + 如实标注；仓库相对图片经鉴权附件通道（S4-T4 落地，接口 `server/src/web/view/attachments.ts` 先行定形，未接入出占位标注）；目录路径 302 → browse | S4-T2 |
 
 S4-T2 起各任务在本表 append 各自页面行；模块注册单点见 `server/src/web/routes.ts`。
