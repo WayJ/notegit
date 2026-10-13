@@ -10,6 +10,8 @@ import { registerViewRoutes } from './view/routes.ts';
 import { registerUploadRoutes } from './upload/routes.ts';
 import { registerEditRoutes } from './edit/routes.ts';
 import { registerRenameRoutes } from './rename/routes.ts';
+import { registerHistoryRoutes } from './history/routes.ts';
+import { registerSearchPageRoutes } from './search/routes.ts';
 import { submissionsPlugin } from './edit/submissions.ts';
 
 /**
@@ -52,6 +54,8 @@ export function registerWebRoutes(app: FastifyInstance, opts: WebRoutesOptions):
   registerEditRoutes(app, shared); // S4-T3 元数据表单与正文编辑（edit 路由族；提交走 S3-T7 发布组件占位调用面，HTTP 接线属 T7）
   registerUploadRoutes(app, shared); // S4-T4 上传端点 + 附件鉴权读取（blob 寻址，URL 不可枚举；view 附件通道装配）
   registerRenameRoutes(app, shared); // S4-T5 重命名与删除（目标路径重判定/历史保留；GET 表单页 + POST 走发布组件）
+  registerHistoryRoutes(app, shared); // S5-T1 提交历史与文档 diff（默认分支实时读 Git；库级/路径级历史页 + 逐文件 diff；无权=不存在 404）
+  registerSearchPageRoutes(app, shared); // S5-T4 元数据查找页（/search?q=——查询面实时成员过滤，与 API 端点同一判定面）
   // S4-T7 提交端点（api.md §8.2 POST /api/v1/vaults/{slug}/submissions）：编辑页
   // 「提交」按钮消费端——/api/v1 域（认证 401 JSON、app 级 maintenanceGuard/
   // CSRF 自动覆盖）；冲突保护 409 E-RES-003 含当前 tip（组件层 gate 透传为最后一道）

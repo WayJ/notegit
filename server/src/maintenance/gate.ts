@@ -17,6 +17,9 @@ const RUNTIME_WRITE_ALLOWLIST: ReadonlySet<string> = new Set([
   '/api/v1/auth/login', // 矩阵第 6 行：会话是临时运行态，不属一致性集合（D-BR-06）
   '/api/v1/auth/logout', // 会话运行态写入（删会话行）：同上，登录会话域的运行态
   '/api/v1/admin/maintenance', // 维护模式自身的生命周期事件（开启/关闭），运行态写入
+  '/api/v1/admin/search-index/rebuild', // S5-T5：派生索引全量重建——派生数据不入备份
+  // 一致性集合（storage-model §2/backup §3 写分类），且 backup §7 步骤 9 的恢复
+  // 流程在维护模式内触发；闸门目的是拦权威数据写入，对派生面不适用
 ]);
 
 const SAFE_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS']);

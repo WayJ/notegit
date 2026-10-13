@@ -208,4 +208,48 @@ CREATE TABLE drafts (
 ) STRICT;`,
     ],
   },
+  {
+    // S5-T3（迁移 0009，本任务独占）：派生搜索索引两表。架构 §3.1/§9（派生数据、
+    // 索引延迟可观测）+ storage-model §2 明示「派生（不在本 schema）」——本表在
+    // 契约 DDL 之外落地，DDL 建议稿见 docs/s1/search-index-amendments.md（D11
+    // 模式：实现 + ADR 补正建议稿，不动 docs/contracts/）。0008 之后 append
+    // （迁移独占约束同前任务）。无外键是结构性裁决：派生行不得阻塞权威侧删库
+    // （孤儿行由索引器启动对账清理）；全量替换语义（同库逐路径一行）供 T5 重建复用。
+    version: 9,
+    description: 'S5-T3: search_index + search_index_state — derived metadata index from published default branch (架构 §3.1/§9; storage-model §2 派生不入权威 schema)',
+    statements: [
+      `-- 派生元数据索引（架构 §3.1：标题/标签/摘要 = 派生数据，可从 Git 全量重建；
+-- §9：内容搜索基于已发布分支派生索引、索引延迟可观测、写入完成不以索引成功为
+-- 唯一依据——D7 失败不阻断发布）。行来源 = 已发布默认分支的 .md 文件；逐库逐
+-- 路径一行，新版本全量替换（T5 重建走同一写面）。无外键：vaults 行删除不被
+-- 陈旧派生行阻塞，孤儿行由启动对账清理（不是删除事务的职责）。
+CREATE TABLE search_index (
+  vault_id   INTEGER NOT NULL,             -- 来源库（vaults.id，应用层维护；无 FK——见上）
+  path       TEXT    NOT NULL,             -- 库内路径（Git tree 条目原样）
+  commit_oid TEXT    NOT NULL,             -- 索引行来源的已发布默认分支 commit
+  title      TEXT,                         -- frontmatter title；README 等 frontmatter 豁免文件为 NULL（如实记录无 title）
+  tags       TEXT    NOT NULL,             -- JSON 数组文本（frontmatter tags；缺失/不可解析 = '[]'）
+  summary    TEXT    NOT NULL,             -- 正文首段摘要片段（截断存储，长度上界见索引器）
+  indexed_at TEXT    NOT NULL,             -- 行写入时间（服务端时钟）
+  PRIMARY KEY (vault_id, path)             -- 一库一路径一行（全量替换；旧路径删除即消失）
+) STRICT;`,
+      `-- 索引状态与可观测面（逐库一行）：延迟指标（lag_ms = indexed_at − 触发发布的
+-- 审计行 occurred_at）与时间戳可查（管理端点消费）；失败告警的数据面
+-- （consecutive_failures/last_error——索引失败不阻断发布，只在此可见 + 日志）。
+CREATE TABLE search_index_state (
+  vault_id             INTEGER NOT NULL PRIMARY KEY,
+  branch               TEXT    NOT NULL,             -- 被索引分支 = 库默认分支（vaults.default_branch 快照）
+  head_commit          TEXT,                         -- 索引已反映的默认分支 commit（NULL = 分支尚无提交）
+  triggered_by         TEXT    NOT NULL CHECK (triggered_by IN ('vault.push','vault.web_submit','startup-reconcile','manual')),
+  triggered_at         TEXT,                         -- 触发发布的审计行 occurred_at（延迟分母；重建型触发为 NULL）
+  indexed_at           TEXT    NOT NULL,             -- 本次索引完成时间（服务端时钟）
+  duration_ms          INTEGER NOT NULL,             -- 派生耗时（读 tree + 解析 + 写行）
+  lag_ms               INTEGER,                      -- indexed_at − 触发发布 occurred_at（延迟指标；重建型为 NULL）
+  updates              INTEGER NOT NULL DEFAULT 0,   -- 累计成功更新次数
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,   -- 连续失败次数（成功后清零）
+  last_error           TEXT,                         -- 最近一次失败摘要（告警可见）
+  last_error_at        TEXT                          -- 最近失败时间
+) STRICT;`,
+    ],
+  },
 ];
