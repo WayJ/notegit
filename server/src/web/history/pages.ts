@@ -1,5 +1,6 @@
 import { escapeHtml, layout } from '../pages.ts';
 import type { CommitEntry } from './log.ts';
+import { formatCitation } from './cite.ts';
 
 /**
  * S5-T1 历史族页面模板（D6：S4 web 骨架同规——服务端渲染、无框架；插值唯一
@@ -66,7 +67,7 @@ export function historyPage(input: {
   const rowLinks = (oid: string): string =>
     treePath === ''
       ? ''
-      : ` <a href="${versionUrl(vault.slug, oid, treePath)}">预览</a> <a href="${restoreUrl(vault.slug, oid, treePath)}">还原到此版本</a>`;
+      : ` <a href="${versionUrl(vault.slug, oid, treePath)}">预览</a> <a href="${restoreUrl(vault.slug, oid, treePath)}">还原到此版本</a> <code class="citation">${escapeHtml(formatCitation(vault.slug, treePath, oid))}</code>`;
   const rows = commits
     .map(
       (c) => `  <li class="commit" data-short="${escapeHtml(c.shortOid)}" data-author="${escapeHtml(c.authorName)}" data-date="${escapeHtml(c.authorDate)}" data-oid="${escapeHtml(c.oid)}" data-email="${escapeHtml(c.authorEmail)}" data-subject="${escapeHtml(c.subject)}">${escapeHtml(c.shortOid)} ${escapeHtml(c.subject)} — ${escapeHtml(c.authorName)}（Git 元数据） ${escapeHtml(c.authorDate)} <a href="${diffUrl(vault.slug, c.oid, treePath)}">diff</a>${rowLinks(c.oid)}</li>`,
@@ -192,6 +193,7 @@ export function versionPage(input: {
 <nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
 <p>类型：文件 · 大小：${sizeBytes ?? '?'} 字节 · 历史版本 @ ${escapeHtml(commitOid)}（只读预览——以新提交还原入口见下）${notice}</p>
 <p><a href="${historyUrl(vault.slug, treePath)}">该路径历史</a> · <a href="${diffUrl(vault.slug, commitOid, treePath)}">diff</a> · <a href="${restoreUrl(vault.slug, commitOid, treePath)}">还原到此版本</a></p>
+<p class="cite">复制引用（库 / 路径 @ commit 三要素——与 Agent 报告引用格式一致，经 <a href="/cite">引用解析</a> 可回放本页）：<code class="citation">${escapeHtml(formatCitation(vault.slug, treePath, commitOid))}</code></p>
 ${article}
 `,
   );
@@ -230,6 +232,51 @@ export function restorePage(input: {
 <form method="post" action="${restoreUrl(vault.slug, commitOid, treePath)}">
   <button type="submit">还原到此版本</button>
 </form>
+`,
+  );
+}
+
+// ── S5-T6 引用解析入口与失败页（api.md §13 S5-T6 行）──────────────────────
+
+/** 引用三要素格式说明（入口页/格式失败页共用文案——期望形态唯一来源） */
+const CITE_FORMAT_HINT = '库 / 路径 @ commit（例：v-handbook / docs/getting-started.md @ 4c55b7a0d1e2f3a4）';
+
+/** 引用解析入口页（GET /cite 空输入：粘贴表单 + 格式说明——GET 表单、无 JS） */
+export function citeEntryPage(): string {
+  return layout(
+    '引用解析',
+    `<h1>引用解析</h1>
+<p>粘贴文档引用（三要素），解析到对应历史版本页：</p>
+<form method="get" action="/cite">
+  <input type="text" name="c" size="64" placeholder="v-handbook / docs/getting-started.md @ 4c55b7a0d1e2f3a4">
+  <button type="submit">解析</button>
+</form>
+<p>期望格式：${escapeHtml(CITE_FORMAT_HINT)}——与 Agent 报告引用格式一致（回答引用可对应到 Web 历史）。</p>
+`,
+  );
+}
+
+/** 引用格式失败页（404）：非三要素形态的可理解错误（静态同页——只谈格式，不触库判定） */
+export function citeFormatErrorPage(): string {
+  return layout(
+    '引用格式无法解析',
+    `<h1>引用格式无法解析</h1>
+<p>收到的引用不是「库 / 路径 @ commit」三要素形态，无法解析。</p>
+<p>期望格式：${escapeHtml(CITE_FORMAT_HINT)}。</p>
+<p><a href="/cite">返回引用解析入口</a></p>
+`,
+  );
+}
+
+/** 引用存在性失败页（404 反存在性）：已过权限判定的引用未能对应任何历史版本。
+ *  静态同页不区分原因（提交未知/非提交对象/该路径在该提交处不存在——不泄露
+ *  库内容）；无权/未知库不在此页（D-IC-06 与页面族同页同码 404）。 */
+export function citeUnresolvablePage(): string {
+  return layout(
+    '引用无法解析',
+    `<h1>引用无法解析</h1>
+<p>引用未能对应到任何历史版本页（提交未知、非提交对象，或该路径在该提交处不存在——按反存在性语义不区分原因）。</p>
+<p>可核对引用三要素后经 <a href="/cite">引用解析入口</a> 重试，或在对应库的提交历史页查证。</p>
 `,
   );
 }
