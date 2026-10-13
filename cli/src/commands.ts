@@ -30,10 +30,10 @@ export const COMMANDS: Record<string, CommandSpec> = {
   ls: {
     name: 'ls',
     summary: '列出有权访问的知识库、clone URL 与本地状态',
-    status: 'S6-T3 已实现（--json schema 固化于 cli/test/ls.test.ts）',
+    status: 'S6-T3 已实现（--json schema 固化于 cli/test/ls.test.ts）；S7-T6 离线明示（HEAD/上次同步/可能过期）',
     usage: 'notegit ls [--json]',
-    detail: '实时按当前员工权限列出可见库（GET /api/v1/vaults，Bearer）；本地状态 = 未克隆/已克隆/落后/未知（对照本地根目录 <root>/<slug>）。凭据占位面：NOTEGIT_SERVER 与 NOTEGIT_TOKEN 环境变量（S6-T2 login 交付后接管）；本地根目录默认 ~/knowbase，可用 NOTEGIT_LOCAL_ROOT 覆盖。',
-    options: ['--json  输出 JSON（schema 固化）', '-h, --help  输出本帮助'],
+    detail: '实时按当前员工权限列出可见库（GET /api/v1/vaults，Bearer）；本地状态 = 未克隆/已克隆/落后/未知（对照本地根目录 <root>/<slug>）。S7-T6 起逐库附上次同步时间（消费 sync 状态面）与离线副本 HEAD；有副本但无法对照远端时标注「可能过期」。凭据占位面：NOTEGIT_SERVER 与 NOTEGIT_TOKEN 环境变量（S6-T2 login 交付后接管）；本地根目录默认 ~/knowbase，可用 NOTEGIT_LOCAL_ROOT 覆盖。',
+    options: ['--json  输出 JSON（schema 固化；local 含 head/remote_tip/last_sync）', '-h, --help  输出本帮助'],
     implemented: true,
   },
   setup: {
@@ -68,15 +68,16 @@ export const COMMANDS: Record<string, CommandSpec> = {
   sync: {
     name: 'sync',
     summary: '发现并安全同步知识库到本地（克隆/快进，不覆盖本地改动）',
-    status: 'S7-T1 六态策略表 + S7-T3 逐项结果/JSON/退出码契约',
+    status: 'S7-T1 六态策略表 + S7-T3 逐项结果/JSON/退出码契约 + S7-T6 断网三态与离线明示',
     implemented: true,
     usage: 'notegit sync [--depth <深度>] [--json]',
-    detail: '发现当前员工可见库（GET /api/v1/vaults，Bearer；同 ls），按架构 §7.3 策略表同步到 <本地根目录>/<slug>：无副本 → 完整克隆；干净且位于默认分支 → fetch 后快进（--ff-only 语义）；有未提交修改、领先远端、分叉或位于其他分支 → 跳过并逐库报告（绝不自动 stash/reset/rebase）。浅克隆仅 --depth 显式选项；slug 改名只提示映射变化，不移动本地目录。逐库报告成功/跳过/失败（status + reason_code + 细节）；退出码非零当且仅当有失败（跳过不判失败）。',
+    detail: '发现当前员工可见库（GET /api/v1/vaults，Bearer；同 ls），按架构 §7.3 策略表同步到 <本地根目录>/<slug>：无副本 → 完整克隆；干净且位于默认分支 → fetch 后快进（--ff-only 语义）；有未提交修改、领先远端、分叉或位于其他分支 → 跳过并逐库报告（绝不自动 stash/reset/rebase）。浅克隆仅 --depth 显式选项；slug 改名只提示映射变化，不移动本地目录。逐库报告成功/跳过/失败（status + reason_code + 细节）；退出码非零当且仅当有失败（跳过不判失败）。断网时逐库失败原因码区分 net_unreachable/timeout/http_error，失败 message 明示离线副本 commit 与上次同步时间（可能过期——不声称最新）；克隆失败不残留半成品目录。',
     options: [
       '--depth <深度>  新库浅克隆（显式选项；缺省完整克隆，不影响已有副本的快进更新）',
       '--json          逐库结构化 JSON 报告（stdout 仅 JSON：vaults[] + summary 计数 + generatedAt；schema 固化于 test/sync-report.test.ts）',
       '凭据面：环境变量 NOTEGIT_SERVER 与 NOTEGIT_TOKEN（同 ls）；Git 传输凭据经 credential helper',
       '本地根目录：NOTEGIT_LOCAL_ROOT / CLI 配置 / 缺省 ~/knowbase（同 ls 三级解析）',
+      '网络超时：NOTEGIT_SYNC_TIMEOUT_MS 毫秒覆盖 clone/fetch 超时（慢网/调试调优；缺省 clone 300 秒、fetch 120 秒）',
       '-h, --help      输出本帮助',
     ],
   },

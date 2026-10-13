@@ -36,6 +36,22 @@ export interface MockVault {
   readonly main_admin_only: boolean
 }
 
+/**
+ * S7-T6 断网注入面：按 slug 对 /git/* 传输注入故障（API 面不受影响——库列表照常，
+ * 断网只发生在 Git 传输层，模拟「发现成功、克隆/取远端失败」的断网中途场景）：
+ *   refuse = 接受连接后不发响应直接断开（客户端收连接重置 → net_unreachable 类）；
+ *   hang   = 接受连接后永不响应（配合 CLI 侧超时注入 → timeout 类）；
+ *   http   = 返回给定 HTTP 错误码（缺省 500 → http_error 类）。
+ */
+export type GitFaultMode = 'refuse' | 'hang' | 'http'
+
+export interface GitFaultRule {
+  readonly slug: string
+  readonly mode: GitFaultMode
+  /** mode=http 时的状态码（缺省 500）。 */
+  readonly status?: number
+}
+
 export interface MockState {
   username: string
   token: string
@@ -43,6 +59,8 @@ export interface MockState {
   gitBasicAccepted: boolean
   /** GET /api/v1/vaults 返回面（S7-T1 sync e2e；缺省空列表；可变——测试中改 slug 模拟改名）。 */
   vaults?: MockVault[]
+  /** /git/* 断网注入（S7-T6；可变——测试中途翻转模拟「同步中途断网」）。 */
+  gitFault?: readonly GitFaultRule[]
 }
 
 export interface MockServer {
@@ -72,7 +90,13 @@ export function startMockServer(projectRoot: string, state: MockState): Promise<
         port,
         baseUrl: `http://127.0.0.1:${port}`,
         state,
-        close: () => new Promise((done) => server.close(() => done())),
+        close: () =>
+          new Promise((done) => {
+            // S7-T6 hang 注入会留下「已收到请求但永不响应」的连接——close() 会一直
+            // 等到 requestTimeout；先断开全部连接再关，保证测试收尾不挂起。
+            server.closeAllConnections()
+            server.close(() => done())
+          }),
       })
     })
   })
@@ -121,6 +145,19 @@ function handleGit(req: http.IncomingMessage, res: http.ServerResponse, url: URL
     return
   }
   const [, repo, pathInfo = ''] = m
+  // S7-T6 断网注入（api 面不受影响）：命中 slug 的 Git 传输按模式失败/挂起。
+  const fault = state.gitFault?.find((f) => f.slug === repo)
+  if (fault !== undefined) {
+    if (fault.mode === 'refuse') {
+      res.destroy()
+      return
+    }
+    if (fault.mode === 'hang') return // 接受连接但不响应——注入客户端超时路径
+    const status = fault.status ?? 500
+    res.writeHead(status, { 'content-type': 'text/plain' })
+    res.end(`injected fault: HTTP ${status}`)
+    return
+  }
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     GATEWAY_INTERFACE: 'CGI/1.1',

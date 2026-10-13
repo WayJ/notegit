@@ -14,6 +14,8 @@
  * 全局状态锁（lock.ts；锁序固定 repo → state，不得反向）；runSync 单一 syncedAt
  * 时钟 → 报告 last_sync / 状态条目 / .git 标记三面同源同值；状态仅缓存
  * （state.ts），丢失由正常 sync 全流程重建。
+ * S7-T6：命令级网络失败（库列表拉取不可达）stderr 附离线提示（可能过期 +
+ * 指向 ls）；逐库断网三态/离线副本明示在 engine.ts 变更面完成。
  */
 import process from 'node:process'
 import path from 'node:path'
@@ -102,7 +104,9 @@ export async function runSync(argv: string[], env: NodeJS.ProcessEnv = process.e
   }
   const result = await fetchVaults(cred)
   if (!result.ok) {
-    process.stderr.write(`notegit sync: ${result.message}\n`)
+    // S7-T6：网络面失败（服务器不可达）提示离线语义——不声称最新，指向 ls 查看各库离线副本
+    const offlineHint = result.kind === 'network' ? '；本地副本未刷新、可能过期（notegit ls 可查看各库 HEAD 与上次同步时间）' : ''
+    process.stderr.write(`notegit sync: ${result.message}${offlineHint}\n`)
     return EXIT_FAIL
   }
   const root = localRootOf(env)

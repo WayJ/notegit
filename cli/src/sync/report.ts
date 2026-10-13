@@ -5,9 +5,12 @@
  * T1 的最小 stderr/stdout 行在此升级为结构化逐项结果：
  *   - status ∈ success | skipped | failed；
  *   - reason_code：成功=动作（cloned/fast_forwarded/up_to_date）、跳过=四态
- *     （dirty/ahead/diverged/other_branch）、失败=引擎原因码（SyncFailureCode）；
+ *     （dirty/ahead/diverged/other_branch）、失败=引擎原因码（SyncFailureCode——
+ *     S7-T6 起含断网三态 net_unreachable/timeout/http_error，见 engine.ts）；
  *   - 细节随变体：head（cloned/up_to_date）、from+to（fast_forwarded）、
- *     reason（跳过文案）、message（失败细节）。
+ *     reason（跳过文案）、message（失败细节；S7-T6：断网类失败的 message 携带
+ *     「离线副本 <commit>（可能过期），上次同步 <时间>」明示——离线信息随
+ *     message 走，不扩失败键集）。
  *
  * --json：stdout 仅一份 JSON 文档（server/local_root/generatedAt/vaults[]/summary，
  * schema 固化于 test/sync-report*.test.ts）。用法/认证等命令级错误不产生 JSON 信封
