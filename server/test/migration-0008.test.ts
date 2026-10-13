@@ -47,7 +47,7 @@ test('迁移 0008：schema_version 引导行不在迁移内容中（runner 持�
 test('迁移 0008：全量应用后 drafts 表/列落地，重入跳过', () => {
   const db = memory();
   const first = migrate(db, MIGRATIONS);
-  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6, 7, 8, 9]); // 9 = S5-T3 追加（search_index/search_index_state）
 
   const cols = (db.prepare('PRAGMA table_info(drafts)').all() as { name: string }[]).map((c) => c.name);
   assert.deepEqual(cols.sort(), [
@@ -57,7 +57,7 @@ test('迁移 0008：全量应用后 drafts 表/列落地，重入跳过', () => 
 
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   db.close();
 });
 

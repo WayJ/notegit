@@ -19,6 +19,8 @@ import { gitHttpPlugin } from './githttp/http-backend.ts';
 import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
 import { registerMaintenanceRoutes } from './maintenance/routes.ts';
 import { registerRulesVersionRoutes } from './rulesversion/routes.ts';
+import { registerSearchRoutes } from './search/routes.ts';
+import { SearchIndexer } from './search/indexer.ts';
 import { registerWebRoutes } from './web/routes.ts';
 
 /** 认证主体（identity §1：认证主体 = 员工账号）。 */
@@ -56,6 +58,15 @@ export interface AppDeps {
   /** 库文件路径（S3-T2）：透传 NOTEGIT_DB 给 pre-receive hook 子进程直连；
    *  缺省则 /git 推送在 hook 处 fail-closed（读路径不受影响）。main.ts 恒传入。 */
   readonly dbFile?: string;
+  /** 搜索索引器可调项（S5-T3；dataDir 注入时生效）：pollMs 节奏 / derive 注入
+   *  （失败注入测试缝）/ now 控时 / log 收集。缺省全默认（250ms 或
+   *  NOTEGIT_SEARCH_POLL_MS）。 */
+  readonly searchIndex?: {
+    pollMs?: number;
+    derive?: (repoPath: string, branch: string) => Promise<import('./search/derive.ts').DerivedIndex>;
+    now?: () => Date;
+    log?: import('./search/indexer.ts').SearchLog;
+  };
 }
 
 /** 已填默认值的依赖，注册路由用。 */
@@ -161,6 +172,26 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     app.register(draftsPlugin, {
       db: wired.db,
       authenticateRequest: wired.authenticateRequest,
+    });
+    // S5-T3 搜索索引器（dataDir 注入时接线）：进程内异步——审计尾随（push 的
+    // settle 钩子与网页发布共用触发面）+ 启动对账（崩溃兜底）；失败不阻断发布
+    // （D7），只记 state 告警字段与日志。定时器 unref（不独自维持事件循环），
+    // app.close() 经 onClose 排空在途工作（不留后台未决写）。
+    const searchIndexer =
+      deps.dataDir !== undefined
+        ? new SearchIndexer({ db: deps.db, dataDir: deps.dataDir, ...(deps.searchIndex ?? {}) })
+        : undefined;
+    if (searchIndexer !== undefined) {
+      searchIndexer.start();
+      app.addHook('onClose', async () => {
+        await searchIndexer.stop();
+      });
+    }
+    // S5-T3 最小可观测端点：GET /api/v1/admin/search-index（实例管理员）——延迟
+    // 指标/时间戳/失败告警/实时新鲜度（api.md 未入册——D11 建议稿 docs/s1/）
+    registerSearchRoutes(app, {
+      authenticateRequest: wired.authenticateRequest,
+      ...(searchIndexer !== undefined ? { indexer: searchIndexer } : {}),
     });
     // S2-T8 最小页面 + S4 浏览族（/login、/、/admin、/credentials、/vaults…——GET
     // 外壳/数据页；页面无写操作，安全判定全部在 API 侧复用 authorize/管理员门槛）。
