@@ -220,13 +220,16 @@ export async function restoreOffline(opts: RestoreOfflineOptions): Promise<Resto
   }
   checks.push(ok('version-compat', notes.join('；')));
 
-  // 4. §7 顺序装载：config → keys → db → git（失败清扫已建域，目标回到全新态）
-  const created: string[] = [];
+  // 4. §7 顺序装载：config → keys → db → git（失败清扫已建域，目标回到全新态）。
+  //    域目录复制用 force:false + errorOnExist:false：目标四域可能以空目录预建
+  //    （镜像 /data 布局），promise 版 fs.cp 的 errorOnExist 对「已存在的空目录」
+  //    也抛 EEXIST；防覆盖由 targetFresh 前置（四域必空）与装载后逐文件哈希复核
+  //    （post-load）共同承担——跳过/覆盖任何文件都过不了复算。
   try {
     await cp(path.join(opts.dataItemDir, 'config'), path.join(opts.dataDir, 'config'), {
       recursive: true,
       force: false,
-      errorOnExist: true,
+      errorOnExist: false,
       preserveTimestamps: true,
     });
     checks.push(ok('config-restored', '§7 步骤 2（K3/K4 属部署层记录，随密钥件同置保管——B6 口径）'));
@@ -234,7 +237,7 @@ export async function restoreOffline(opts: RestoreOfflineOptions): Promise<Resto
     await cp(path.join(opts.keysItemDir, 'keys'), path.join(opts.dataDir, 'keys'), {
       recursive: true,
       force: false,
-      errorOnExist: true,
+      errorOnExist: false,
       preserveTimestamps: true,
     });
     // 权限强制（identity §6.1：keys 目录 0700、文件 0600——不信任来源/umask）
@@ -255,14 +258,11 @@ export async function restoreOffline(opts: RestoreOfflineOptions): Promise<Resto
     await cp(path.join(opts.dataItemDir, 'git'), path.join(opts.dataDir, 'git'), {
       recursive: true,
       force: false,
-      errorOnExist: true,
+      errorOnExist: false,
       preserveTimestamps: true,
     });
     checks.push(ok('git-restored', `§7 步骤 5（${manifest.vault_count} 库，保留权限与时间戳）`));
   } catch (err) {
-    for (const domain of [opts.dataDir, ...created]) {
-      await rm(domain, { recursive: true, force: true }).catch(() => {});
-    }
     for (const domain of DOMAINS) {
       await rm(path.join(opts.dataDir, domain), { recursive: true, force: true }).catch(() => {});
     }
