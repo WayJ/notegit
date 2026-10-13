@@ -56,7 +56,10 @@ function isGitExitFailure(err: unknown): boolean {
 /**
  * 读取默认分支提交历史（库级 filePath=''；路径级传树路径），与
  * `git log [--skip N -n M] refs/heads/<branch> [-- <path>]` 同集同序（一致性
- * 断言所依）。分页：多取 1 条探测 hasMore，返回恒为单页窗口。
+ * 断言所依）。路径级附 `--follow`（S5-T7 重命名边界）：Git 改名检测使历史页
+ * 可追改名前后（S4-T5 rename 单提交内容逐字节保留 → R100 可检测）；仅同一
+ * 库内跟随——跨库移动不跟随（架构 §9 不承诺跨库永久 ID）。分页：多取 1 条
+ * 探测 hasMore，返回恒为单页窗口。
  */
 export async function readCommitLog(
   dataDir: string,
@@ -80,7 +83,7 @@ export async function readCommitLog(
     '--skip', String((page - 1) * HISTORY_PAGE_SIZE),
     ref,
   ];
-  if (filePath !== '') args.push('--', filePath);
+  if (filePath !== '') args.push('--follow', '--', filePath);
   let out: string;
   try {
     out = await execGit(args, { cwd: repo });
