@@ -145,7 +145,10 @@ test('vendored 自包含：dist/node_modules/notegit-validation 纯 JS、exports
 // ── 打包产物面：三端一致断言的对象随包分发（T5 移交：dist/src/hooks 断言） ──────
 
 function npmPackDryRun(): Array<{ path: string }> {
-  const r = spawnSync('npm', ['pack', '--dry-run', '--json'], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+  // S7-T8：--ignore-scripts 跳过 prepack（=npm run build）——并发测试阶段重建 dist
+  // 是 T4 记录、T8 处置的竞态源（pack-build-isolation.test.ts 固化不变量）；消费 npm
+  // test 串行前置相已构建的 dist，真实发布路径不受影响（非 dry-run 照常走 prepack）。
+  const r = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
   assert.equal(r.status, 0, `npm pack --dry-run 应成功，stderr：${r.stderr.slice(0, 500)}`)
   return (JSON.parse(r.stdout) as Array<{ files: Array<{ path: string }> }>)[0]!.files
 }

@@ -421,12 +421,10 @@ v-handbook：失败——快进失败：服务器 HTTP 错误 500（fatal: … T
     { "slug": "v-handbook", "status": "success", "reason_code": "fast_forwarded", "path": "/Users/alice/knowbase/v-handbook", "from": "9d81e02…", "to": "4c55b7a…" },
     { "slug": "v-draft", "status": "skipped", "reason_code": "dirty", "path": "/Users/alice/knowbase/v-draft", "reason": "工作区有未提交修改（含未跟踪文件）；保留本地改动，不自动 stash/reset/rebase" },
     { "slug": "v-gone", "status": "skipped", "reason_code": "revoked", "path": "/Users/alice/knowbase/v-gone", "reason": "库已不可访问（服务端对 fetch 返回 404——权限可能已被撤销或库已删除）；本地副本保留、不自动删除，可用 notegit sync clean 显式清理", "head": "8c31d90…", "last_sync": "2026-10-12T09:30:00.000Z" },
-    { "slug": "v-broken", "status": "failed", "reason_code": "status_error", "path": "/Users/alice/knowbase/v-broken", "message": "目录存在但不是 git 仓库（或 HEAD 不可读）：…" }
-  ],
-  "summary": { "total": 5, "success": 2, "skipped": 2, "failed": 1 }
     { "slug": "v-broken", "status": "failed", "reason_code": "status_error", "path": "/Users/alice/knowbase/v-broken", "message": "目录存在但不是 git 仓库（或 HEAD 不可读）：…" },
     { "slug": "v-remote", "status": "failed", "reason_code": "net_unreachable", "path": "/Users/alice/knowbase/v-remote", "message": "快进失败：无法连接服务器（fatal: unable to access '…': Failed to connect …）；离线副本 4c55b7a（可能过期），上次同步 2026-10-13T08:00:00.000Z" }
-  "summary": { "total": 5, "success": 2, "skipped": 1, "failed": 2 }
+  ],
+  "summary": { "total": 6, "success": 2, "skipped": 2, "failed": 2 }
 }
 ```
 
