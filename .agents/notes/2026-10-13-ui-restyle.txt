@@ -1,0 +1,58 @@
+UI-RESTYLE 全站重样式（用户直派任务 task_6142c96af8f4 / dispatch ctx_e1e65efbccf0）
+日期：2026-10-13 · 分支 WayJ/ui-restyle @ 97be62c（基线 local/main @ e447f7c rebase）
+
+== 交付 ==
+- server/src/web/assets/styles.css（744 行）：单一共享 CSS，DESIGN.md token 全值
+  （--canvas #faf9f5 / --primary #cc785c / --surface-dark #181715 三色体系；间距
+  4px 基；圆角 4/6/8/12/16/pill）。字体选型（DESIGN.md §Note on Font Substitutes，
+  本地栈、不引外部字体服务，无自托管 webfont）：display = "Cormorant Garamond"
+  weight 500 + -0.02em（EB Garamond/Garamond/Times 兜底）；body = Inter
+  （系统 sans 兜底）；mono = JetBrains Mono（系统 mono 兜底）。
+- server/src/web/assets.ts：GET /assets/styles.css（新增纯资产端点；api.md §13
+  既有路由行为零变化——既有 web-* 测试族全绿为证）。
+- layout() 壳：top-nav 64px 米色栏（4-spoke spike-mark inline SVG + Notegit 字标
+  + 主菜单 查找/引用解析/我的凭据（管理员加 管理）/登录态/珊瑚主 CTA「知识库」）
+  + 深色页脚收束。viewer 呈现层透传（普通成员全页无 /admin——S2-T8 断言保持）。
+
+== 安全不变量（零变化） ==
+- 插值唯一通道 escapeHtml；无新增客户端拼接/innerHTML；每页唯一 <script>；
+- li data-type/data-name、tr data-vault/…、span.diff-line data-kind 等一致性
+  属性与精确 href 全保留（3 处被测试钉死的裸形态按原样保留：
+  <button type="submit">（edit 提交——珊瑚样式经 #edit-form 作用域选择器承担）、
+  <form method="get" action="/cite">、「大小：N 字节」文本）。
+- 服务端改动的行为面：仅页面模板呈现与 viewer 展示数据透传；无路由/状态码/
+  位置/内容类型变化。
+
+== 验证 ==
+- npm ci --no-audit --no-fund && npm test（根，全 workspace）：
+  server 709/709（含 web-render-xss 全清 + 新增 web-ui-style.test.ts 14 项
+  HTML 特征断言）、packages 106/106、cli 345/345。
+- curl 冒烟（真实服务器 NOTEGIT_DATA_DIR=/tmp，bootstrap→登录→建库→两次
+  web 提交种子），各页 token 类名落位摘录：
+  /login        class="login-card"｜btn-primary">登录｜top-nav｜stylesheet 链接
+  /             card-grid｜feature-card｜nav-user">root｜href="/admin"（管理员）
+  /vaults       vault-grid｜vault-card｜vault-name">产品手册｜badge">管理员
+  browse        entries｜type-tag">文件｜readme-card｜面包屑 aria-label
+  view          meta-badges｜badge-muted">大小：201 字节｜<article id="doc">
+  edit          form-card｜field-err id="err-title"｜<button type="submit">提交
+  upload        form-card｜btn-primary">上传
+  rename/delete form-card｜btn-primary">保存重命名/确认删除｜warn-block
+  history       commits｜commit data-short="da18b7a"｜citation 三要素
+  diff          diff-body｜diff-line data-kind=add/del/meta（深色代码窗）
+  search?q=上手 search-form｜btn-primary">查找｜table-wrap｜data-vault="handbook"
+  /admin        admin-section｜table-wrap｜token-view｜aria-current="page"
+  /cite         <form method="get" action="/cite">｜btn-primary">解析
+  404           center-card｜<h1>404
+  styles.css    200 text/css; charset=utf-8
+
+== 边界 ==
+改动面 = server/src/web/**（19 文件）+ server/test/web-ui-style.test.ts（验收
+要求的 HTML 特征断言）+ 本笔记。未动 docs/contracts/、cli/、既有路由逻辑；
+未 push。部署面：deploy/Dockerfile COPY server/ 整树携带 assets/，运行时
+node src/main.ts 直读（readFileSync @ import.meta.url）——容器/源码/测试三态同路径。
+
+== 遗留（不阻塞） ==
+- 导航 <768px 折叠按钮按任务约定后置（当前小屏隐藏菜单簇，保留字标+CTA）。
+- Inter/Cormorant Garamond 未自托管：多数客户端将落到系统兜底字体
+  （Garamond/Times + 系统 sans）；如需品牌一致性可后续自托管 woff2（本次
+  按任务约束未引外部字体依赖）。

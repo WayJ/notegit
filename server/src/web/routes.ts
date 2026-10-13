@@ -4,6 +4,7 @@ import type { RequestAuthenticator } from '../auth/lifecycle.ts';
 import type { MaintenanceGate } from '../maintenance/gate.ts';
 import { createPageGuard } from './page-kit.ts';
 import { webWriteGuard } from './write-gate.ts';
+import { registerAssetRoutes } from './assets.ts';
 import { registerShellRoutes } from './shell.ts';
 import { registerBrowseRoutes } from './browse/routes.ts';
 import { registerViewRoutes } from './view/routes.ts';
@@ -47,6 +48,7 @@ export function registerWebRoutes(app: FastifyInstance, opts: WebRoutesOptions):
   // S4-T5 缝（T4 遗留）：web 写守卫——/vaults/ 下非安全方法维护模式 503
   // （backup §3 矩阵 web 行；api/v1 与 /git 各有同语义闸门，不在此层）
   app.addHook('onRequest', webWriteGuard(opts.maintenanceGate));
+  registerAssetRoutes(app); // UI-RESTYLE：GET /assets/styles.css（全站唯一共享样式，纯呈现层）
   registerShellRoutes(app, shared); // S2-T8 外壳四页（/login、/、/admin、/credentials）
   registerBrowseRoutes(app, shared); // S4-T1 有权库列表 + 目录浏览 + 预览占位
   // S4-T2+ ：各任务页面模块在此 append（一行一模块）

@@ -32,7 +32,10 @@ export function registerSearchPageRoutes(app: FastifyInstance, opts: SearchRoute
     const raw = (req.query as { q?: unknown }).q;
     // 空/缺 q：表单空态（200）——页面形态宽进（与 API 400 语义分工）
     if (typeof raw !== 'string' || raw.trim() === '') {
-      return html(reply, searchPage({ viewer: { username: who.subject.username }, q: null }));
+      return html(reply, searchPage({ viewer: {
+          username: who.subject.username,
+          is_instance_admin: who.subject.is_instance_admin,
+        }, q: null }));
     }
     if (raw.length > SEARCH_MAX_Q_CHARS) {
       return reply
@@ -40,7 +43,10 @@ export function registerSearchPageRoutes(app: FastifyInstance, opts: SearchRoute
         .type('text/html; charset=utf-8')
         .send(
           searchPage({
-            viewer: { username: who.subject.username },
+            viewer: {
+          username: who.subject.username,
+          is_instance_admin: who.subject.is_instance_admin,
+        },
             q: raw,
             notice: `关键词过长（上界 ${SEARCH_MAX_Q_CHARS} 字符）——请收窄后重查。`,
           }),
@@ -49,7 +55,10 @@ export function registerSearchPageRoutes(app: FastifyInstance, opts: SearchRoute
     const result = searchKeyword(opts.db, who.subject.employee_id, raw);
     return html(
       reply,
-      searchPage({ viewer: { username: who.subject.username }, q: raw, result }),
+      searchPage({ viewer: {
+          username: who.subject.username,
+          is_instance_admin: who.subject.is_instance_admin,
+        }, q: raw, result }),
     );
   });
 }

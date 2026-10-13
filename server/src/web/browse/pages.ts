@@ -3,39 +3,56 @@ import type { VaultListItem } from '../../vaults/service.ts';
 import type { TreeEntry } from './tree.ts';
 
 /**
- * S4-T1 浏览族页面模板（D5 极简：服务端渲染、无框架；插值唯一通道 escapeHtml，
- * 与 S2-T8 pages.ts 同规）。数据页不做页内 fetch——列表与目录每次请求实时渲染
- * （实时查权限/默认分支，D-IC-05 精神），与「外壳 + fetch」的管理页分工不同。
+ * S4-T1 浏览族页面模板（服务端渲染、无框架；插值唯一通道 escapeHtml，与 S2-T8
+ * pages.ts 同规）。数据页不做页内 fetch——列表与目录每次请求实时渲染（实时查
+ * 权限/默认分支，D-IC-05 精神），与「外壳 + fetch」的管理页分工不同。
+ *
+ * UI-RESTYLE：DESIGN.md 视觉契约落位——库列表为卡片网格（feature-card 形态）、
+ * 目录条目为表格化列表（条目集与序仍与 `git ls-tree` 同集同序，仅呈现）、README
+ * 为米色导航卡；viewer 透传顶部导航登录态（呈现层）。
  */
+
+/** 顶部导航登录态（呈现层透传——S2-T8「管理入口可见性」判定不在此） */
+export interface PageViewer {
+  readonly username: string;
+  readonly is_instance_admin: boolean;
+}
 
 const ROLE_LABELS: Readonly<Record<string, string>> = { admin: '管理员', editor: '编辑者', reader: '读者' };
 
 /** 有权库列表页（架构 §4.2：未授权的库不进入列表） */
-export function vaultListPage(user: { username: string }, vaults: readonly VaultListItem[]): string {
-  const rows = vaults
+export function vaultListPage(
+  user: { username: string; is_instance_admin?: boolean },
+  vaults: readonly VaultListItem[],
+): string {
+  const cards = vaults
     .map(
-      (v) => `  <tr>
-    <td><a href="/vaults/${encodeURIComponent(v.slug)}/browse">${escapeHtml(v.name)}</a></td>
-    <td>${escapeHtml(v.slug)}</td>
-    <td>${ROLE_LABELS[v.role] ?? escapeHtml(v.role)}</td>
-  </tr>`,
+      (v) => `  <a class="vault-card" href="/vaults/${encodeURIComponent(v.slug)}/browse">
+    <span class="vault-name">${escapeHtml(v.name)}</span>
+    <span class="vault-slug">${escapeHtml(v.slug)}</span>
+    <span class="badge">${ROLE_LABELS[v.role] ?? escapeHtml(v.role)}</span>
+  </a>`,
     )
-    .join('');
+    .join('\n');
   const listing =
     vaults.length === 0
-      ? '<p>暂无有权访问的库。</p>'
-      : `<table>
-  <thead><tr><th>名称</th><th>slug</th><th>我的角色</th></tr></thead>
-  <tbody>
-${rows}
-  </tbody>
-</table>`;
+      ? '<p class="state-note">暂无有权访问的库。</p>'
+      : `<div class="vault-grid">\n${cards}\n</div>`;
   return layout(
     '知识库',
-    `<h1>知识库</h1>
-<p>当前登录：${escapeHtml(user.username)} · <a href="/">返回首页</a></p>
-${listing}
+    `<div class="page">
+  <div class="page-head">
+    <h1>知识库</h1>
+    <p class="page-meta">当前登录：${escapeHtml(user.username)} · <a href="/">返回首页</a></p>
+  </div>
+  ${listing}
+</div>
 `,
+    '',
+    {
+      user: { username: user.username, isAdmin: user.is_instance_admin === true },
+      active: 'vaults',
+    },
   );
 }
 
@@ -77,6 +94,8 @@ export interface BrowsePageInput {
   readonly entries: readonly TreeEntry[];
   /** README.md 内容（escapeHtml 渲染为纯文本导航）；null=无/超限不渲染；'too-large'=超限标注 */
   readonly readme: string | null | 'too-large';
+  /** UI-RESTYLE：顶部导航登录态（可选——测试直调形态缺省） */
+  readonly viewer?: PageViewer;
 }
 
 /**
@@ -85,7 +104,7 @@ export interface BrowsePageInput {
  * §5.2——README 无 frontmatter 不属错误，页面零校验、原样展示）。
  */
 export function browsePage(input: BrowsePageInput): string {
-  const { vault, dirPath, entries, readme } = input;
+  const { vault, dirPath, entries, readme, viewer } = input;
   const list = entries
     .map((e) => {
       const child = dirPath === '' ? e.name : `${dirPath}/${e.name}`;
@@ -95,26 +114,32 @@ export function browsePage(input: BrowsePageInput): string {
       const ops = e.type === 'blob'
         ? ` <span class="entry-ops">(<a href="${renameUrl(vault.slug, child)}">重命名</a> · <a href="${deleteUrl(vault.slug, child)}">删除</a>)</span>`
         : '';
-      return `  <li data-type="${e.type}" data-name="${escapeHtml(e.name)}"${e.size !== undefined ? ` data-size="${e.size}"` : ''}>${TYPE_LABELS[e.type]} ${link}${ops}</li>`;
+      return `  <li data-type="${e.type}" data-name="${escapeHtml(e.name)}"${e.size !== undefined ? ` data-size="${e.size}"` : ''}><span class="type-tag">${TYPE_LABELS[e.type]}</span> ${link}${ops}</li>`;
     })
     .join('\n');
   const readmeHtml =
     readme === 'too-large'
-      ? '<h2>README.md <small>（导航文档 · 豁免 frontmatter）</small></h2>\n<p>README 过大（超过渲染上限），未渲染正文。</p>'
+      ? '<section class="readme-card">\n<h2>README.md <small>（导航文档 · 豁免 frontmatter）</small></h2>\n<p>README 过大（超过渲染上限），未渲染正文。</p>\n</section>'
       : readme === null
         ? ''
-        : `<h2>README.md <small>（导航文档 · 豁免 frontmatter）</small></h2>\n<pre>${escapeHtml(readme)}</pre>`;
+        : `<section class="readme-card">\n<h2>README.md <small>（导航文档 · 豁免 frontmatter）</small></h2>\n<pre>${escapeHtml(readme)}</pre>\n</section>`;
   // S4-T8（T4 遗留收口）：目录级上传入口（GET 页面无写操作；写权限在 POST 判定）
   const uploadEntry = ` <span class="entry-ops">(<a href="/vaults/${encodeURIComponent(vault.slug)}/upload${dirPath === '' ? '' : '/' + dirPath.split('/').map(encodeURIComponent).join('/')}">上传</a>)</span>`;
   return layout(
     `${vault.name} 目录`,
-    `<h1>${escapeHtml(vault.name)}</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, dirPath)}</nav>${uploadEntry}
-<ul class="entries">
+    `<div class="page">
+  <div class="page-head">
+    <h1>${escapeHtml(vault.name)}</h1>
+    <nav aria-label="面包屑">${breadcrumb(vault, dirPath)}</nav>${uploadEntry}
+  </div>
+  <ul class="entries">
 ${list}
-</ul>
-${readmeHtml}
+  </ul>
+  ${readmeHtml}
+</div>
 `,
+    '',
+    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -122,9 +147,11 @@ ${readmeHtml}
 export function browseStatePage(vault: { slug: string; name: string }, message: string): string {
   return layout(
     `${vault.name} 目录`,
-    `<h1>${escapeHtml(vault.name)}</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, '')}</nav>
-<p>${escapeHtml(message)}</p>
+    `<div class="page">
+  <h1>${escapeHtml(vault.name)}</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, '')}</nav>
+  <p class="state-note">${escapeHtml(message)}</p>
+</div>
 `,
   );
 }
