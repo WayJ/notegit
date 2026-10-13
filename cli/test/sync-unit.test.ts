@@ -221,15 +221,17 @@ function fakeSyncOps(opts: { head?: string; failClone?: boolean; failFf?: boolea
 }
 
 const INFO_BASE = { path: path.join('/root', 'alpha'), branch: 'main', message: null } as const
+/** S7-T4：成功 outcome 携带的 last_sync（注入固定时钟，runSync 与状态文件同源同值）。 */
+const SYNCED_AT = '2026-10-13T08:00:00.000Z'
 
 async function apply(info: Record<string, unknown>, ops: SyncOps, depth?: number): Promise<ReturnType<typeof applySyncStrategy>> {
-  return applySyncStrategy({ root: '/root', slug: 'alpha', cloneUrl: 'https://s/git/alpha.git', defaultBranch: 'main', info: info as never, depth, ops })
+  return applySyncStrategy({ root: '/root', slug: 'alpha', cloneUrl: 'https://s/git/alpha.git', defaultBranch: 'main', info: info as never, depth, ops, syncedAt: SYNCED_AT })
 }
 
-test('策略表·new：完整克隆（无 depth），成功后上报 head', async () => {
+test('策略表·new：完整克隆（无 depth），成功后上报 head 与 last_sync', async () => {
   const ops = fakeSyncOps({ head: SHA2 })
   const out = await apply({ state: 'new', ...INFO_BASE, head: null, remote_tip: null }, ops)
-  assert.deepEqual(out, { action: 'cloned', slug: 'alpha', path: path.join('/root', 'alpha'), head: SHA2 })
+  assert.deepEqual(out, { action: 'cloned', slug: 'alpha', path: path.join('/root', 'alpha'), head: SHA2, last_sync: SYNCED_AT })
   assert.deepEqual(ops.calls, [`clone:https://s/git/alpha.git|${path.join('/root', 'alpha')}|full`, `revHead:${path.join('/root', 'alpha')}`])
 })
 
@@ -243,14 +245,14 @@ test('策略表·new + --depth：浅克隆作为显式选项传递', async () =>
 test('策略表·clean 且 head==tip：已是最新，不发起任何变更操作', async () => {
   const ops = fakeSyncOps({ head: SHA1 })
   const out = await apply({ state: 'clean', ...INFO_BASE, head: SHA1, remote_tip: SHA1 }, ops)
-  assert.deepEqual(out, { action: 'up_to_date', slug: 'alpha', path: INFO_BASE.path, head: SHA1 })
+  assert.deepEqual(out, { action: 'up_to_date', slug: 'alpha', path: INFO_BASE.path, head: SHA1, last_sync: SYNCED_AT })
   assert.deepEqual(ops.calls, [], '已是最新不应触发 clone/ff')
 })
 
 test('策略表·clean 且落后：fetch 后快进（--ff-only 语义），from→to 如实上报', async () => {
   const ops = fakeSyncOps({ head: SHA2 })
   const out = await apply({ state: 'clean', ...INFO_BASE, head: SHA1, remote_tip: SHA2 }, ops)
-  assert.deepEqual(out, { action: 'fast_forwarded', slug: 'alpha', path: INFO_BASE.path, from: SHA1, to: SHA2 })
+  assert.deepEqual(out, { action: 'fast_forwarded', slug: 'alpha', path: INFO_BASE.path, from: SHA1, to: SHA2, last_sync: SYNCED_AT })
   assert.deepEqual(ops.calls, [`ff:${INFO_BASE.path}|https://s/git/alpha.git|main`, `revHead:${INFO_BASE.path}`])
 })
 

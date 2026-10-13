@@ -22,12 +22,14 @@ import { EXIT_FAIL, EXIT_OK } from '../src/exit-codes.ts'
 const SHA1 = '1111111111111111111111111111111111111111'
 const SHA2 = '2222222222222222222222222222222222222222'
 const DIR = path.join('/root', 'alpha')
+/** S7-T4：成功项 last_sync（与状态文件同源同值——runSync 单一 syncedAt 时钟）。 */
+const TS = '2026-10-13T08:00:00.000Z'
 
 /** 各变体至少一件的 outcome 夹具（reason/message 为测试自供文本——本层只测映射，不锁引擎文案）。 */
 const OUTCOMES: SyncOutcome[] = [
-  { action: 'cloned', slug: 'w-new', path: DIR, head: SHA2 },
-  { action: 'fast_forwarded', slug: 'w-behind', path: DIR, from: SHA1, to: SHA2 },
-  { action: 'up_to_date', slug: 'w-tip', path: DIR, head: SHA1 },
+  { action: 'cloned', slug: 'w-new', path: DIR, head: SHA2, last_sync: TS },
+  { action: 'fast_forwarded', slug: 'w-behind', path: DIR, from: SHA1, to: SHA2, last_sync: TS },
+  { action: 'up_to_date', slug: 'w-tip', path: DIR, head: SHA1, last_sync: TS },
   { action: 'skipped', slug: 'w-dirty', path: DIR, state: 'dirty', reason: '工作区有未提交修改', head: null, last_sync: null },
   { action: 'skipped', slug: 'w-ahead', path: DIR, state: 'ahead', reason: '本地有领先远端的未推送提交', head: null, last_sync: null },
   { action: 'skipped', slug: 'w-diverged', path: DIR, state: 'diverged', reason: '本地与远端分叉', head: null, last_sync: null },
@@ -37,13 +39,13 @@ const OUTCOMES: SyncOutcome[] = [
 
 // ── vaultResultOf：outcome → 逐项结果对象（status + reason_code + 细节） ──────
 
-test('映射·成功三动作：cloned/fast_forwarded/up_to_date → status=success，reason_code=动作，细节随变体', () => {
+test('映射·成功三动作：cloned/fast_forwarded/up_to_date → status=success，reason_code=动作，last_sync 透传（S7-T4），细节随变体', () => {
   const cloned = vaultResultOf(OUTCOMES[0]!)
-  assert.deepEqual(cloned, { slug: 'w-new', status: 'success', reason_code: 'cloned', path: DIR, head: SHA2 })
+  assert.deepEqual(cloned, { slug: 'w-new', status: 'success', reason_code: 'cloned', path: DIR, head: SHA2, last_sync: TS })
   const ff = vaultResultOf(OUTCOMES[1]!)
-  assert.deepEqual(ff, { slug: 'w-behind', status: 'success', reason_code: 'fast_forwarded', path: DIR, from: SHA1, to: SHA2 })
+  assert.deepEqual(ff, { slug: 'w-behind', status: 'success', reason_code: 'fast_forwarded', path: DIR, from: SHA1, to: SHA2, last_sync: TS })
   const tip = vaultResultOf(OUTCOMES[2]!)
-  assert.deepEqual(tip, { slug: 'w-tip', status: 'success', reason_code: 'up_to_date', path: DIR, head: SHA1 })
+  assert.deepEqual(tip, { slug: 'w-tip', status: 'success', reason_code: 'up_to_date', path: DIR, head: SHA1, last_sync: TS })
 })
 
 test('映射·跳过四态：reason_code=四态枚举，reason 原样透传，path 可为 null', () => {
@@ -106,7 +108,7 @@ test('--json schema 固化：注入时钟下整文档 deepEqual 锁定（server/
     local_root: '/root',
     generatedAt: '2026-10-13T08:00:00.000Z',
     vaults: [
-      { slug: 'w-new', status: 'success', reason_code: 'cloned', path: DIR, head: SHA2 },
+      { slug: 'w-new', status: 'success', reason_code: 'cloned', path: DIR, head: SHA2, last_sync: TS },
       { slug: 'w-bad', status: 'failed', reason_code: 'status_error', path: DIR, message: '目录存在但不是 git 仓库' },
     ],
     summary: { total: 2, success: 1, skipped: 0, failed: 1 },

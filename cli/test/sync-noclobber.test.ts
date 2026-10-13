@@ -282,7 +282,7 @@ test('被跳过库报告：含原因 + 离线副本 commit + 上次同步时间�
   }
   for (const slug of SKIP_STATES) {
     const expectedHead = world.heads[slug]!.slice(0, 7)
-    const marker = readLastSync(dir(slug))
+    const marker = readLastSync(world.localRoot, dir(slug))
     assert.ok(marker !== null, `${slug} 首轮成功同步应留下时间标记`)
     assert.match(
       r.stderr,
