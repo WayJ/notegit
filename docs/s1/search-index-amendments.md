@@ -1,8 +1,8 @@
 # 搜索索引契约补正建议（S5-T3）
 
-- **状态**：S5-T3 起草（2026-10-13），待 master 评审。评审通过后由 master 落对应契约原文并在 epic 的 Decisions (ADR) 记录——按仓库约束，本文件不改契约。先例：api-md-amendments.md（S4-T1，A1–A5）。**C3 由 S5-T4 追加（2026-10-13，coordinator 批复建议稿形态）——三节一并待 D13 裁决。**
-- **范围**：S5-T3 落地的两处契约外事实面——派生索引表的 DDL 归属（storage-model.md 目前明示「派生（不在本 schema）」）与索引可观测管理端点（api.md 无定义）；S5-T4 追加查询端点与搜索页的入册文本（api.md §3 查询端点 + §13 页面行）。另附实现形态选型记录（进程内异步 vs 队列；LIKE vs 全文引擎）供 ADR 归档。
-- **实现状态**：全部已实现并测试（迁移 0009；`server/src/search/`；`server/src/web/search/`；35 项新测试；npm test 全绿）。
+- **状态**：S5-T3 起草（2026-10-13），待 master 评审。评审通过后由 master 落对应契约原文并在 epic 的 Decisions (ADR) 记录——按仓库约束，本文件不改契约。先例：api-md-amendments.md（S4-T1，A1–A5）。**C3 由 S5-T4 追加、C4 由 S5-T5 追加（2026-10-13，C3 为 coordinator 批复建议稿形态）——四节一并待 D13 裁决。**
+- **范围**：S5-T3 落地的两处契约外事实面——派生索引表的 DDL 归属（storage-model.md 目前明示「派生（不在本 schema）」）与索引可观测管理端点（api.md 无定义）；S5-T4 追加查询端点与搜索页的入册文本（api.md §3 查询端点 + §13 页面行）；S5-T5 追加全量重建入口（api.md §3 端点 + 存储模型 §5 审计 event_kind 注册行 + 两个新错误码）。另附实现形态选型记录（进程内异步 vs 队列；LIKE vs 全文引擎；重建降级/幂等）供 ADR 归档。
+- **实现状态**：全部已实现并测试（迁移 0009；`server/src/search/`；`server/src/web/search/`；S5-T5 起 `maintenance/gate.ts` 放行清单含重建端点；43 项新测试；npm test 全绿）。
 
 ## C1 派生索引表的 DDL 归属（storage-model.md）
 
@@ -72,7 +72,7 @@ CREATE TABLE search_index_state (
 - 审计：只读端点，不记审计行。
 ```
 
-**待裁决**：(a) 是否补 `POST /api/v1/admin/search-index/rebuild`（T5 全量重建入口的端点形态——当前 T5 未启动，留待其任务定义）；(b) `pollMs` 是否作为 app_settings 配置键暴露（当前仅 `NOTEGIT_SEARCH_POLL_MS` 环境变量）。
+**待裁决**：(a) ~~是否补 `POST /api/v1/admin/search-index/rebuild`~~——已由 S5-T5 落地，建议稿文本见 C4（落点并入本节 §3.5）；(b) `pollMs` 是否作为 app_settings 配置键暴露（当前仅 `NOTEGIT_SEARCH_POLL_MS` 环境变量）；(c) 本节 200 体新增的 `rebuild` 进度面键（C4 一并建议）。
 
 ## C3 元数据查找：查询端点与搜索页（api.md，S5-T4）
 
@@ -101,7 +101,68 @@ CREATE TABLE search_index_state (
 
 **待裁决**：(a) 端点落点节号（§3.6 建议）；(b) 上限 100 行与 q 上界 200 字符是否入契约常量（当前在 `server/src/search/query.ts` 的 `SEARCH_RESULT_LIMIT`/`SEARCH_MAX_Q_CHARS`）；(c) 是否需要分页参数（当前 truncated 如实标注、不承诺分页——容量证明需要时再议）。
 
-## 实现形态选型记录（供 epic ADR 归档；breakdown 第 5 点）
+## C4 索引全量重建入口（api.md + storage-model.md，S5-T5）
+
+**现状**：S5-T5 已实现 `POST /api/v1/admin/search-index/rebuild`（`server/src/search/routes.ts` + `indexer.ts` 的 `rebuild()`——T3 启动对账 reconcile 的强制全量面：无视 state.head_commit 一致，逐库重派生 + 单事务全量替换；孤儿清理同 reconcile）。实例管理员门槛同 §3.5 GET。备份恢复流程的「应用内触发全量重建」（backup §7 步骤 9）即本端点；**维护模式放行**（`maintenance/gate.ts` RUNTIME_WRITE_ALLOWLIST 登记——派生索引不入备份一致性集合、闸门只拦权威数据写入；coordinator 2026-10-13 批复）。
+
+**建议 api.md 文本**（并入 §3.5 小节；§2.2 错误码表追加两行）：
+
+```markdown
+- **POST /api/v1/admin/search-index/rebuild**（写；实例管理员；backup-recovery §7 步骤 9）：
+  触发全量索引重建（逐库强制重派生——不比对头一致性；进度并入 GET 面）。
+  - 成功 202 `{rebuild: {state, total, done, started_at, finished_at}}`（异步在途；
+    GET /api/v1/admin/search-index 同键随时可查；逐库失败不阻断收口，经 vaults 面
+    up_to_date=false / consecutive_failures 单独可见——D7）。
+  - 重建型触发在逐库 state 上呈现 `triggered_by: "manual"`、`lag_ms: null`
+    （无发布延迟分母——C1 口径）。
+  - 幂等：重建中再触发 **409 E-RES-008**（拒绝不排队；`details.rebuild` 携带当前
+    进度）。触发成功记 `search.rebuild` 审计行（直接终态、实例级、运行态写入——
+    §5 注册表）；409 拒绝不记（无迁移不记）。
+  - 重建期间查询降级 = **部分结果**（鉴权过滤不降级：查询面逐请求实时 JOIN 成员
+    关系——D7；无泄露面）。维护模式内可触发（运行态写入——派生数据不入备份
+    一致性集合）。
+  - 错误：401（§1 通用）；403 E-AUTHZ-001；409 E-RES-008（重建在途）；
+    503 E-SRCH-001（无 dataDir 接线形态——索引器未接线，如实不可用）。
+```
+
+§2.2 错误码表追加（编号待 master 校订）：
+
+```markdown
+| E-RES-008 | 409 | 索引重建已在进行（触发被拒，进度可查；details.rebuild 携带进度面） | S5-T5；backup §7 步骤 9 |
+| E-SRCH-001 | 503 | 搜索索引未接线（无 dataDir 形态），索引域管理端点不可用 | S5-T5 |
+```
+
+**建议 storage-model.md §5 注册表追加行**：
+
+```markdown
+| `search.rebuild` | 直接终态（succeeded；运行态写入，不入备份一致性集合） | 否 | backup §7 步骤 9（S5-T5） |
+```
+
+**待裁决**：(a) 错误码编号与 E-SRCH 域是否成立（E-RES-008 顺延 / 或并入 E-RES-002 语义域）；(b) `rebuild` 进度面键（GET §3.5 与 POST 202 共用）的入册形态；(c) 审计 event_kind `search.rebuild` 注册行文本。
+
+### 重建降级选型（S5-T5，breakdown「重建期间查询可降级但权限过滤不降级——选型记录」）
+
+**选型：部分结果，不 503。** 依据：
+
+- 逐库替换是单事务（BEGIN IMMEDIATE … COMMIT，T3 落地）——读者永不见半库状态；
+  重建期间的查询结果 = 「已重建库的新行 ∪ 未重建库的旧行/缺行」，都是真实已发布
+  数据的子集，如实呈现（截断/缺行不伪造）。
+- 权限过滤在查询面逐请求实时 JOIN（identity §5.1 第 2 层同一无缓存判定面——D7），
+  与索引新鲜度正交：降级只缺「完整度」，**不存在授权降级面**。降态陷阱复测
+  （search-rebuild-e2e.test.ts）：无权库的行已在表（已重建）时，高权账号查询
+  精确计数不泄露；撤权下一查询即消失——两面（API+页面）同判定。
+- 被否方案 503 + Retry-After：无泄露面可消（授权过滤本就不依赖索引状态），只损失
+  读可用性（重建时长随库数增长，搜索全站不可用不成比例）。
+
+### 重建幂等选型（S5-T5，breakdown「重建中再触发拒绝或排队——选型记录」）
+
+**选型：拒绝（409 E-RES-008 + 当前进度），不排队。** 依据：单进程逐库串行（T3
+并发形态不变）；重建总取当前默认分支头，排队重跑与在跑重建产出相同（收敛目标
+同一）——排队只产生重复派生工作与队列生命周期语义（崩溃残留队列？），拒绝 +
+进度可查（409 details.rebuild / GET §3.5）对管理员更诚实。重建完成后可再次
+触发（无冷却期；state=completed 非终态锁）。
+
+
 
 **选型：进程内异步（审计尾随轮询 + 逐库串行重索引），不引队列服务。**
 
@@ -136,4 +197,5 @@ CREATE TABLE search_index_state (
 | C1 | storage-model.md | §3.11（建议，非权威面登记）或维持现状（migrations.ts 为 DDL 家） | 派生表 DDL 归属 | 已实现（迁移 0009） |
 | C2 | api.md | §3.5（建议） | 补录已实现端点 | 已实现（search/routes.ts） |
 | C3 | api.md | §3.6（建议）+ §13 表行 | 补录已实现查询端点与搜索页 | 已实现（search/routes.ts + search/query.ts + web/search/） |
+| C4 | api.md + storage-model.md | §3.5 并入（建议）+ §2.2 错误码两行 + §5 审计注册行 | 补录全量重建入口与降级/幂等选型 | 已实现（search/routes.ts + search/indexer.ts rebuild；gate.ts 放行清单） |
 | — | 架构 §13 / epic ADR | — | 实现形态选型（进程内异步审计尾随；LIKE 子串不做全文引擎） | 已实现（search/indexer.ts、search/query.ts） |

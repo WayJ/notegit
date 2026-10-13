@@ -48,6 +48,23 @@ export interface SearchIndexerOptions {
   readonly log?: SearchLog;
 }
 
+/**
+ * 全量重建运行态（S5-T5；backup §7 步骤 9「应用内触发全量重建，进度与延迟可观测」）：
+ * 进程内单实例（与索引器同生命周期；重启后归 idle——启动对账即崩溃兜底）。
+ * GET /api/v1/admin/search-index 消费（T3 指标面复用：rebuilding 状态 + 进度计数）。
+ */
+export interface RebuildStatus {
+  /** idle = 从未触发；running = 在途；completed = 本轮全部库已 settle（逐库失败经
+   *  vaults 面的 up_to_date/consecutive_failures 可见——D7 失败不阻断，单独可观测） */
+  readonly state: 'idle' | 'running' | 'completed';
+  readonly total: number;
+  readonly done: number;
+  readonly started_at: string | null;
+  readonly finished_at: string | null;
+}
+
+export const REBUILD_IDLE: RebuildStatus = { state: 'idle', total: 0, done: 0, started_at: null, finished_at: null };
+
 export interface SearchVaultStatus {
   readonly vault_id: number;
   readonly slug: string;
@@ -72,7 +89,7 @@ export interface SearchVaultStatus {
 }
 
 interface TriggerInfo {
-  readonly by: 'vault.push' | 'vault.web_submit' | 'startup-reconcile';
+  readonly by: 'vault.push' | 'vault.web_submit' | 'startup-reconcile' | 'manual';
   readonly at: string | null;
 }
 
@@ -102,6 +119,9 @@ export class SearchIndexer {
   private polling = false;
   /** 启动对账的在途句柄（stop 等待其完成——不留后台未决工作） */
   private reconcilePromise: Promise<void> | null = null;
+  /** 全量重建的在途句柄（stop 同款排空语义）与进度面（RebuildStatus 见接口注释） */
+  private rebuildPromise: Promise<void> | null = null;
+  private rebuildStatus: RebuildStatus = REBUILD_IDLE;
   /** 逐库待重索引标记 + 最近触发信息（合并触发取最新） */
   private readonly dirty = new Map<number, TriggerInfo>();
   /** 逐库串行链（在途/链式排队的重索引 Promise；pollOnce/reconcile await 它们求确定性） */
@@ -139,6 +159,10 @@ export class SearchIndexer {
     if (this.reconcilePromise !== null) {
       await this.reconcilePromise;
       this.reconcilePromise = null;
+    }
+    if (this.rebuildPromise !== null) {
+      await this.rebuildPromise;
+      this.rebuildPromise = null;
     }
     while (this.drains.size > 0) {
       await Promise.all([...this.drains.values()].map((p) => p.catch(() => {})));
@@ -204,8 +228,68 @@ export class SearchIndexer {
     await this.drainAll();
   }
 
-  /** 管理端点消费面：逐库状态 + 实时新鲜度 + 索引行数 */
-  async status(): Promise<{ running: boolean; pollMs: number; vaults: SearchVaultStatus[] }> {
+  /**
+   * 管理侧全量重建（S5-T5；backup §7 步骤 9）。与 reconcile 的差别：**无视**
+   * state.head_commit 是否与实际头一致，逐库强制重派生 + 单事务全量替换——
+   * reconcile 只修「头漂移」，不修「头一致而行丢失/损坏」（删索引数据后 state
+   * 也清空时两者恰好同效；state 残留而 index 行被清时只有本面能恢复）。孤儿
+   * 清理与 reconcile 同款（无外键的对应清理面）。逐库触发记 {by:'manual',
+   * at:null}（DDL CHECK 预留位；lag_ms 重建型为 NULL——C1 建议稿口径）。
+   *
+   * 重建期间查询降级选型 = 部分结果（不 503）：逐库事务替换（BEGIN IMMEDIATE
+   * …COMMIT）保证读者永不见半库状态；鉴权过滤在查询面逐请求实时 JOIN（D7 无
+   * 缓存），降级只缺「完整度」不缺「授权」——不存在泄露面，503 只损失读可用性
+   * （选型记录 docs/s1/search-index-amendments.md C4）。
+   *
+   * 幂等选型 = running 中再触发直接拒绝（false → 路由 409）：单进程逐库串行、
+   * 重建总取当前头，排队重跑与在跑产出相同——拒绝 + 进度可查比排队诚实。
+   *
+   * @returns 是否成功启动（false = 已有重建在途）
+   */
+  rebuild(): boolean {
+    if (this.rebuildStatus.state === 'running') return false;
+    const vaults = this.db.prepare('SELECT id FROM vaults').all() as { id: number }[];
+    this.rebuildStatus = {
+      state: 'running',
+      total: vaults.length,
+      done: 0,
+      started_at: this.now().toISOString(),
+      finished_at: null,
+    };
+    this.rebuildPromise = this.runRebuild(vaults.map((v) => v.id)).catch(() => {}); // runRebuild 内部吞错；防御外泄
+    return true;
+  }
+
+  /** 重建进度面（GET /api/v1/admin/search-index 消费；路由直接读，不触发副作用） */
+  rebuildStatusView(): RebuildStatus {
+    return this.rebuildStatus;
+  }
+
+  /** 重建主体：孤儿清理 → 逐库强制重索引（并行 kick、逐库串行链）→ 进度计数 → 定态 */
+  private async runRebuild(vaultIds: readonly number[]): Promise<void> {
+    try {
+      this.db.prepare('DELETE FROM search_index WHERE vault_id NOT IN (SELECT id FROM vaults)').run();
+      this.db.prepare('DELETE FROM search_index_state WHERE vault_id NOT IN (SELECT id FROM vaults)').run();
+      await Promise.all(
+        vaultIds.map(async (vaultId) => {
+          this.dirty.set(vaultId, { by: 'manual', at: null });
+          await this.kick(vaultId); // 含在途链：settle 即该库本轮定态（失败也已落 state/日志）
+          this.rebuildStatus = { ...this.rebuildStatus, done: this.rebuildStatus.done + 1 };
+        }),
+      );
+    } catch (err) {
+      this.log.error(
+        `[notegit search] 全量重建异常（进度 ${this.rebuildStatus.done}/${this.rebuildStatus.total}）：${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      // 逐库失败不阻断重建收口（D7：失败只在 vaults 面/日志可见——up_to_date=false、
+      // consecutive_failures 递增）；done 计数如实反映已 settle 的库数
+      this.rebuildStatus = { ...this.rebuildStatus, state: 'completed', finished_at: this.now().toISOString() };
+    }
+  }
+
+  /** 管理端点消费面：逐库状态 + 实时新鲜度 + 索引行数 + 重建进度面（S5-T5） */
+  async status(): Promise<{ running: boolean; pollMs: number; rebuild: RebuildStatus; vaults: SearchVaultStatus[] }> {
     const counts = new Map(
       (
         this.db.prepare('SELECT vault_id, COUNT(*) AS n FROM search_index GROUP BY vault_id').all() as {
@@ -248,7 +332,7 @@ export class SearchIndexer {
         rows: counts.get(Number(r['vault_id'])) ?? 0,
       });
     }
-    return { running: this.timer !== null, pollMs: this.pollMs, vaults };
+    return { running: this.timer !== null, pollMs: this.pollMs, rebuild: this.rebuildStatus, vaults };
   }
 
   /** 触发受影响库的串行重索引并等待排空（含在途链——调用方返回即已定态） */
