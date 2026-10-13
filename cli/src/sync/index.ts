@@ -18,13 +18,15 @@
  * 恢复权限即随正常结局复位）；子命令 clean（clean.ts）显式清理已标记库副本。
  * S7-T6：命令级网络失败（库列表拉取不可达）stderr 附离线提示（可能过期 +
  * 指向 ls）；逐库断网三态/离线副本明示在 engine.ts 变更面完成。
+ * S7-T7：本地根目录创建走 ensureLocalRoot（0700 创建 + 预存在收紧）——托管
+ * 按员工隔离的目录权限面（架构 §7.2/§4.1，断言见 hosted-isolation.test.ts）。
  */
 import process from 'node:process'
 import path from 'node:path'
-import { mkdir, readdir } from 'node:fs/promises'
+import { readdir } from 'node:fs/promises'
 import { credentialSourceFromEnv } from '../ls/credential-source.ts'
 import { cloneUrlOf, fetchVaults } from '../ls/api.ts'
-import { computeSyncStatus, localRootOf, realSyncGitOps } from '../ls/local-status.ts'
+import { computeSyncStatus, ensureLocalRoot, localRootOf, realSyncGitOps } from '../ls/local-status.ts'
 import { applySyncStrategy, realSyncOps, type SyncOutcome } from './engine.ts'
 import { buildSyncReport, exitCodeOf, renderReportJson, renderReportText, summarize, vaultResultOf } from './report.ts'
 import { writeLastSync } from './last-sync.ts'
@@ -116,7 +118,7 @@ export async function runSync(argv: string[], env: NodeJS.ProcessEnv = process.e
   const root = localRootOf(env)
   const ops = realSyncGitOps()
   const syncOps = realSyncOps()
-  await mkdir(root, { recursive: true })
+  ensureLocalRoot(root) // S7-T7：员工根目录 0700（创建即私有 + 预存在收紧）——托管目录隔离权限面
   // 单一时钟（S7-T4）：报告 last_sync、状态条目、.git 标记三面取同一时刻（同源同值）
   const syncedAt = new Date()
   const outcomes: SyncOutcome[] = []
