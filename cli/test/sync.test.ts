@@ -370,7 +370,8 @@ test('服务器不可达：退出码 1，stderr 提示无法连接', async () =>
 })
 
 test('未知选项 / 位置参数 / 非法 --depth：退出码 2（用法错误）', async () => {
-  for (const args of [['--definitely-not-a-flag'], ['positional'], ['--depth', '0'], ['--depth', 'x'], ['--json']] as const) {
+  // 注：--json 已是合法选项（S7-T3 交付，契约见 sync-report.test.ts），不再属用法错误
+  for (const args of [['--definitely-not-a-flag'], ['positional'], ['--depth', '0'], ['--depth', 'x']] as const) {
     const r = await run(['sync', ...args], syncEnv())
     assert.equal(r.status, 2, `${args.join(' ')} 应为用法错误`)
     assert.ok(r.stderr.length > 0)

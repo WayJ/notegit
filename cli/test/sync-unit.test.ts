@@ -279,10 +279,10 @@ test('策略表·他分支·分离头指针：跳过原因不引用分支名', a
   assert.ok(!out.reason.includes('null'))
 })
 
-test('策略表·error 判定：直接失败并携带判定消息，不发起变更操作', async () => {
+test('策略表·error 判定：直接失败并携带判定消息与原因码（S7-T3），不发起变更操作', async () => {
   const ops = fakeSyncOps()
   const out = await apply({ state: 'error', ...INFO_BASE, head: SHA1, remote_tip: null, message: '不是 git 仓库' }, ops)
-  assert.deepEqual(out, { action: 'failed', slug: 'alpha', path: INFO_BASE.path, message: '不是 git 仓库' })
+  assert.deepEqual(out, { action: 'failed', slug: 'alpha', path: INFO_BASE.path, code: 'status_error', message: '不是 git 仓库' })
   assert.deepEqual(ops.calls, [])
 })
 
