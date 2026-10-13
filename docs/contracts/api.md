@@ -155,6 +155,12 @@
 - 错误：403 E-AUTHZ-001；404 E-RES-001（键不在注册表）；400/422 E-RES-004/007（值域校验失败）；503 E-MAINT-001。（2026-10-13 ADR D12 定稿；HTTP 挂接待后续任务，写入面已实现自 S3-T8。）
 
 
+### 3.5 规则版本元信息（S6-T7 补录；validation §7.3 三端引用）
+#### GET /api/v1/rules-version（需认证）
+- 用途：CLI/程序化客户端探测服务端规则版本——本地旧于服务端时客户端附 N-UPGRADE-001 提示（validation §6：版本差异本身不构成拒绝理由；服务端为运行时权威）。
+- 成功：200 `{rulesVersion, status}`——值取自 [rules-version.json](rules-version.json) 唯一机器来源（服务端运行时经 notegit-validation 读取，与 pre-receive 同源，不另行复制维护）。
+- 错误：401 E-AUTH-001（§1 通用 401 映射；Bearer/会话双载体）。
+
 ## 4. 访问凭据（ngt_ token）
 
 自助与管理员代管并存（identity §3.5）。明文只在创建响应出现一次；此后任何端点不回显明文，仅 `ngt_` 前缀与末 4 位（identity §3.1）。

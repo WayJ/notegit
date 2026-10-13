@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "rewriteRelativeImportExtensions": true,
+    "outDir": "dist/node_modules/notegit-validation/src",
+    "rootDir": "../packages/validation/src"
+  },
+  "include": ["../packages/validation/src/**/*.ts"]
+}
