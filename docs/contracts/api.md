@@ -379,4 +379,6 @@ src/
 | GET /vaults/{slug}/view/{path} | 文件预览占位（元信息 + 如实标注；安全渲染 S4-T2 落地）；目录路径 302 → browse | S4-T1 |
 | GET /vaults/{slug}/view/{path} | 文件预览（S4-T2 落地，接管上行占位）：`.md` 服务端安全渲染（清理唯一通道：原始 HTML 剥离、URL 协议白名单 http/https/相对/锚点、脚本/事件属性不可达；代码块/行内码不二次渲染；frontmatter 不入正文；剥离如实标注）；非 Markdown 与超上限（1 MiB）仅元信息 + 如实标注；仓库相对图片经鉴权附件通道（S4-T4 落地，接口 `server/src/web/view/attachments.ts` 先行定形，未接入出占位标注）；目录路径 302 → browse | S4-T2 |
 
+| GET /vaults/{slug}/edit/{path} | 编辑页（S4-T3）：`.md` 知识文档六字段元数据表单（title 必填提示 required+maxlength、新建时 title 自文件名生成提交前可改、status 下拉封闭集防呆（active/draft/deprecated/缺省，非法旧值如实保留标注）、tags 逗号分隔输入、额外字段=安全 YAML 值文本区）+ 正文 textarea（多行纯文本，无富文本）；既有文件回填（六字段+额外字段+正文），新建路径=空表单；表单错误按 E-FM 码映射到字段与行定位（映射权威在服务端 `server/src/web/edit/errors.ts`，错误单一来源=发布组件 scope=web-submit 报告——缺 title 阻断含 E-FM-003 与行、W-FM-101 仅温和提示不阻断）；保存=§7 草稿 PUT 形状（存储 S4-T6 落地）、提交=§8.2 submissions（S3-T7 发布组件，占位调用面 `server/src/web/edit/submit.ts`，HTTP 接线 S4-T7）；base commit=打开编辑器时默认分支 HEAD 嵌入页面（完整冲突保护 S4-T7）；README（大小写不敏感）豁免=仅正文编辑并如实标注；非 `.md` 404（附件上传属 S4-T4）；目录路径 302 → browse；页面门槛=read 成员（D-IC-06 无权=不存在 404 同页；写权限由提交时发布组件 authorization 阶段判定——页面无写操作，安全判定在 API 侧） | S4-T3 |
+
 S4-T2 起各任务在本表 append 各自页面行；模块注册单点见 `server/src/web/routes.ts`。
