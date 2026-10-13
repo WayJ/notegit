@@ -4,8 +4,9 @@
  *
  * T1 的最小 stderr/stdout 行在此升级为结构化逐项结果：
  *   - status ∈ success | skipped | failed；
- *   - reason_code：成功=动作（cloned/fast_forwarded/up_to_date）、跳过=四态
- *     （dirty/ahead/diverged/other_branch）、失败=引擎原因码（SyncFailureCode）；
+ *   - reason_code：成功=动作（cloned/fast_forwarded/up_to_date）、跳过=四态+撤权
+ *     （dirty/ahead/diverged/other_branch/revoked——S7-T5：404 撤权入跳过域）、
+ *     失败=引擎原因码（SyncFailureCode）；
  *   - 细节随变体：head（cloned/up_to_date）、from+to（fast_forwarded）、
  *     reason（跳过文案）、message（失败细节）。
  *
@@ -26,13 +27,14 @@ export type VaultReasonCode =
   | 'ahead'
   | 'diverged'
   | 'other_branch'
+  | 'revoked'
   | SyncFailureCode
 
 /** 逐库结果对象（vaults[] 元素形态；键集按变体固化；last_sync 与状态文件同源同值——S7-T4）。 */
 export type VaultResult =
   | { readonly slug: string; readonly status: 'success'; readonly reason_code: 'cloned' | 'up_to_date'; readonly path: string; readonly head: string; readonly last_sync: string }
   | { readonly slug: string; readonly status: 'success'; readonly reason_code: 'fast_forwarded'; readonly path: string; readonly from: string; readonly to: string; readonly last_sync: string }
-  | { readonly slug: string; readonly status: 'skipped'; readonly reason_code: 'dirty' | 'ahead' | 'diverged' | 'other_branch'; readonly path: string | null; readonly reason: string; readonly head: string | null; readonly last_sync: string | null }
+  | { readonly slug: string; readonly status: 'skipped'; readonly reason_code: 'dirty' | 'ahead' | 'diverged' | 'other_branch' | 'revoked'; readonly path: string | null; readonly reason: string; readonly head: string | null; readonly last_sync: string | null }
   | { readonly slug: string; readonly status: 'failed'; readonly reason_code: SyncFailureCode; readonly path: string | null; readonly message: string }
 
 /** 汇总计数（各计数 == vaults[] 逐项复数；total == vaults.length）。 */

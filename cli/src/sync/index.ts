@@ -14,6 +14,8 @@
  * 全局状态锁（lock.ts；锁序固定 repo → state，不得反向）；runSync 单一 syncedAt
  * 时钟 → 报告 last_sync / 状态条目 / .git 标记三面同源同值；状态仅缓存
  * （state.ts），丢失由正常 sync 全流程重建。
+ * S7-T5：fetch 收 404 → skipped/revoked + 状态位置位（stateEntryOfOutcome 推导，
+ * 恢复权限即随正常结局复位）；子命令 clean（clean.ts）显式清理已标记库副本。
  */
 import process from 'node:process'
 import path from 'node:path'
@@ -26,6 +28,7 @@ import { buildSyncReport, exitCodeOf, renderReportJson, renderReportText, summar
 import { writeLastSync } from './last-sync.ts'
 import { repoLockPath, withFileLock } from './lock.ts'
 import { stateEntryOfOutcome, writeVaultEntry } from './state.ts'
+import { runSyncClean } from './clean.ts'
 import { EXIT_ERROR, EXIT_FAIL } from '../exit-codes.ts'
 
 interface SyncArgs {
@@ -49,7 +52,7 @@ function parseArgs(argv: string[]): { ok: true; args: SyncArgs } | { ok: false; 
     } else if (a.startsWith('-')) {
       return { ok: false, message: `未知选项：${a}（notegit sync --help 查看用法）` }
     } else {
-      return { ok: false, message: `不接受位置参数：${a}（notegit sync [--depth <深度>] [--json]）` }
+      return { ok: false, message: `不接受位置参数：${a}（notegit sync [--depth <深度>] [--json]；清理子命令 notegit sync clean 见 --help）` }
     }
   }
   return { ok: true, args: { depth, json } }
@@ -90,6 +93,7 @@ async function recordVaultSync(root: string, outcome: SyncOutcome, syncedAt: Dat
 
 /** 执行 sync；返回进程退出码。用法错误打 stderr 并返回 2（不抛出）。 */
 export async function runSync(argv: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
+  if (argv[0] === 'clean') return runSyncClean(argv.slice(1), env) // S7-T5 子命令：显式清理撤权库副本
   const parsed = parseArgs(argv)
   if (!parsed.ok) {
     process.stderr.write(`notegit sync: ${parsed.message}\n`)

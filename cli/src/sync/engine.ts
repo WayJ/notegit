@@ -6,10 +6,12 @@
  *   clean → 已最新不动 / 落后则 fetch 后快进（--ff-only 语义）；
  *   dirty / ahead / diverged / other_branch → 跳过并给原因；
  *   error（判定失败）→ 失败。
+ * S7-T5：revoked（fetch 收 404——撤权信号，判定面见 local-status.ts fetchTip）
+ *   → 跳过并给原因（副本保留、指向显式清理入口）——撤权是预期后果，不判失败。
  *
  * D7 红线：本模块不存在任何 stash/reset/rebase 路径——跳过即完全不动本地副本。
  * 报告契约（JSON/逐项结构/汇总口径）见 report.ts（S7-T3）；本层只产出结构化 outcome
- * （失败带机器原因码 SyncFailureCode，跳过带四态与原因文案）。
+ * （失败带机器原因码 SyncFailureCode，跳过带状态与原因文案）。
  * S7-T2：skipped outcome 携带离线副本 head 与上次同步时间（last-sync 本地形状，
  * T4 状态文件集成点见该模块头）——供报告层呈现「原因+commit+时间」。
  * S7-T4：成功 outcome 亦携带 last_sync（syncedAt 注入，与状态文件/报告同源同值）。
@@ -54,7 +56,7 @@ export type SyncOutcome =
  */
 export type SyncFailureCode = 'status_error' | 'clone_failed' | 'head_unreadable' | 'fast_forward_failed' | 'internal' | 'lock_failed'
 
-/** 四类跳过态的原因文案（§7.3 枚举顺序；T3 收口报告契约时可再精化）。 */
+/** 跳过态的原因文案（四类工作副本态 + 撤权态；§7.3 枚举顺序）。 */
 function skipReason(info: SyncInfo, defaultBranch: string): string {
   switch (info.state) {
     case 'dirty':
@@ -67,6 +69,8 @@ function skipReason(info: SyncInfo, defaultBranch: string): string {
       return info.branch === null
         ? `当前为分离头指针，不在默认分支 ${defaultBranch} 上`
         : `当前位于分支 ${info.branch}，不是默认分支 ${defaultBranch}`
+    case 'revoked':
+      return '库已不可访问（服务端对 fetch 返回 404——权限可能已被撤销或库已删除）；本地副本保留、不自动删除，可用 notegit sync clean 显式清理'
     default:
       return `未知跳过态：${info.state}`
   }

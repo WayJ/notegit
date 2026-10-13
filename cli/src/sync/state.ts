@@ -5,8 +5,10 @@
  *   { version: 1, vaults: { [slug]: { head, last_sync, revoked } } }
  *   - head：该库本地副本当前 HEAD（40 位 sha；new 未克隆前无条目）；
  *   - last_sync：上次成功同步时间（ISO 8601；从未成功同步为 null）；
- *   - revoked：撤权标记位（S7-T5 消费：404 置位、清理命令读取；正常 sync
- *     写入一律复位 false——库重新可见即恢复同步资格，生命周期归 T5）。
+ *   - revoked：撤权标记位（S7-T5 生命周期：fetch 404 的 skipped/revoked 结局
+ *     置位 true；其余任何结局（成功或普通跳过）复位 false——库仍在列表即重新
+ *     可见即恢复同步资格，identity §5.2 列表实时反映权限；sync clean 消费本位
+ *     决定清理范围，清理成功后条目整体移除〔removeVaultEntry〕）。
  *
  * 仅缓存语义（红线）：文件缺失/损坏/未知版本一律折叠为空缓存，本模块读面绝不
  * 因此抛出；删除整个 .notegit 后 sync 以正常全流程重建（黑盒断言见
@@ -104,10 +106,20 @@ export async function setRevoked(root: string, slug: string, revoked: boolean): 
   })
 }
 
+/** 移除单库条目（S7-T5：sync clean 清理成功后调用；未知 slug 幂等）。 */
+export async function removeVaultEntry(root: string, slug: string): Promise<void> {
+  await writeMerged(root, (doc) => {
+    const vaults = { ...doc.vaults }
+    delete vaults[slug]
+    return { version: 1, vaults }
+  })
+}
+
 /**
  * outcome → 状态条目（纯推导；runSync 据此写入）：
  *   成功三动作 → head=操作后 HEAD、last_sync=本次 syncedAt；
  *   跳过 → head=当前本地 HEAD、last_sync=上次值（跳过不刷新同步时间）；
+ *     其中 revoked 跳过（fetch 404）→ 撤权位置位 true（S7-T5）；
  *   失败 → null（不写——保留旧条目，失败库不产生缓存事实）。
  */
 export function stateEntryOfOutcome(outcome: SyncOutcome, syncedAt: string): VaultStateEntry | null {
@@ -119,7 +131,7 @@ export function stateEntryOfOutcome(outcome: SyncOutcome, syncedAt: string): Vau
     case 'up_to_date':
       return { head: outcome.head, last_sync: syncedAt, revoked: false }
     case 'skipped':
-      return { head: outcome.head, last_sync: outcome.last_sync, revoked: false }
+      return { head: outcome.head, last_sync: outcome.last_sync, revoked: outcome.state === 'revoked' }
     case 'failed':
       return null
   }

@@ -15,6 +15,8 @@
  * S7-T1 扩展（D5）：sync 六态 = ls 四态的展开——not_cloned→new；cloned/behind→
  * clean；unknown→{dirty/ahead/diverged/other_branch}（判定基础设施失败另记
  * error）。见下方 SyncGitOps/computeSyncStatus；ls 四态自身语义不变。
+ * S7-T5 扩展：fetch 失败面分类（fetchTip）——HTTP 404 → revoked（撤权标记，
+ * identity §5.2）；ls 四态与 remoteTip 语义不变（ls 不消费撤权信号）。
  */
 import { existsSync } from 'node:fs'
 import { execFile } from 'node:child_process'
@@ -78,6 +80,18 @@ function runGit(cwd: string, args: string[]): Promise<{ code: number; stdout: st
   })
 }
 
+/** 同 runGit 但捕获 stderr（fetch 失败面分类需要——S7-T5）。 */
+function runGitErr(cwd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    execFile(
+      'git',
+      args,
+      { cwd, encoding: 'utf8', timeout: 60_000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } },
+      (err, stdout, stderr) => resolve({ code: err === null ? 0 : (err as { code?: number }).code ?? 1, stdout: stdout ?? '', stderr: stderr ?? '' }),
+    )
+  })
+}
+
 export function realGitOps(): GitOps {
   return {
     revParse: async (cwd, ref) => {
@@ -107,14 +121,26 @@ export interface SyncGitOps extends GitOps {
   currentBranch(cwd: string): Promise<string | null | undefined>
   /** 工作区是否有未提交修改（含未跟踪文件——保守视为脏，防快进覆盖）；undefined = 不可判定。 */
   isDirty(cwd: string): Promise<boolean | undefined>
+  /**
+   * 判定面 fetch（同 remoteTip 语义）但失败面分类（S7-T5）：
+   * not_found = HTTP 404 / 库不存在——撤权信号（identity §5.2）；
+   * unavailable = 其他失败（网络、认证等——不误标撤权）。
+   */
+  fetchTip(cwd: string, url: string, branch: string): Promise<FetchTipResult>
 }
+
+export type FetchTipResult = { readonly found: true; readonly sha: string } | { readonly found: false; readonly reason: 'not_found' | 'unavailable' }
 
 /**
  * sync 六态（架构 §7.3 策略表的判定面）：
  *   new=无副本；clean=默认分支干净（含已最新与可快进）；dirty/ahead/diverged/other_branch=四类跳过。
  * error = 判定基础设施失败（非 git 仓库、fetch 失败、祖先判定不可用）——按失败逐库报告，不入策略表。
+ * revoked = 服务端权限面状态而非工作副本状态（S7-T5）：fetch 收 HTTP 404
+ *   （identity §5.2：撤权库 Git 通道一律 404）→ 该库不可继续同步，策略上归入
+ *   跳过族（本地副本保留，显式清理入口 sync clean）；判定序仍在 fetch 处——
+ *   本地即可判的跳过态（脏/他分支等）不发起网络，也就不会发现撤权。
  */
-export type SyncState = 'new' | 'clean' | 'dirty' | 'ahead' | 'diverged' | 'other_branch'
+export type SyncState = 'new' | 'clean' | 'dirty' | 'ahead' | 'diverged' | 'other_branch' | 'revoked'
 
 export interface SyncInfo {
   readonly state: SyncState | 'error'
@@ -130,8 +156,8 @@ export interface SyncInfo {
 /**
  * 六态判定顺序（§7.3「先获取远端，再判断更新条件」作用于更新路径；本地即可判定的
  * 跳过态不发起网络）：无副本→new；非仓库→error；他分支/分离→other_branch；
- * 脏→dirty；fetch→tip；head==tip→clean；head 祖先于 tip→clean（可快进）；
- * tip 祖先于 head→ahead；互不为祖先→diverged。
+ * 脏→dirty；fetch→tip（404→revoked，S7-T5；其他失败→error）；head==tip→clean；
+ * head 祖先于 tip→clean（可快进）；tip 祖先于 head→ahead；互不为祖先→diverged。
  */
 export async function computeSyncStatus(args: {
   root: string
@@ -158,26 +184,29 @@ export async function computeSyncStatus(args: {
     return { state: 'error', path: dir, branch, head: repoHead, remote_tip: null, message: `无法判定工作区洁净度：${dir}` }
   }
   if (dirty === true) return { state: 'dirty', path: dir, branch, head: repoHead, remote_tip: null, message: null }
-  const tip = await args.ops.remoteTip(dir, args.cloneUrl, args.defaultBranch)
-  if (tip === undefined) {
+  const tip = await args.ops.fetchTip(dir, args.cloneUrl, args.defaultBranch)
+  if (tip.found === false) {
+    if (tip.reason === 'not_found') {
+      return { state: 'revoked', path: dir, branch, head: repoHead, remote_tip: null, message: null }
+    }
     return { state: 'error', path: dir, branch, head: repoHead, remote_tip: null, message: `获取远端失败（网络或权限）：${args.cloneUrl}` }
   }
   const head = await args.ops.revParse(dir, `refs/heads/${args.defaultBranch}`)
   if (head === undefined) {
-    return { state: 'error', path: dir, branch, head: null, remote_tip: tip, message: `本地默认分支 ${args.defaultBranch} 不可解析：${dir}` }
+    return { state: 'error', path: dir, branch, head: null, remote_tip: tip.sha, message: `本地默认分支 ${args.defaultBranch} 不可解析：${dir}` }
   }
-  if (head === tip) return { state: 'clean', path: dir, branch, head, remote_tip: tip, message: null }
-  const behind = await args.ops.isAncestor(dir, head, tip)
-  if (behind === true) return { state: 'clean', path: dir, branch, head, remote_tip: tip, message: null }
+  if (head === tip.sha) return { state: 'clean', path: dir, branch, head, remote_tip: tip.sha, message: null }
+  const behind = await args.ops.isAncestor(dir, head, tip.sha)
+  if (behind === true) return { state: 'clean', path: dir, branch, head, remote_tip: tip.sha, message: null }
   if (behind === undefined) {
-    return { state: 'error', path: dir, branch, head, remote_tip: tip, message: `祖先判定不可用（head=${head.slice(0, 7)} tip=${tip.slice(0, 7)}）` }
+    return { state: 'error', path: dir, branch, head, remote_tip: tip.sha, message: `祖先判定不可用（head=${head.slice(0, 7)} tip=${tip.sha.slice(0, 7)}）` }
   }
-  const ahead = await args.ops.isAncestor(dir, tip, head)
-  if (ahead === true) return { state: 'ahead', path: dir, branch, head, remote_tip: tip, message: null }
-  return { state: 'diverged', path: dir, branch, head, remote_tip: tip, message: null }
+  const ahead = await args.ops.isAncestor(dir, tip.sha, head)
+  if (ahead === true) return { state: 'ahead', path: dir, branch, head, remote_tip: tip.sha, message: null }
+  return { state: 'diverged', path: dir, branch, head, remote_tip: tip.sha, message: null }
 }
 
-/** 真实 sync 判定 ops（ls 三原语 + 分支/洁净度；同一 runGit 栈）。 */
+/** 真实 sync 判定 ops（ls 三原语 + 分支/洁净度 + 分类 fetch；同一 runGit 栈）。 */
 export function realSyncGitOps(): SyncGitOps {
   return {
     ...realGitOps(),
@@ -189,6 +218,19 @@ export function realSyncGitOps(): SyncGitOps {
       const r = await runGit(cwd, ['status', '--porcelain'])
       if (r.code !== 0) return undefined
       return r.stdout.trim() !== ''
+    },
+    fetchTip: async (cwd, url, branch) => {
+      const f = await runGitErr(cwd, ['fetch', '--quiet', url, branch])
+      if (f.code !== 0) {
+        // git 对 Smart HTTP 404 的规范报错为「fatal: repository '<url>' not found」
+        // （2026-10-13 本机探针实证：连接拒绝=unable to access…Failed to connect、
+        // 认证失败=Authentication failed，均不含 not found）。本地化 git 理论上可漂移：
+        // 匹配不到时落入 unavailable→error（fail-safe 方向——不误标撤权、不误清理）。
+        return /not found/i.test(f.stderr) ? { found: false, reason: 'not_found' as const } : { found: false, reason: 'unavailable' as const }
+      }
+      const p = await runGit(cwd, ['rev-parse', '--verify', '--quiet', 'FETCH_HEAD^{commit}'])
+      const sha = p.stdout.trim()
+      return p.code === 0 && /^[0-9a-f]{40}$/.test(sha) ? { found: true, sha } : { found: false, reason: 'unavailable' as const }
     },
   }
 }

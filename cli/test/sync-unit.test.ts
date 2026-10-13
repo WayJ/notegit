@@ -19,7 +19,9 @@ function fakeGit(script: {
   branch?: string | null // currentBranch（null = 分离头指针）
   dirty?: boolean
   head?: string // revParse refs/heads/<默认分支>
-  tip?: string // remoteTip（fetch 后 FETCH_HEAD）
+  tip?: string // fetchTip 成功时的 FETCH_HEAD
+  notFound?: boolean // fetchTip：HTTP 404（撤权信号，S7-T5）
+  unavailable?: boolean // fetchTip：其他失败（网络/认证）
   headAncestor?: boolean // isAncestor(head, tip)
   tipAncestor?: boolean // isAncestor(tip, head)
 }): SyncGitOps & { calls: string[] } {
@@ -41,6 +43,12 @@ function fakeGit(script: {
     remoteTip: async (_cwd, _url, branch) => {
       calls.push(`remoteTip:${branch}`)
       return script.tip
+    },
+    fetchTip: async (_cwd, _url, branch) => {
+      calls.push(`fetchTip:${branch}`)
+      if (script.notFound === true) return { found: false as const, reason: 'not_found' as const }
+      if (script.unavailable === true) return { found: false as const, reason: 'unavailable' as const }
+      return { found: true as const, sha: script.tip ?? SHA2 }
     },
     isAncestor: async (_cwd, a, b) => {
       calls.push(`isAncestor:${a.slice(0, 4)}->${b.slice(0, 4)}`)
@@ -91,7 +99,7 @@ test('computeSyncStatus：分离头指针（currentBranch=null）→ other_branc
     const git = fakeGit({ repo: SHA1, branch: null, head: SHA1, tip: SHA1 })
     const info = await computeSyncStatus({ root, ...ARGS, ops: git })
     assert.deepEqual(info, { state: 'other_branch', path: path.join(root, 'alpha'), branch: null, head: SHA1, remote_tip: null, message: null })
-    assert.ok(!git.calls.some((c) => c.startsWith('remoteTip')), '本地即可判跳过，不应发起网络')
+    assert.ok(!git.calls.some((c) => c.startsWith('fetchTip')), '本地即可判跳过，不应发起网络')
   })
 })
 
@@ -101,7 +109,7 @@ test('computeSyncStatus：当前分支 ≠ 默认分支 → other_branch（携�
     const git = fakeGit({ repo: SHA1, branch: 'feature', head: SHA1, tip: SHA2 })
     const info = await computeSyncStatus({ root, ...ARGS, ops: git })
     assert.deepEqual(info, { state: 'other_branch', path: path.join(root, 'alpha'), branch: 'feature', head: SHA1, remote_tip: null, message: null })
-    assert.ok(!git.calls.some((c) => c.startsWith('remoteTip')), '他分支跳过无需 fetch')
+    assert.ok(!git.calls.some((c) => c.startsWith('fetchTip')), '他分支跳过无需 fetch')
   })
 })
 
@@ -111,18 +119,29 @@ test('computeSyncStatus：工作区有未提交修改（含未跟踪）→ dirty
     const git = fakeGit({ repo: SHA1, branch: 'main', dirty: true, head: SHA1, tip: SHA2 })
     const info = await computeSyncStatus({ root, ...ARGS, ops: git })
     assert.deepEqual(info, { state: 'dirty', path: path.join(root, 'alpha'), branch: 'main', head: SHA1, remote_tip: null, message: null })
-    assert.ok(!git.calls.some((c) => c.startsWith('remoteTip')), '脏工作区跳过无需 fetch')
+    assert.ok(!git.calls.some((c) => c.startsWith('fetchTip')), '脏工作区跳过无需 fetch')
   })
 })
 
-test('computeSyncStatus：位于默认分支且干净，但 fetch 失败 → error（head 保留）', async () => {
+test('computeSyncStatus：位于默认分支且干净，但 fetch 失败（非 404）→ error（head 保留）', async () => {
   await withRoot(async (root) => {
     await mkdir(path.join(root, 'alpha'))
-    const git = fakeGit({ repo: SHA1, branch: 'main', dirty: false, head: SHA1, tip: undefined })
+    const git = fakeGit({ repo: SHA1, branch: 'main', dirty: false, head: SHA1, unavailable: true })
     const info = await computeSyncStatus({ root, ...ARGS, ops: git })
     assert.equal(info.state, 'error')
     assert.equal(info.head, SHA1)
     assert.match(info.message ?? '', /fetch|远端/)
+  })
+})
+
+test('computeSyncStatus：fetch 收 404（not_found）→ revoked（S7-T5：撤权标记的判定入口）', async () => {
+  await withRoot(async (root) => {
+    await mkdir(path.join(root, 'alpha'))
+    const git = fakeGit({ repo: SHA1, branch: 'main', dirty: false, head: SHA1, notFound: true })
+    const info = await computeSyncStatus({ root, ...ARGS, ops: git })
+    assert.equal(info.state, 'revoked', '404 是撤权信号（identity §5.2），不折叠为 error')
+    assert.equal(info.head, SHA1, '本地 head 保留（供报告/状态条目）')
+    assert.equal(info.remote_tip, null)
   })
 })
 
