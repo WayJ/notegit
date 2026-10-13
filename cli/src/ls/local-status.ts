@@ -18,7 +18,7 @@
  * S7-T5 扩展：fetch 失败面分类（fetchTip）——HTTP 404 → revoked（撤权标记，
  * identity §5.2）；ls 四态与 remoteTip 语义不变（ls 不消费撤权信号）。
  */
-import { existsSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
@@ -47,6 +47,19 @@ export function localRootOf(env: NodeJS.ProcessEnv): string {
   const configured = (readCliConfig(env)['localRoot'] ?? '').trim()
   if (configured !== '') return path.resolve(configured)
   return path.join(os.homedir(), 'knowbase')
+}
+
+/**
+ * S7-T7 托管隔离：员工本地根目录创建面（架构 §7.2「不同员工的可写工作目录不
+ * 共享」、§4.1；DOD-10）。创建即 0700——列举目录即可泄露库 slug，其他员工不得
+ * 持有任何组/其他权限位；预存在目录显式收紧（同 credentials.ts 对凭据文件 0600
+ * 的先例——防历史/误配宽松权限，fail-closed 到私有；收紧只移除组/其他位，属主
+ * 使用不受影响）。凭据文件的对应面在 credentials.ts（文件 0600 + 创建时父目录
+ * 0700；父目录不收紧——令牌机密由文件位保护，不动用户 ~/.config 既有权限）。
+ */
+export function ensureLocalRoot(root: string): void {
+  mkdirSync(root, { recursive: true, mode: 0o700 })
+  chmodSync(root, 0o700)
 }
 
 export async function computeLocalStatus(args: {
