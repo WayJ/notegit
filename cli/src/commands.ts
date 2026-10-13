@@ -38,11 +38,17 @@ export const COMMANDS: Record<string, CommandSpec> = {
   },
   setup: {
     name: 'setup',
-    summary: '在已克隆库中安装/管理本地校验 hook',
-    status: 'S6-T6 交付',
-    usage: 'notegit setup [--uninstall]',
-    detail: '安装 pre-commit hook（不执行库内脚本，保留现有 hook 兼容或明确报告冲突）；卸载可还原 .git/hooks 原状；重复安装幂等。',
-    options: ['--uninstall  卸载并还原 hook', '-h, --help  输出本帮助'],
+    summary: '在已克隆库中安装/卸载/管理本地校验 hook 与本地根目录',
+    status: 'S6-T6 交付（兼容两模式与卸载还原测试：cli/test/setup-*.test.ts）',
+    usage: 'notegit setup [--chain] [--local-root <路径>] [--uninstall]',
+    detail: '在当前仓库安装 pre-commit hook（不执行库内脚本）。已有外来 pre-commit 时默认明确报告冲突并拒绝安装（保留现有 hook）；加 --chain 改用兼容链：原 hook 原样保留为 pre-commit.user，提交时先运行原 hook 再追加 notegit 校验。卸载还原 .git/hooks 原状（兼容链卸载把原 hook 还原回 pre-commit），重复安装/卸载幂等。--local-root 把本地根目录持久化到 CLI 配置（notegit ls 按 <根>/<slug> 对照，缺省 ~/knowbase）；同时提示性检查 Git credential helper 注册状态。',
+    options: [
+      '--chain            已有外来 pre-commit 时采用兼容链（保留原 hook 为 pre-commit.user，先运行原 hook 再追加 notegit 校验）；默认为明确报告冲突拒绝安装',
+      '--local-root <路径>  持久化本地根目录到 CLI 配置（~ 按当前 HOME 展开；缺省取环境变量 NOTEGIT_LOCAL_ROOT）',
+      '--uninstall        卸载并还原 .git/hooks 原状（幂等；外来 hook 不触碰）',
+      '-h, --help         输出本帮助',
+    ],
+    implemented: true,
   },
   lint: {
     name: 'lint',

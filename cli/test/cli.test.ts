@@ -1,8 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -115,10 +114,16 @@ test('ls（已实现，S6-T3 集成修正）：未配置凭据时退出码 1（�
   assert.equal(r.status, 1)
 })
 
-test('setup（占位执行）：退出码 2，stderr 标注尚未实现', () => {
-  const r = runCli(['setup'])
-  assert.equal(r.status, 2)
-  assert.match(r.stderr, /尚未实现/)
+test('setup（S6-T6 已实现）：在非 git 仓库中运行 → 退出码 2，stderr 说明不在工作树内', () => {
+  // 不能在 cli/ 内裸跑（本仓库会被装上 hook）：用隔离的临时目录断言运行错误路径
+  const notRepo = mkdtempSync(path.join(tmpdir(), 'ngt-cli-setup-'))
+  try {
+    const r = spawnSync(process.execPath, [BIN, 'setup'], { cwd: notRepo, encoding: 'utf8' })
+    assert.equal(r.status, 2)
+    assert.match(r.stderr, /工作树/)
+  } finally {
+    rmSync(notRepo, { recursive: true, force: true })
+  }
 })
 
 test('lint --staged --json（S6-T4 已实现）：非 git 仓库 → 退出码 2 + E-RUN-002 运行错误报告', () => {
