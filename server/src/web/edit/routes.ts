@@ -11,6 +11,7 @@ import { browseUrl } from '../browse/pages.ts';
 import { readEntryAt, readBlobText, README_RENDER_MAX_BYTES } from '../browse/tree.ts';
 import { parseDocForForm, titleFromFilename } from './form.ts';
 import { editPage, readmeEditPage, editStatePage } from './pages.ts';
+import { DraftsService, type DraftContent } from '../../drafts/service.ts';
 
 /**
  * S4-T3 编辑族路由（元数据表单 + 正文编辑）：
@@ -27,6 +28,10 @@ import { editPage, readmeEditPage, editStatePage } from './pages.ts';
  * - base commit：打开编辑器即解析默认分支 HEAD 嵌入页面（提交 CAS 旧值 /
  *   草稿 base_commit——架构 §6「打开编辑器记录 base commit」，完整冲突保护
  *   属 S4-T7）。
+ * - S4-T7 草稿预填（T6 遗留接页）：本人现行草稿（§7 active）存在 → 表单回填
+ *   草稿内容（草稿优先于库内文件——作者最新工作），同时呈现草稿 base_commit
+ *   旧值与保存时间（T6 notes 移交节）；草稿基线 ≠ 当前 HEAD → 如实标注
+ *   「分支已前进」提示核对（直接提交将 409——刷新本页即取最新基线重提）。
  *
  * D5 模块自声明：不改 web/routes.ts 既有行（组装点 append 一行注册本模块）。
  */
@@ -43,19 +48,27 @@ const EDIT_LOAD_MAX_BYTES = README_RENDER_MAX_BYTES;
 export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions): void {
   const vaults = new VaultService({ db: opts.db }); // 只读消费（getVaultRow）
   const membershipSource = createDbMembershipSource(opts.db); // 三入口同源成员判定
+  const drafts = new DraftsService({ db: opts.db }); // 只读消费（get——回填预取）
 
   async function requireVault(
     req: FastifyRequest,
     reply: FastifyReply,
     slug: string,
-  ): Promise<{ slug: string; name: string; id: number; defaultBranch: string } | null> {
+  ): Promise<{ who: AuthSuccess; slug: string; name: string; id: number; defaultBranch: string } | null> {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return null;
     const decision = authorize(membershipSource, who.subject.employee_id, slug, 'read');
     if (!decision.allowed) return sendPageNotFound(reply), null; // 无权=不存在（D-IC-06）
     const row = vaults.getVaultRow(slug);
     if (!row) return sendPageNotFound(reply), null; // fail-closed
-    return { slug: row.slug, name: row.name, id: row.id, defaultBranch: row.default_branch };
+    return { who, slug: row.slug, name: row.name, id: row.id, defaultBranch: row.default_branch };
+  }
+
+  /** 回填信息（T6 移交：呈现草稿基线旧值；stale = 分支已前进如实标注） */
+  function draftInfoOf(draft: DraftContent | null, currentBase: string | null) {
+    return draft === null
+      ? {}
+      : { draft: { baseCommit: draft.base_commit, updatedAt: draft.updated_at, stale: draft.base_commit !== currentBase } };
   }
 
   /** 默认分支 HEAD（base commit）；空库/解析失败 = null（分支创建语义） */
@@ -103,10 +116,13 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
     }
 
     const baseCommit = await headCommit(opts.dataDir, vault.id, vault.defaultBranch);
+    // S4-T7 草稿预填（T6 遗留接页）：本人现行草稿优先于库内文件（§7 GET 同一
+    // 存储面；按作者私有——他人草稿在此取数路径上不可达）
+    const draft = drafts.get(vault.id, vault.who.subject.employee_id, entryPath);
 
     if (read.kind !== 'ok') {
-      // 新建模式：title 从文件名生成（提交前可改——架构 §5.1）
-      const prefill = parseDocForForm('');
+      // 新建模式：title 从文件名生成（提交前可改——架构 §5.1）；有草稿则回填草稿
+      const empty = parseDocForForm('');
       return html(
         reply,
         editPage({
@@ -114,7 +130,11 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
           entryPath,
           mode: 'new',
           baseCommit,
-          prefill: { ...prefill, fields: { ...prefill.fields, title: titleFromFilename(entryPath) } },
+          prefill:
+            draft !== null
+              ? parseDocForForm(draft.content)
+              : { ...empty, fields: { ...empty.fields, title: titleFromFilename(entryPath) } },
+          ...draftInfoOf(draft, baseCommit),
         }),
       );
     }
@@ -128,8 +148,28 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
 
     if (isReadme) {
       // README 豁免：不套六字段表单（正文即全文——含 frontmatter 也原样呈现，保存不丢）
-      return html(reply, readmeEditPage({ vault, entryPath, mode: 'edit', baseCommit, body: text }));
+      return html(
+        reply,
+        readmeEditPage({
+          vault,
+          entryPath,
+          mode: 'edit',
+          baseCommit,
+          body: draft?.content ?? text,
+          ...draftInfoOf(draft, baseCommit),
+        }),
+      );
     }
-    return html(reply, editPage({ vault, entryPath, mode: 'edit', baseCommit, prefill: parseDocForForm(text) }));
+    return html(
+      reply,
+      editPage({
+        vault,
+        entryPath,
+        mode: 'edit',
+        baseCommit,
+        prefill: draft !== null ? parseDocForForm(draft.content) : parseDocForForm(text),
+        ...draftInfoOf(draft, baseCommit),
+      }),
+    );
   });
 }

@@ -10,6 +10,7 @@ import { registerViewRoutes } from './view/routes.ts';
 import { registerUploadRoutes } from './upload/routes.ts';
 import { registerEditRoutes } from './edit/routes.ts';
 import { registerRenameRoutes } from './rename/routes.ts';
+import { submissionsPlugin } from './edit/submissions.ts';
 
 /**
  * Web 页面域组装点（唯一主链路——S4 plan D5 骨架裁决，S3 教训对策）：
@@ -51,4 +52,13 @@ export function registerWebRoutes(app: FastifyInstance, opts: WebRoutesOptions):
   registerEditRoutes(app, shared); // S4-T3 元数据表单与正文编辑（edit 路由族；提交走 S3-T7 发布组件占位调用面，HTTP 接线属 T7）
   registerUploadRoutes(app, shared); // S4-T4 上传端点 + 附件鉴权读取（blob 寻址，URL 不可枚举；view 附件通道装配）
   registerRenameRoutes(app, shared); // S4-T5 重命名与删除（目标路径重判定/历史保留；GET 表单页 + POST 走发布组件）
+  // S4-T7 提交端点（api.md §8.2 POST /api/v1/vaults/{slug}/submissions）：编辑页
+  // 「提交」按钮消费端——/api/v1 域（认证 401 JSON、app 级 maintenanceGuard/
+  // CSRF 自动覆盖）；冲突保护 409 E-RES-003 含当前 tip（组件层 gate 透传为最后一道）
+  app.register(submissionsPlugin, {
+    db: opts.db,
+    authenticateRequest: opts.authenticateRequest,
+    ...(opts.dataDir !== undefined ? { dataDir: opts.dataDir } : {}),
+    ...(opts.maintenanceGate !== undefined ? { maintenanceGate: opts.maintenanceGate } : {}),
+  });
 }

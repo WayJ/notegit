@@ -45,6 +45,17 @@ export interface EditPageInput {
   /** 打开编辑器时默认分支 HEAD（§7/§8.2 base_commit；空库 null） */
   readonly baseCommit: string | null;
   readonly prefill: ParsedForForm;
+  /** S4-T7 草稿预填信息（本人现行草稿回填时呈现；缺省 = 无草稿） */
+  readonly draft?: { baseCommit: string | null; updatedAt: string; stale: boolean };
+}
+
+/** 回填标注（T6 移交：呈现草稿 base_commit 旧值；stale=分支已前进如实提示） */
+function draftNote(draft: { baseCommit: string | null; updatedAt: string; stale: boolean }): string {
+  const base = draft.baseCommit === null ? '（空库）' : escapeHtml(draft.baseCommit);
+  const tail = draft.stale
+    ? '——<strong>分支已前进</strong>：他人已提交新版本，直接提交将得到冲突提示；请先核对最新内容，刷新本页即取最新基线重提'
+    : '——与当前基线一致';
+  return `<p class="draft-note">已回填你保存的草稿（更新于 ${escapeHtml(draft.updatedAt)}；草稿基线 <code>${base}</code>${tail}）。</p>`;
 }
 
 /** 字段块：label + 控件 + 行内错误位（422 报告渲染落点 id="err-<field>"） */
@@ -62,7 +73,7 @@ function js(v: string): string {
 }
 
 export function editPage(input: EditPageInput): string {
-  const { vault, entryPath, mode, baseCommit, prefill } = input;
+  const { vault, entryPath, mode, baseCommit, prefill, draft } = input;
   const name = nameOf(entryPath);
   const isNew = mode === 'new';
   const statusEnum = ['active', 'draft', 'deprecated'];
@@ -170,7 +181,9 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
       renderReport(err.data); // T2 报告（scope=web-submit）——字段定位 + 行
       document.getElementById('form-msg').textContent = '提交被校验阻止（草稿内容保留在表单中——不发布）。';
     } else if (err.status === 409) {
-      document.getElementById('form-msg').textContent = '提交冲突：分支已前进（他人先提交）——内容仍在表单，刷新基线后重提（S4-T7 完整接线）。';
+      // S4-T7 冲突保护：409 信封 details.current_head（当前 tip 提示刷新——S3-T7 CAS 拒）
+      const tip = err.data && err.data.error && err.data.error.details ? err.data.error.details.current_head : null;
+      document.getElementById('form-msg').textContent = '提交冲突：分支已前进' + (tip ? '（当前 ' + String(tip).slice(0, 10) + '…）' : '') + '——他人先提交，内容仍在表单、草稿已保留；请先核对最新内容，刷新本页取最新基线后重提。';
     } else {
       document.getElementById('form-msg').textContent = '提交失败：' + err.message;
     }
@@ -182,7 +195,8 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
     `${isNew ? '新建' : '编辑'}：${name} — ${vault.name}`,
     `<h1>${isNew ? '新建' : '编辑'}：${escapeHtml(name)}</h1>
 <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
-<p>类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${isNew ? ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）' : ''}</p>
+<p>类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${isNew ? (draft ? ' · <strong>新建</strong>' : ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）') : ''}</p>
+${draft ? draftNote(draft) : ''}
 <form id="edit-form">
 ${fieldRow('标题 <strong>（必填）</strong>', `<input name="title" required maxlength="200" value="${attr(prefill.fields.title)}">`, 'title')}
 ${fieldRow('负责人（可选，知识负责人）', `<input name="owner" maxlength="100" value="${attr(prefill.fields.owner)}">`, 'owner')}
@@ -206,7 +220,7 @@ ${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</c
 
 /** README 豁免页（架构 §5.2：导航文档豁免 frontmatter）——仅正文编辑 */
 export function readmeEditPage(input: Omit<EditPageInput, 'prefill'> & { body: string }): string {
-  const { vault, entryPath, mode, baseCommit, body } = input;
+  const { vault, entryPath, mode, baseCommit, body, draft } = input;
   const name = nameOf(entryPath);
   const apiBase = `/api/v1/vaults/${encodeURIComponent(vault.slug)}`;
   const script = `
@@ -242,7 +256,13 @@ document.getElementById('readme-form').addEventListener('submit', async (ev) => 
     document.getElementById('form-msg').textContent = '已发布（commit ' + (r.commit || '?') + '）——草稿已标记为已提交。';
     setTimeout(() => { location.href = VIEW_URL; }, 600);
   } catch (err) {
-    document.getElementById('form-msg').textContent = '提交失败：' + err.message;
+    if (err.status === 409) {
+      // S4-T7 冲突保护（同六字段页 409 形态——当前 tip 提示刷新）
+      const tip = err.data && err.data.error && err.data.error.details ? err.data.error.details.current_head : null;
+      document.getElementById('form-msg').textContent = '提交冲突：分支已前进' + (tip ? '（当前 ' + String(tip).slice(0, 10) + '…）' : '') + '——他人先提交，内容仍在表单、草稿已保留；请先核对最新内容，刷新本页取最新基线后重提。';
+    } else {
+      document.getElementById('form-msg').textContent = '提交失败：' + err.message;
+    }
   }
 });
 `;
@@ -251,6 +271,7 @@ document.getElementById('readme-form').addEventListener('submit', async (ev) => 
     `<h1>编辑：${escapeHtml(name)}</h1>
 <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
 <p>类型：README 导航文档 · <strong>frontmatter 豁免</strong>（架构 §5.2——不套用六字段表单，正文直接编辑） · base commit：<code>${baseCommit === null ? '（空库）' : escapeHtml(baseCommit)}</code>${mode === 'new' ? ' · 新建' : ''}</p>
+${draft ? draftNote(draft) : ''}
 <form id="readme-form">
 <label>正文（Markdown，多行纯文本）<br><textarea id="readme-body" name="body" rows="18">${escapeHtml(body)}</textarea></label>
 <p id="form-msg" role="alert"></p>
