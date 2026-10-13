@@ -1,9 +1,11 @@
 /**
- * 服务端规则版本探测与比较（S6-T4；coordinator ask 裁定方案 A）。
+ * 服务端规则版本探测与比较（S6-T4；coordinator ask 裁定方案 A；S6-T7 激活）。
  *
  * GET <server>/api/v1/rules-version（Bearer，复用 ls 凭据面 NOTEGIT_SERVER/NOTEGIT_TOKEN）。
- * honest-gap：api.md 尚无该端点（T7 补录契约 + server 极小实现后单点激活本路径）；
- * 端点缺失/不可达/坏形状一律「跳过提示」，绝不影响校验判定与退出码（validation.md §6：
+ * S6-T7 起端点已落地（api.md §3.3 补录 + server/src/rulesversion/routes.ts 实现，
+ * 经 notegit-validation 运行时读 rules-version.json 单一来源）；本常量与 api.md
+ * 端点表的一致性由 cli/test/rules-version-consistency.test.ts 断言。
+ * 端点不可达/坏形状仍一律「跳过提示」，绝不影响校验判定与退出码（validation.md §6：
  * 版本差异本身不构成拒绝理由；N- 码退出码 0）。
  */
 import type { ServerCredential } from '../ls/credential-source.ts'

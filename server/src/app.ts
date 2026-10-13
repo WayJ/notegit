@@ -17,6 +17,7 @@ import { createVaultRepoOps } from './gitrepo/lifecycle.ts';
 import { gitHttpPlugin } from './githttp/http-backend.ts';
 import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
 import { registerMaintenanceRoutes } from './maintenance/routes.ts';
+import { registerRulesVersionRoutes } from './rulesversion/routes.ts';
 import { registerWebRoutes } from './web/routes.ts';
 
 /** 认证主体（identity §1：认证主体 = 员工账号）。 */
@@ -159,6 +160,11 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       db: wired.db,
       authenticateRequest: wired.authenticateRequest,
     });
+    // S6-T7 规则版本元信息端点（api.md §3.3 补录；ADR 由 master 落）：
+    // GET /api/v1/rules-version → 200 {rulesVersion, status}，需认证（统一缝双载体）；
+    // 值经 notegit-validation 运行时读 rules-version.json（validation §7.3 单一来源，
+    // 与 pre-receive 同机制）——CLI version-probe（S6-T4）的激活端点
+    registerRulesVersionRoutes(app, { authenticateRequest: wired.authenticateRequest });
     // S3-T2 Git Smart HTTP 入口（api.md §8.4）：CGI 包装 git http-backend，认证
     // 经 Basic→token（同一凭据域服务）、授权经同一 authorize/membershipSource、
     // 维护模式 write 403——与 Web/API 三入口共用组件；dataDir 注入时注册
