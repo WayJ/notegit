@@ -200,21 +200,24 @@ test('view：超过渲染上限的 .md 只出元信息与如实标注（正文�
   }
 });
 
-test('view：仓库相对图片引用 → 鉴权附件通道占位（无 <img>，携带引用路径）', async () => {
+test('view：仓库相对图片引用 → 鉴权附件通道（S4-T4 已接线：在库出 <img>，缺库保占位）', async () => {
   const h = await browseHarness();
   try {
     const alice = addEmployee(h.db, { username: 'alice' });
     await seededVault(h, 'alpha', alice, {
-      'docs/guide.md': '登录界面：![登录](shots/login.png)\n',
+      'docs/guide.md': '登录界面：![登录](shots/login.png)\n缺失：![缺](shots/gone.png)\n',
       'docs/shots/login.png': 'png-stub',
     });
     addMember(h.db, 1, alice, 'reader', alice);
     const res = await h.app.inject({ method: 'GET', url: '/vaults/alpha/view/docs/guide.md', headers: h.session(alice) });
     assert.equal(res.statusCode, 200, res.body);
     const art = article(res.body);
-    assert.ok(art.includes('class="img-attachment"'), '占位标注形态');
-    assert.ok(art.includes('data-attachment="shots/login.png"'), '携带 Markdown 原始引用路径（S4-T4 解析依据）');
-    assert.ok(!/<img [^>]*shots/.test(art), '未接入通道前不得直接出 img 指向仓库路径');
+    // 在库附件：blob 寻址鉴权 URL（40 hex OID——URL 不可枚举），不直出仓库路径
+    assert.match(art, /<img src="\/vaults\/alpha\/attach\/[0-9a-f]{40}\/login\.png" alt="登录">/);
+    assert.ok(!/<img [^>]*shots/.test(art), '不得直出仓库相对路径为 src');
+    // 缺库引用：保留占位标注（携带 Markdown 原始引用路径）
+    assert.ok(art.includes('class="img-attachment"'), '缺失引用占位标注形态');
+    assert.ok(art.includes('data-attachment="shots/gone.png"'), '占位携带原始引用路径');
   } finally {
     await h.close();
   }

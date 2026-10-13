@@ -9,7 +9,12 @@ import { html, sendPageNotFound } from '../page-kit.ts';
 import { browseStatePage, browseUrl } from '../browse/pages.ts';
 import { readEntryAt, readBlobText, README_RENDER_MAX_BYTES } from '../browse/tree.ts';
 import { renderMarkdown } from './render.ts';
-import { ATTACHMENT_CHANNEL_PENDING } from './attachments.ts';
+import {
+  ATTACHMENT_CHANNEL_PENDING,
+  attachmentUrl,
+  repoPathOfRef,
+  type AttachmentImageUrlResolver,
+} from './attachments.ts';
 import { viewPage, attachmentImagePage, noPreviewPage, tooLargePage } from './pages.ts';
 
 /**
@@ -19,8 +24,8 @@ import { viewPage, attachmentImagePage, noPreviewPage, tooLargePage } from './pa
  *   清理管——服务端清理唯一通道）；非 .md 如实标注不渲染；超过渲染上限标注；
  *   目录路径 302 → browse（S4-T1 行为延续）。
  * - 认证/授权与 S4-T1 浏览族同判（实时查库、无权=不存在 404 同页 D-IC-06）。
- * - 附件图片：渲染管经 view/attachments.ts 接口（S4-T2 占位 null → 标注；
- *   S4-T4 落地附件路由后装配真实解析器）。
+ * - 附件图片（S4-T4 已接线）：仓库相对引用经 view/attachments.ts 通道解析为
+ *   blob 寻址鉴权 URL（两遍法见 renderBody；解析不到保留占位标注）。
  *
  * D5 模块自声明：不改 web/routes.ts 既有行（组装点 append 一行注册本模块）。
  */
@@ -68,6 +73,46 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
 
   const attachmentImageUrl = opts.attachmentImageUrl ?? ATTACHMENT_CHANNEL_PENDING;
 
+  /**
+   * S4-T4 附件通道装配（T2 占位接口接线）：渲染管解析器是同步接口，而 blob
+   * 寻址需异步读树——两遍法：第一遍以记录解析器收集相对图片引用（无引用则
+   * 第一遍输出即终态，不空跑第二遍）；对每个引用按文档目录语义解析仓库路径
+   * （repoPathOfRef）并读默认分支 HEAD 条目，是 blob 则映射到鉴权附件 URL；
+   * 第二遍以查表解析器正式渲染（渲染管纯函数，两遍输出除附件位一致）。解析
+   * 不到（缺文件/越界/畸形/非 blob）保留占位标注——不泄露树内容。
+   */
+  async function renderBody(
+    vault: { slug: string; id: number; defaultBranch: string },
+    entryPath: string,
+    body: string,
+  ): Promise<{ html: string; strippedHtml: boolean }> {
+    if (opts.attachmentImageUrl !== undefined || opts.dataDir === undefined) {
+      return renderMarkdown(body, { attachmentImageUrl }); // 注入覆盖（测试缝）或通道未挂接
+    }
+    const refs = new Set<string>();
+    const pass1 = renderMarkdown(body, {
+      attachmentImageUrl: (ref) => {
+        refs.add(ref);
+        return null;
+      },
+    });
+    if (refs.size === 0) return pass1;
+    const resolved = new Map<string, string>();
+    for (const ref of refs) {
+      const repoPath = repoPathOfRef(entryPath, ref);
+      if (repoPath === null) continue;
+      const entry = await readEntryAt(opts.dataDir, vault.id, vault.defaultBranch, repoPath);
+      if (entry.kind === 'ok' && entry.entry.type === 'blob') {
+        resolved.set(repoPath, attachmentUrl(vault.slug, entry.entry.oid, entry.entry.name));
+      }
+    }
+    const lookup: AttachmentImageUrlResolver = (ref) => {
+      const repoPath = repoPathOfRef(entryPath, ref);
+      return repoPath !== null ? (resolved.get(repoPath) ?? null) : null;
+    };
+    return renderMarkdown(body, { attachmentImageUrl: lookup });
+  }
+
   app.get('/vaults/:slug/view/*', async (req, reply) => {
     const { slug } = req.params as { slug: string };
     const vault = await requireVault(req, reply, slug);
@@ -102,7 +147,7 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
       return html(reply, browseStatePage(vault, '内容暂不可用（正文读取失败）。'));
     }
     const body = bodyAfterFrontmatter(text);
-    const rendered = renderMarkdown(body, { attachmentImageUrl });
+    const rendered = await renderBody(vault, entryPath, body);
     return html(
       reply,
       viewPage({
