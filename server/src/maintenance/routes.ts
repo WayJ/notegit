@@ -1,15 +1,20 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { rejectAuth, type RequestAuthenticator } from '../auth/lifecycle.ts';
-import { recordAuditEvent } from '../audit/audit.ts';
+import { drainCount, recordAuditEvent } from '../audit/audit.ts';
 import type { MaintenanceGate } from './gate.ts';
 
 /**
  * 维护模式生命周期端点（S2-T7；backup-recovery §3 + coordinator 2026-10-13 批复）：
  *
  * - POST   /api/v1/admin/maintenance —— 开启；DELETE —— 关闭。
+ * - GET    /api/v1/admin/maintenance —— 进度面（S8-T3；backup §4 步骤 2）：
+ *   `200 {enabled, drain: {pending}}`——pending = audit.drain_count 规范查询
+ *   （pending|unresolved 在途写计数）。GET 属安全方法，维护中放行（矩阵第 7 行）；
+ *   drain.pending 为 T2 指标面（R14）可消费的预留字段。api.md 补录随 S8-T3
+ *   建议稿（docs/s1/maintenance-drain-amendments.md）走 D13 裁决。
  * - 均需实例管理员（否则 403 E-AUTHZ-001；未认证 401 经统一缝 rejectAuth）。
- * - 幂等：已处于目标态返回 204 且不重复记审计（迁移发生才记）。
+ * - POST/DELETE 幂等：已处于目标态返回 204 且不重复记审计（迁移发生才记）。
  * - 维护期间自身放行（运行态写入，backup §3 写分类）——闸门 allowlist 已覆盖。
  * - 切换记 maintenance.enable / maintenance.disable 审计行（storage-model §5：运行态
  *   写入，不入备份一致性集合）：主体 = 切换管理员 + 载体 + 入口（identity §8）。
@@ -62,6 +67,14 @@ export function registerMaintenanceRoutes(app: FastifyInstance, opts: Maintenanc
       eventKind,
     });
   }
+
+  // 进度面（S8-T3；backup §4 步骤 2）：排空进度可查——enabled + drain.pending
+  // （audit.drain_count 规范查询；T2 指标面消费的预留字段）。
+  app.get('/api/v1/admin/maintenance', async (req, reply) => {
+    const outcome = await requireInstanceAdmin(req, reply);
+    if (!outcome) return reply;
+    return { enabled: opts.gate.isEnabled(), drain: { pending: drainCount(opts.db) } };
+  });
 
   app.post('/api/v1/admin/maintenance', async (req, reply) => {
     const outcome = await requireInstanceAdmin(req, reply);
