@@ -1,0 +1,29 @@
+{
+  "name": "notegit",
+  "version": "0.0.0",
+  "description": "Notegit employee CLI (D10: npm distribution, macOS/Linux, Node >=22.13; login/ls/setup/lint land in S6, sync skeleton until S7)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "notegit": "./dist/bin/notegit.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.dist.json && tsc -p tsconfig.validation-dist.json && node scripts/vendor-validation.mjs && chmod +x dist/bin/notegit.js",
+    "prepack": "npm run build",
+    "test": "tsc --noEmit && npm run build && node --test"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2",
+    "notegit-validation": "0.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ]
+}
