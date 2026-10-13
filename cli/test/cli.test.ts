@@ -101,11 +101,13 @@ test('lint --help：退出码 0，stdout 含 --staged/--all/--json 与退出码�
   assert.match(r.stdout, /--json/)
 })
 
-test('sync --help：退出码 0，stdout 按 D6 标注 S7 实现且本 sprint 仅骨架', () => {
+test('sync --help：退出码 0，stdout 含用法与 --depth 选项（S7-T1 已实现）', () => {
+  // 集成修正：T1 占位断言随 S7-T1 实现作废——改为已实现契约（行为细节见 sync.test.ts）
   const r = runCli(['sync', '--help'])
   assert.equal(r.status, 0)
-  assert.match(r.stdout, /notegit sync/)
-  assert.match(r.stdout, /S7/)
+  assert.match(r.stdout, /notegit sync \[--depth <深度>\]/)
+  assert.match(r.stdout, /--depth/)
+  assert.doesNotMatch(r.stdout, /尚未实现/)
 })
 
 test('ls（已实现，S6-T3 集成修正）：未配置凭据时退出码 1（业务性失败）', () => {
@@ -142,11 +144,11 @@ test('lint --staged --json（S6-T4 已实现）：非 git 仓库 → 退出码 2
   }
 })
 
-test('sync（占位执行）：退出码 2，stderr 标注 S7', () => {
+test('sync（S7-T1 已实现）：未配置凭据时退出码 1（业务性失败，同 ls）', () => {
+  // 集成修正：T1 占位断言随 S7-T1 实现作废——无凭据走业务失败路径（六态行为见 sync.test.ts）
   const r = runCli(['sync'])
-  assert.equal(r.status, 2)
-  assert.match(r.stderr, /尚未实现/)
-  assert.match(r.stderr, /S7/)
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /未配置/)
 })
 
 test('子命令 -h 短旗标与 --help 等价（以 lint 为例）', () => {

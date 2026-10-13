@@ -100,16 +100,10 @@ test('文档一致性：命令一览表覆盖全部命令，作用列 == --help 
   }
 })
 
-test('文档一致性：已实现命令章节不出现「尚未实现」；sync 章节如实标注 S7（D6）', () => {
+test('文档一致性：已实现命令章节不出现「尚未实现」（sync 随 S7-T1 转正）', () => {
   for (const name of COMMAND_ORDER) {
     const section = sectionOf(name)
-    if (name === 'sync') {
-      assert.ok(section.includes('S7'), 'sync 章节应标注 S7')
-      assert.ok(section.includes('尚未实现') || section.includes('骨架'), 'sync 章节应标注占位/骨架状态')
-      assert.ok(!section.includes('已实现'), 'sync 章节不得宣称已实现')
-    } else {
-      assert.ok(!section.includes('尚未实现'), `${name} 已实现，章节不应出现「尚未实现」`)
-    }
+    assert.ok(!section.includes('尚未实现'), `${name} 已实现，章节不应出现「尚未实现」`)
   }
 })
 

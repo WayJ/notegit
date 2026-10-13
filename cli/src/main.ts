@@ -8,6 +8,7 @@ import { runLogin } from './login.ts'
 import { runLint } from './lint/index.ts'
 import { runCredentialHelper } from './credentials.ts'
 import { runSetup } from './setup/index.ts'
+import { runSync } from './sync/index.ts'
 
 function topHelp(): string {
   const lines = [
@@ -90,6 +91,7 @@ export async function run(argv: string[]): Promise<number> {
   if (cmd.name === 'login') return await runLogin(rest) // S6-T2
   if (cmd.name === 'lint') return await runLint(rest) // S6-T4
   if (cmd.name === 'setup') return await runSetup(rest) // S6-T6
+  if (cmd.name === 'sync') return await runSync(rest) // S7-T1
   process.stderr.write(`notegit ${cmd.name}: 尚未实现（${cmd.status}）\n`)
   return EXIT_ERROR
 }
