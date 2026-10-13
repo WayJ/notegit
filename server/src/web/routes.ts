@@ -5,6 +5,7 @@ import { createPageGuard } from './page-kit.ts';
 import { registerShellRoutes } from './shell.ts';
 import { registerBrowseRoutes } from './browse/routes.ts';
 import { registerViewRoutes } from './view/routes.ts';
+import { registerEditRoutes } from './edit/routes.ts';
 
 /**
  * Web 页面域组装点（唯一主链路——S4 plan D5 骨架裁决，S3 教训对策）：
@@ -35,4 +36,5 @@ export function registerWebRoutes(app: FastifyInstance, opts: WebRoutesOptions):
   registerBrowseRoutes(app, shared); // S4-T1 有权库列表 + 目录浏览 + 预览占位
   // S4-T2+ ：各任务页面模块在此 append（一行一模块）
   registerViewRoutes(app, shared); // S4-T2 Markdown 预览与安全渲染（view 路由族自本任务起由 view/ 模块持有，S4-T1 占位退役）
+  registerEditRoutes(app, shared); // S4-T3 元数据表单与正文编辑（edit 路由族；提交走 S3-T7 发布组件占位调用面，HTTP 接线属 T7）
 }
