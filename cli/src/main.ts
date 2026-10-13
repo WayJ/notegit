@@ -6,6 +6,7 @@ import { EXIT_ERROR, EXIT_OK } from './exit-codes.ts'
 import { runLs } from './ls/index.ts'
 import { runLogin } from './login.ts'
 import { runCredentialHelper } from './credentials.ts'
+import { runSetup } from './setup/index.ts'
 
 function topHelp(): string {
   const lines = [
@@ -86,6 +87,7 @@ export async function run(argv: string[]): Promise<number> {
   }
   if (cmd.name === 'ls') return runLs(rest) // S6-T3
   if (cmd.name === 'login') return await runLogin(rest) // S6-T2
+  if (cmd.name === 'setup') return await runSetup(rest) // S6-T6
   process.stderr.write(`notegit ${cmd.name}: 尚未实现（${cmd.status}）\n`)
   return EXIT_ERROR
 }

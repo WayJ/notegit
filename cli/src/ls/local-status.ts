@@ -16,6 +16,7 @@ import { existsSync } from 'node:fs'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
+import { readCliConfig } from '../setup/config.ts'
 
 export type LocalStatus = 'not_cloned' | 'cloned' | 'behind' | 'unknown'
 
@@ -33,10 +34,12 @@ export interface GitOps {
   isAncestor(cwd: string, a: string, b: string): Promise<boolean | undefined>
 }
 
-/** 本地根目录解析：NOTEGIT_LOCAL_ROOT 显式优先，缺省 ~/knowbase（架构 §7.2）。 */
+/** 本地根目录解析（S6-T6 起三级）：NOTEGIT_LOCAL_ROOT 显式 > CLI 配置 localRoot（setup --local-root 持久化）> 缺省 ~/knowbase（架构 §7.2）。 */
 export function localRootOf(env: NodeJS.ProcessEnv): string {
   const explicit = (env['NOTEGIT_LOCAL_ROOT'] ?? '').trim()
   if (explicit !== '') return path.resolve(explicit)
+  const configured = (readCliConfig(env)['localRoot'] ?? '').trim()
+  if (configured !== '') return path.resolve(configured)
   return path.join(os.homedir(), 'knowbase')
 }
 
