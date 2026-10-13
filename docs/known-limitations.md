@@ -43,7 +43,7 @@ Notegit 第一版（E1 范围）能力边界的集中声明，DOD-15 交付材�
 | 管理员锁死恢复未实现 | 规划的主机侧命令 `notegit admin recover` 尚未实现，且无「最后管理员」保护——实例管理员全员锁死当前无自助恢复路径；**保持至少两名实例管理员** | [architecture-notes](dev/architecture-notes.md) §6.3/§6.6 |
 | 搜索索引边界 | 重建期间查询降级为部分结果（鉴权过滤不降级）；frontmatter 折叠多行标量（`>`/`|` 罕见形态）在索引中退化为 title=NULL/tags=[]（行仍入索引） | [S5-T3/T5 记录](../.agents/notes/2026-10-13-S5-T3-search-index.md) |
 | 指标口径边界 | `auth_failures` 为进程内计数、重启归零；校验耗时分布只覆盖 web-submit scope（pre-receive 运行于 hook 子进程） | [api.md §3.8](contracts/api.md) |
-| 部署地板修订挂账 | 512MB→768MB 内存地板的 selection §5 / roadmap Q2 正式修订属 master 动作（建议稿 G3），deploy/README 已按 768MB 执行 | [deploy/README](../deploy/README.md) |
+| 部署内存地板 768MB | 全功能服务进程 RSS 基线 232–240MB + 每并发 clone 子进程链 ~17MB ⇒ 内存地板 768MB、推荐 1GB；512MB 档降并发（`git.maxConcurrentChildren`=4）可勉强运行但不承诺。修订已由 ADR D14 正式落契（selection §5、roadmap Q2，2026-10-14），deploy/README 与发布说明一致——无挂账 | [deploy/README](../deploy/README.md)、[selection.md §5](s1/selection.md)、[ADR D14](superpowers/roadmaps/2026-10-12-notegit-v01.md) |
 
 ## 4. 后续范围声明
 
