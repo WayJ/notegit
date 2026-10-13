@@ -56,8 +56,45 @@ S8-T8**（容量/并发限制量化任务，DOD-13）——在此之前生产部
 ```
 
 两侧（Git 与 db）缺一即失能；备份/恢复流程与一致性要求见 backup-recovery 契约
-（工具随 S8-T4/T5 交付）。备份执行者的主机侧访问路径：命名卷经
+（恢复工具随 S8-T5 交付）。备份执行者的主机侧访问路径：命名卷经
 `docker volume inspect notegit-data` 定位挂载点，或改用 bind mount 直达目录。
+
+### 一致备份（S8-T4 工具随镜像分发）
+
+备份触发 = 脚本模式（选型与被否备选见
+[docs/s1/backup-face-amendments.md](../docs/s1/backup-face-amendments.md) B1）：
+CLI 随镜像分发，在容器内执行（`/data` 直达；产物建议落**独立卷/介质**）。
+
+```sh
+# 产物目录须对容器用户（notegit）可写——命名卷初建属 root，首次挂载后交付：
+#   docker exec -u root notegit chown notegit:notegit /backup
+# 管理令牌：--token-file 或 NOTEGIT_ADMIN_TOKEN 环境变量（不进 argv/日志）
+docker exec notegit node src/backup/cli.ts backup \
+  --data-dir /data --out /backup \
+  --url http://127.0.0.1:3000 \
+  --token-file /run/secrets/backup-admin.token \
+  --keys-out /backup-keys        # 可选：密钥件直写另一介质根（backup §6 分置）
+```
+
+产物为**分置两件**：`<时间戳>-data/`（manifest.json + db 快照 + git 复制 + config）
+与 `<时间戳>-keys/`（pepper 全文件含 retired 条目；文件 0600、目录 0700）。
+流程自动覆盖 backup-recovery §4 步骤 1–7：维护端点开/关闸（闸门属应用进程——
+脚本不自设闸门）、排空（默认 300s 有界超时，超时中止并保持维护模式）、
+`VACUUM INTO`、git 复制 + 抽样 fsck（失败中止）、manifest 全字段、
+backup.completed 审计行（完成后 `GET /api/v1/admin/metrics` 的
+`backup.last_completed_at` 更新）。
+
+**离线验证**（§4 步骤 8；不起服务，可在宿主对拷出的产物执行）：
+
+```sh
+docker cp notegit:/backup ./backup-set
+node server/src/backup/cli.ts verify --data-item ./backup-set/<时间戳>-data [--fsck]
+```
+
+运维义务（backup §6）：**K3 TLS 私钥位置、K4 DB 口令保管处**的记录须与密钥件
+同置保存（工具不代管部署层机密）；密钥件建议移至独立介质/访问控制域静态加密
+存放。演练证据（真实容器 16 步全绿）：
+[.agents/notes/2026-10-13-S8-T4-backup-drill.txt](../.agents/notes/2026-10-13-S8-T4-backup-drill.txt)。
 
 ## HTTPS 接入（选型记录）
 

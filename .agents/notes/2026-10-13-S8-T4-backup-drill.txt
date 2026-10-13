@@ -1,0 +1,48 @@
+# 2026-10-13 S8-T4 一致备份演练留档（D5 演练即测试）
+
+环境：macOS（Apple M4）+ colima Docker（server 29.5.2，Ubuntu 24.04.4 VM）；
+宿主 v24.21.0 / git 2.50.1（离线验证在宿主以 type-stripping 直跑 CLI）；
+镜像内 node v24.21.0 / git 2.54.0（alpine）。
+命令（仓库根，可复跑）：node deploy/scripts/backup-drill.mjs 2>&1 | tee <file>
+本轮为第 2 次连续运行（首同为全绿 PASS——可复跑性即证；本次输出为留档件）。
+镜像 notegit:s8t4-drill（备份工具随 server/src/backup/ 树入镜像，node 直跑）。
+产物两件分置：*-data（db/git/config+manifest.json）与 *-keys（0600/0700），
+落独立命名卷 /backup（与 /data 分卷）。
+
+```
+[0.0s] S8-T4 一致备份演练开始（port 39088，keep=false，no-build=false）
+[0.0s] ✓ 01 前置就绪（Docker server 29.5.2；宿主 v24.21.0）
+[0.0s] ✓ 02 清场完成（数据卷与备份产物卷已移除——两卷分置起步）
+[0.2s] ✓ 03 镜像构建完成（0s；备份工具随 server/ 树入镜像）
+[0.3s] ✓ 04 容器已启动（notegit-s8t4-drill；/data 与 /backup 分卷——backup §6 分置的部署侧形态）
+[6.4s] ✓ 05 健康检查通过（备份前实例就绪）
+[6.5s] ✓ 06 管理员初始化完成（bootstrap 令牌脱敏 85EzFT…HM）
+[6.5s] ✓ 07 真实数据就位：员工 alice + 两库（team-kb 待播种、empty-vault 保持 unborn）
+[7.0s] ✓ 08 Git 播种完成（2 commit，pre 态 main=137b13cb43…）
+[7.0s] ✓ 09 管理员令牌已入容器临时文件（脱敏 ngt_Xd…mE；argv/宿主不留痕）
+    │ 备份完成：backup_id=20261013T163226Z
+    │   数据件：/backup/20261013T163226Z-data
+    │   密钥件：/backup/20261013T163226Z-keys（分置两件；建议移至独立介质/访问控制域）
+    │   库数：2；排空：drained（0ms）；fsck：2 库
+    │ 完成时间已记审计行并写入运维指标面（GET /api/v1/admin/metrics → backup.last_completed_at）。
+    │ 下一步（backup §4 步骤 8）：node src/backup/cli.ts verify --data-item /backup/20261013T163226Z-data
+[7.2s] ✓ 10 备份完成（CLI 退出码 0：开闸→排空→VACUUM INTO→git 复制+fsck→config/keys 分置→manifest→关闸→健康检查→完成审计）
+[7.4s] ✓ 11 产物断言全过（20261013T163226Z-data + 20261013T163226Z-keys 分置；keys 0600/0700；manifest 字段与实际一致，host=a470a6c26089）
+[7.4s] ✓ 12 指标面接线核实（backup.last_completed_at=2026-10-13T16:32:26.848Z；维护模式已关）
+    │ ✓ manifest-present — backup_id=20261013T163226Z
+    │ ✓ manifest-fields — 24 项必填字段齐
+    │ ✓ items-present — data=20261013T163226Z-data keys=20261013T163226Z-keys
+    │ ✓ key-item-perms — 1 个文件 0600
+    │ ✓ file-count — 47 个文件齐
+    │ ✓ file-hashes — data 46 + keys 1 个文件复算一致
+    │ ✓ item-bytes — data 178702B / keys 110B
+    │ ✓ db-integrity
+    │ ✓ vault-match — 2 库互证一致
+    │ ✓ head-oid — 2 库互证一致
+    │ 离线验证：全部通过
+[7.5s] ✓ 13 宿主离线验证全绿（20261013T163226Z-data；此时无任何服务参与——verify 只吃产物）
+[7.6s] ✓ 14 负路径核实：快照库篡改 → 离线验证失败并点名（file-hashes）
+[8.0s] ✓ 15 备份后业务写入恢复（push 成功——维护模式确实已退、排空无残留）
+[8.1s] ✓ 16 演练全链绿（16 步）。容器与两卷已清理（--keep 可保留实例检查）
+[8.1s] S8-T4 一致备份演练：PASS
+```
