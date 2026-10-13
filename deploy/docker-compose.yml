@@ -1,0 +1,32 @@
+# Notegit 最小部署示例（S8-T1；单实例 + 命名持久卷）。
+# 用法（在仓库根执行）：
+#   docker compose -f deploy/docker-compose.yml up -d --build
+# 首次初始化（bootstrap 管理员）见 deploy/README.md「首次初始化」；
+# HTTPS 接入形态（反向代理终结 TLS 的选型记录与示例）见 README「HTTPS 接入」。
+
+services:
+  notegit:
+    # 镜像 tag 随发布版本走（DOD-15 版本化发布包）；本地构建示例用 local。
+    image: notegit:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: notegit
+    # 进程生命周期由容器运行时负责（process-model §1：容器内无进程监管器）；
+    # unless-stopped：异常退出自动拉起，运维显式 stop 后不再自启。
+    restart: unless-stopped
+    # 只发布到宿主回环——对外经反向代理终结 TLS（README「HTTPS 接入」）；
+    # 代理与 Notegit 同机时保持回环绑定即可。
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      # /data 为唯一持久数据目录（backup §2：git/ db/ config/ keys/ 四分域）。
+      # 命名卷由 Docker 管理；备份执行者的主机侧访问路径见 README「备份与恢复」。
+      - notegit-data:/data
+    # 资源建议（selection §5 + S7-T8 修正，README「最低规格」）：
+    # 512MB 地板对当前 232MB 服务本体基线余量收窄，复核收口在 S8-T8；
+    # 在此之前生产部署建议按 1GB 档供给（mem_limit 示例，按需调整）。
+    # mem_limit: 1g
+
+volumes:
+  notegit-data:

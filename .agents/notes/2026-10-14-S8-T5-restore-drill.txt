@@ -1,0 +1,142 @@
+# 2026-10-14 S8-T5 全新环境恢复演练留档（D5 演练即测试）
+
+环境：macOS（Apple M4）+ colima Docker（server 29.5.2，Ubuntu VM）；
+宿主 v24.21.0 / git 2.50.1（负路径与离线验证在宿主以 type-stripping 直跑 CLI）；
+镜像内 node v24.21.0 / git（alpine），notegit:s8t5-drill。
+命令（仓库根，可复跑）：node deploy/scripts/restore-drill.mjs 2>&1 | tee <file>
+连续两次全绿 PASS（两次输出均为留档件；脚本逐步断言，任一步失败即非零退出）。
+
+覆盖：backup-recovery §7 十步（两相位：restore 离线装载 2–6 + NOTEGIT_MAINTENANCE_ON_START=1
+维护态启动步骤 1 + finalize 对账/重建步骤 7/9 + §8 清单全绿后显式退出步骤 10）+
+§8 R1–R14 逐项 + 负路径（产物篡改被 restore 拒绝装载且目标不被触碰）。
+种子形态：多员工（root/alice/bob）× 两不同成员集库（team-kb：alice=admin/bob=reader；
+bob-private：仅 bob）× 多凭据（RW×2/只读×1/管理员/建后即撤）+ 未发布草稿 +
+pepper 轮换窗口（v1→retired，备份含 retired 条目——R12 前置）。
+
+—— 第 1 次运行（PASS）——
+[0.0s] S8-T5 全新环境恢复演练开始（port 39090，keep=false，no-build=false）
+[0.0s] ✓ 01 前置就绪（Docker server 29.5.2；宿主 v24.21.0）
+[0.1s] ✓ 02 清场完成（源实例/恢复实例与三卷已移除）
+[0.2s] ✓ 03 镜像构建完成（0s；restore/finalize CLI 随 server/ 树入镜像）
+[6.4s] ✓ 04 源实例就绪（notegit-s8t5-src；健康检查通过）
+[6.5s] ✓ 05 管理员初始化完成（bootstrap 令牌脱敏 mR_G4N…A0）
+[6.6s] ✓ 06 员工就位（alice、bob——经邀请+重置+登录真实链）
+[6.6s] ✓ 07 库就位（team-kb：alice=admin/bob=reader；bob-private：仅 bob——两不同成员集）
+[6.6s] ✓ 08 轮换前凭据就位（T_old=v1 哈希，脱敏 ngt_2b…7s——R12 标本）
+[23.1s] ✓ 09 pepper 轮换完成（rotated active=v2 retired=[v1]；源实例处于迁移窗口——后续备份含 retired 条目）
+[23.1s] ✓ 10 凭据矩阵就位（alice-RW/bob-RO/bob-RW/管理员/已撤销，脱敏 ngt_rj…so 等——全部 v2 哈希）
+[24.0s] ✓ 11 Git 播种完成（team-kb 2 commit、bob-private 1 commit；pre 态 HEAD bac67f4212… / 24120aad80…）
+[24.0s] ✓ 12 未发布草稿就位（notes/draft-restore-drill.md——R10 标本）
+    │ 备份完成：backup_id=20261013T171138Z
+    │   数据件：/backup/20261013T171138Z-data
+    │   密钥件：/backup/20261013T171138Z-keys（分置两件；建议移至独立介质/访问控制域）
+    │   库数：2；排空：drained（0ms）；fsck：2 库
+    │ 完成时间已记审计行并写入运维指标面（GET /api/v1/admin/metrics → backup.last_completed_at）。
+    │ 下一步（backup §4 步骤 8）：node src/backup/cli.ts verify --data-item /backup/20261013T171138Z-data
+[24.2s] ✓ 13 源实例备份完成（迁移窗口内备份——pepper 文件含 retired 条目）
+[24.3s] ✓ 14 产物断言全过（两件分置；retired v1 在件；manifest 双库 HEAD 与 pre 态一致，schema v9）
+[24.4s] ✓ 15 宿主离线验证全绿（两件 20261013T171138Z-data + 20261013T171138Z-keys）
+[24.5s] ✓ 16 负路径核实：产物篡改 → restore 拒绝装载（恢复前核验复用 T4 断言）、目标不被触碰
+[24.8s] ✓ 17 全新环境容器就位（notegit-s8t5-restore；新卷 notegit-s8t5-restore-data，应用未启动——/data 仅镜像预建四空域）
+    │ ✓ pre-verify — T4 离线验证 10 项全过（恢复侧复用）
+    │ ✓ target-fresh — /data
+    │ ✓ version-compat — schema 9→同版
+    │ ✓ config-restored — §7 步骤 2（K3/K4 属部署层记录，随密钥件同置保管——B6 口径）
+    │ ✓ keys-restored — §7 步骤 3（含迁移期 retired 条目；0600/0700 已强制）
+    │ ✓ db-restored — §7 步骤 4（引擎快照回灌——VACUUM INTO 产物为独立文件，无 WAL 伴生）
+    │ ✓ git-restored — §7 步骤 5（2 库，保留权限与时间戳）
+    │ ✓ post-load-hashes — 两件 58 文件装载复算一致
+    │ ✓ post-load-head-oid — 2 库装载后与 manifest 一致
+    │ ✓ post-load-db-integrity — integrity ok；2 库行互证一致
+    │ 离线装载完成：backup_id=20261013T171138Z（2 库）→ /data
+    │ 下一步（backup §7）：
+    │   1. 以维护态启动实例：NOTEGIT_MAINTENANCE_ON_START=1（数据目录 /data）
+    │   2. node src/backup/cli.ts finalize --data-dir /data --url http://127.0.0.1:3000 --token-file <恢复实例的管理员令牌>
+    │   3. §8 R1–R14 恢复验证清单全绿后，显式退出维护（DELETE /api/v1/admin/maintenance）
+[25.0s] ✓ 18 §7 步骤 2–6 离线装载完成（十项核对全绿；keys 0600/0700；库数 2）
+[26.1s] ✓ 19 §7 步骤 1：NOTEGIT_MAINTENANCE_ON_START=1 维护态启动复核（enabled=true；业务写 503 E-MAINT-001；登录读放行）
+    │ ✓ 对账（§7 步骤 7）：无残留；2 个 ref 与审计 old→new 成链一致
+    │ ✓ 索引全量重建（§7 步骤 9）：state=completed done=2/2（finished_at=2026-10-13T17:11:40.319Z）
+    │ finalize 完成：实例仍处维护模式——执行 §8 R1–R14 清单，全绿后显式退出维护（§7 步骤 10）
+[26.8s] ✓ 20 §7 步骤 7/9：finalize 完成（无残留对账 + 索引全量重建 completed；实例保持维护态）
+[26.8s] ✓ 21 R1 管理员登录：成功进入管理页（员工册 3 人在列）
+[26.9s] ✓ 22 R2 员工登录：alice、bob 均成功
+[26.9s] ✓ 23 R3 存量凭据可用（alice-RW ls-remote 认证通过；HEAD==manifest bac67f4212…）
+[26.9s] ✓ 24 R4 撤销仍然生效（恢复前撤销的 token → 401）
+[26.9s] ✓ 25 R5 库数量与映射一致（manifest 2 == /data/git 2 == Web 列表 2；无孤儿）
+[27.1s] ✓ 26 R6 内容一致（两库 HEAD==manifest；Web 浏览/查看与 git clone 内容一致）
+[27.1s] ✓ 27 R7 历史完整（git log 计数/消息与播种一致；Web 历史页可用）
+[27.3s] ✓ 28 R8 权限矩阵（alice 无 bob-private：列表不含/直接 404/git 拒；bob 只读 team-kb：clone 可、push 拒）
+[27.3s] ✓ 29 R9 索引重建正确（重建后标题检索命中两库；无权库结果不泄露）
+[27.3s] ✓ 30 R10 草稿找回（未发布草稿在列、内容逐字一致；可编辑性随 R13 退出维护后补证）
+[27.3s] ✓ 31 R11 审计对账（finalize 步骤 7 + 库内独立抽查：residue=0；2 行全部 succeeded 且主体=认证员工）
+[27.4s] ✓ 32 R12 pepper 版本兼容（恢复后 pepper 含 retired v1；旧版本哈希 token 认证通过——§6.2 可校验语义）
+[27.8s] ✓ 33 R13 维护模式退出可用（一次 push FF + 一次网页提交 201；R10 草稿可编辑性补证通过）
+[27.8s] ✓ 34 R14 运维指标（healthz 200；磁盘水位在；backup.wired=true 且 last_completed_at 如实 null——M4(a) 运维行不入备份口径的实证）
+[27.9s] ✓ 35 演练全链绿（34 步；R1–R14 全项过）。容器与卷已清理（--keep 可保留检查）
+[27.9s] S8-T5 全新环境恢复演练：PASS
+
+
+—— 第 2 次运行（连续，PASS）——
+
+[0.0s] S8-T5 全新环境恢复演练开始（port 39090，keep=false，no-build=false）
+[0.0s] ✓ 01 前置就绪（Docker server 29.5.2；宿主 v24.21.0）
+[0.1s] ✓ 02 清场完成（源实例/恢复实例与三卷已移除）
+[0.2s] ✓ 03 镜像构建完成（0s；restore/finalize CLI 随 server/ 树入镜像）
+[6.5s] ✓ 04 源实例就绪（notegit-s8t5-src；健康检查通过）
+[6.5s] ✓ 05 管理员初始化完成（bootstrap 令牌脱敏 Wh-EMv…tc）
+[6.6s] ✓ 06 员工就位（alice、bob——经邀请+重置+登录真实链）
+[6.6s] ✓ 07 库就位（team-kb：alice=admin/bob=reader；bob-private：仅 bob——两不同成员集）
+[6.6s] ✓ 08 轮换前凭据就位（T_old=v1 哈希，脱敏 ngt_3M…g4——R12 标本）
+[23.1s] ✓ 09 pepper 轮换完成（rotated active=v2 retired=[v1]；源实例处于迁移窗口——后续备份含 retired 条目）
+[23.1s] ✓ 10 凭据矩阵就位（alice-RW/bob-RO/bob-RW/管理员/已撤销，脱敏 ngt_7e…aA 等——全部 v2 哈希）
+[24.0s] ✓ 11 Git 播种完成（team-kb 2 commit、bob-private 1 commit；pre 态 HEAD 0db92050f0… / 55a70afa2d…）
+[24.0s] ✓ 12 未发布草稿就位（notes/draft-restore-drill.md——R10 标本）
+    │ 备份完成：backup_id=20261013T171211Z
+    │   数据件：/backup/20261013T171211Z-data
+    │   密钥件：/backup/20261013T171211Z-keys（分置两件；建议移至独立介质/访问控制域）
+    │   库数：2；排空：drained（0ms）；fsck：2 库
+    │ 完成时间已记审计行并写入运维指标面（GET /api/v1/admin/metrics → backup.last_completed_at）。
+    │ 下一步（backup §4 步骤 8）：node src/backup/cli.ts verify --data-item /backup/20261013T171211Z-data
+[24.2s] ✓ 13 源实例备份完成（迁移窗口内备份——pepper 文件含 retired 条目）
+[24.3s] ✓ 14 产物断言全过（两件分置；retired v1 在件；manifest 双库 HEAD 与 pre 态一致，schema v9）
+[24.4s] ✓ 15 宿主离线验证全绿（两件 20261013T171211Z-data + 20261013T171211Z-keys）
+[24.5s] ✓ 16 负路径核实：产物篡改 → restore 拒绝装载（恢复前核验复用 T4 断言）、目标不被触碰
+[24.8s] ✓ 17 全新环境容器就位（notegit-s8t5-restore；新卷 notegit-s8t5-restore-data，应用未启动——/data 仅镜像预建四空域）
+    │ ✓ pre-verify — T4 离线验证 10 项全过（恢复侧复用）
+    │ ✓ target-fresh — /data
+    │ ✓ version-compat — schema 9→同版
+    │ ✓ config-restored — §7 步骤 2（K3/K4 属部署层记录，随密钥件同置保管——B6 口径）
+    │ ✓ keys-restored — §7 步骤 3（含迁移期 retired 条目；0600/0700 已强制）
+    │ ✓ db-restored — §7 步骤 4（引擎快照回灌——VACUUM INTO 产物为独立文件，无 WAL 伴生）
+    │ ✓ git-restored — §7 步骤 5（2 库，保留权限与时间戳）
+    │ ✓ post-load-hashes — 两件 58 文件装载复算一致
+    │ ✓ post-load-head-oid — 2 库装载后与 manifest 一致
+    │ ✓ post-load-db-integrity — integrity ok；2 库行互证一致
+    │ 离线装载完成：backup_id=20261013T171211Z（2 库）→ /data
+    │ 下一步（backup §7）：
+    │   1. 以维护态启动实例：NOTEGIT_MAINTENANCE_ON_START=1（数据目录 /data）
+    │   2. node src/backup/cli.ts finalize --data-dir /data --url http://127.0.0.1:3000 --token-file <恢复实例的管理员令牌>
+    │   3. §8 R1–R14 恢复验证清单全绿后，显式退出维护（DELETE /api/v1/admin/maintenance）
+[25.0s] ✓ 18 §7 步骤 2–6 离线装载完成（十项核对全绿；keys 0600/0700；库数 2）
+[26.1s] ✓ 19 §7 步骤 1：NOTEGIT_MAINTENANCE_ON_START=1 维护态启动复核（enabled=true；业务写 503 E-MAINT-001；登录读放行）
+    │ ✓ 对账（§7 步骤 7）：无残留；2 个 ref 与审计 old→new 成链一致
+    │ ✓ 索引全量重建（§7 步骤 9）：state=completed done=2/2（finished_at=2026-10-13T17:12:13.162Z）
+    │ finalize 完成：实例仍处维护模式——执行 §8 R1–R14 清单，全绿后显式退出维护（§7 步骤 10）
+[26.8s] ✓ 20 §7 步骤 7/9：finalize 完成（无残留对账 + 索引全量重建 completed；实例保持维护态）
+[26.8s] ✓ 21 R1 管理员登录：成功进入管理页（员工册 3 人在列）
+[26.8s] ✓ 22 R2 员工登录：alice、bob 均成功
+[26.8s] ✓ 23 R3 存量凭据可用（alice-RW ls-remote 认证通过；HEAD==manifest 0db92050f0…）
+[26.9s] ✓ 24 R4 撤销仍然生效（恢复前撤销的 token → 401）
+[26.9s] ✓ 25 R5 库数量与映射一致（manifest 2 == /data/git 2 == Web 列表 2；无孤儿）
+[27.1s] ✓ 26 R6 内容一致（两库 HEAD==manifest；Web 浏览/查看与 git clone 内容一致）
+[27.1s] ✓ 27 R7 历史完整（git log 计数/消息与播种一致；Web 历史页可用）
+[27.3s] ✓ 28 R8 权限矩阵（alice 无 bob-private：列表不含/直接 404/git 拒；bob 只读 team-kb：clone 可、push 拒）
+[27.3s] ✓ 29 R9 索引重建正确（重建后标题检索命中两库；无权库结果不泄露）
+[27.3s] ✓ 30 R10 草稿找回（未发布草稿在列、内容逐字一致；可编辑性随 R13 退出维护后补证）
+[27.3s] ✓ 31 R11 审计对账（finalize 步骤 7 + 库内独立抽查：residue=0；2 行全部 succeeded 且主体=认证员工）
+[27.4s] ✓ 32 R12 pepper 版本兼容（恢复后 pepper 含 retired v1；旧版本哈希 token 认证通过——§6.2 可校验语义）
+[27.9s] ✓ 33 R13 维护模式退出可用（一次 push FF + 一次网页提交 201；R10 草稿可编辑性补证通过）
+[27.9s] ✓ 34 R14 运维指标（healthz 200；磁盘水位在；backup.wired=true 且 last_completed_at 如实 null——M4(a) 运维行不入备份口径的实证）
+[28.0s] ✓ 35 演练全链绿（34 步；R1–R14 全项过）。容器与卷已清理（--keep 可保留检查）
+[28.0s] S8-T5 全新环境恢复演练：PASS

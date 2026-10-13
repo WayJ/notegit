@@ -36,6 +36,8 @@ import {
   type ValidationConfig,
 } from 'notegit-validation';
 import { LIMIT_KEY_FIELDS, LIMIT_KEYS, envNameOf, parseLimitValue, validateLimitValue, type LimitKey, type LimitValue } from './keys.ts';
+import { GIT_LIMIT_KEY_FIELDS, type GitLimitKey } from './git-gate.ts';
+import { metricsCollector } from '../metrics/collector.ts';
 
 export { LIMIT_KEY_FIELDS, LIMIT_KEYS, envNameOf, parseLimitValue, validateLimitValue } from './keys.ts';
 export type { LimitKey, LimitValue } from './keys.ts';
@@ -57,7 +59,9 @@ function envOverrides(env: Readonly<Record<string, string | undefined>>): Config
   return out as ConfigOverrides;
 }
 
-/** app_settings 行覆盖；未知键忽略；缺表容忍（未迁移形态返回零覆盖） */
+/** app_settings 行覆盖；未知键忽略；缺表容忍（未迁移形态返回零覆盖）。
+ *  git 域键（S8-T8，git-gate.ts 独立注册表）静默跳过——非本面键但非未知键，
+ *  由 effectiveGitLimits 自行读行。 */
 function dbOverrides(db: DatabaseSync | undefined): ConfigOverrides {
   if (db === undefined) return {};
   let rows: { key: string; value: string }[];
@@ -71,7 +75,9 @@ function dbOverrides(db: DatabaseSync | undefined): ConfigOverrides {
   for (const row of rows) {
     const key = row.key as LimitKey;
     if (!(key in LIMIT_KEY_FIELDS)) {
-      console.warn(`[notegit limits] 忽略未知配置键（向前兼容）：${row.key}`);
+      if (!(row.key in GIT_LIMIT_KEY_FIELDS)) {
+        console.warn(`[notegit limits] 忽略未知配置键（向前兼容）：${row.key}`);
+      }
       continue;
     }
     out[LIMIT_KEY_FIELDS[key]] = parseLimitValue(key, row.value);
@@ -90,15 +96,16 @@ export function effectiveConfig(source: LimitsSource = {}): ValidationConfig {
   return withOverrides(defaultConfig(), effectiveOverrides(source));
 }
 
-/** 写入一个配置行（upsert；键与值域校验）。HTTP 管理端点随 api.md 契约补录
- *  （storage-model §3.10「变更走管理端点并记审计」——kind 注册表尚无 config 类
- *  kind，审计与端点同批落，open 项见 notes）；本面先服务 ops/基准与未来端点。 */
+/** 写入一个配置行（upsert；键与值域校验；S8-T8 起兼收 git 域键）。HTTP 管理
+ *  端点随 api.md 契约补录（storage-model §3.10「变更走管理端点并记审计」——
+ *  audit kind 注册表已有 config.update 行、端点未入册，open 项见建议稿 G5）；
+ *  本面先服务 ops/基准与未来端点。 */
 export function setAppSetting(
   db: DatabaseSync,
-  input: { key: LimitKey; value: LimitValue; updatedBy?: number; now?: string },
+  input: { key: LimitKey | GitLimitKey; value: LimitValue; updatedBy?: number; now?: string },
 ): void {
-  if (!(input.key in LIMIT_KEY_FIELDS)) {
-    throw new Error(`未知配置键（不在 validation-defaults.json 键集）：${String(input.key)}`);
+  if (!(input.key in LIMIT_KEY_FIELDS) && !(input.key in GIT_LIMIT_KEY_FIELDS)) {
+    throw new Error(`未知配置键（不在 validation-defaults.json / git 域键集）：${String(input.key)}`);
   }
   const value = validateLimitValue(input.key, input.value);
   db.prepare(
@@ -127,8 +134,19 @@ const validatorOf = (overrides: ConfigOverrides): Validator => {
 
 /** 判定点统一入口：实时读取覆盖链（热生效）→ 共享闸门 → 单一来源校验。
  *  pre-receive（每推送一进程，闸门计 1）与发布组件（app 进程内跨请求共享）同源。
- *  input.config 若显式传入则叠加于生效覆盖之上（测试缝，生产路径不传）。 */
+ *  input.config 若显式传入则叠加于生效覆盖之上（测试缝，生产路径不传）。
+ *  S8-T2 起计时入指标采集器（架构 §10「校验耗时」；两 server scope 的唯一
+ *  计时挂接点——web-submit 样本驻留 app 进程；pre-receive 样本随 hook 子进程
+ *  消亡，指标面如实只呈现 web-submit 分布，失败次数类不受影响——走审计面）。 */
 export async function runServerValidation(input: ValidateInput, source: LimitsSource = {}): Promise<Report> {
   const overrides = effectiveOverrides(source);
-  return validatorOf(overrides).validate(input);
+  const validator = validatorOf(overrides);
+  const startedAt = performance.now();
+  try {
+    return await validator.validate(input);
+  } finally {
+    if (input.scope === 'web-submit' || input.scope === 'pre-receive') {
+      metricsCollector.recordValidationRun(input.scope, performance.now() - startedAt);
+    }
+  }
 }

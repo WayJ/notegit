@@ -14,6 +14,16 @@ import type { MaintenanceGate } from '../maintenance/gate.ts';
 import { vaultRepoDirName, vaultRepoPath } from '../vaults/repo-path.ts';
 import { buildCgiEnv, buildRemoteUser, parseBasicAuth, parseGitSmartRequest } from './cgi.ts';
 import { ensureReceiveSetup } from './hooks.ts';
+import { createGitChildGate, effectiveGitLimits, type GitChildGate } from '../limits/git-gate.ts';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** S8-T8 git 子进程并发闸门观察面（app.ts 装配时挂；plain property——插件
+     *  封装上下文内的 decorate 对根实例不可达，故不走 decorate）。测试与未来
+     *  指标接线消费 active/queued/peak。 */
+    childProcessGate?: GitChildGate;
+  }
+}
 
 /**
  * Git Smart HTTP 入口（S3-T2；api.md §8.4；D10 路线 B；架构 §3.2）：
@@ -43,6 +53,10 @@ export interface GitHttpPluginOptions {
   /** HTTP Basic 口令侧 token 认证（凭据域服务；四状态 ApiError 原样上抛） */
   readonly authenticateToken: (token: string) => AuthTokenContext;
   readonly maintenanceGate: MaintenanceGate;
+  /** S8-T8 每请求 git 子进程并发闸门（git.maxConcurrentChildren，FIFO 排队）：
+   *  app.ts 装配时创建并传入（同时挂 app.childProcessGate 观察缝）；缺省自建
+   *  （独立注册插件的形态，容量读 opts.db 覆盖链）。 */
+  readonly childProcessGate?: GitChildGate;
   /** S3-T6 审计清扫：receive 子进程链退出后，残留 pending 审计行按 pushId 标待核对。
    *  缺省（无 db 注入的单测形态）跳过清扫——行留待启动清扫。 */
   readonly db?: DatabaseSync;
@@ -56,6 +70,8 @@ const bodyGuardCeiling = (db?: DatabaseSync): number =>
 
 export const gitHttpPlugin: FastifyPluginAsync<GitHttpPluginOptions> = async (instance, opts) => {
   const projectRoot = path.join(opts.dataDir, 'git');
+  // S8-T8 每请求 git 子进程并发闸门：容量热生效（每次 acquire/唤醒实时读覆盖链）
+  const childProcessGate = opts.childProcessGate ?? createGitChildGate(() => effectiveGitLimits({ db: opts.db }).maxConcurrentChildren);
 
   // pack 请求体透传：不解析（body 保持 undefined、流不消费，handler 直接 pipe
   // req.raw）；解析器级 bodyLimit 抬高——默认 1MB 会误拒大推送（护栏见
@@ -152,15 +168,23 @@ export const gitHttpPlugin: FastifyPluginAsync<GitHttpPluginOptions> = async (in
       },
     });
 
+    // S8-T8 并发闸门：认证/授权/维护检查之后、spawn 之前取槽（401/403/404 与
+    // receive-setup 不占槽——闸门只数真实 spawn 的 http-backend 链）；git 域配置
+    // 非法在此 fail-closed 上抛（尚未 hijack，走 Fastify 错误通道）。排队请求停在
+    // handler（body 未消费——TCP 背压天然停住客户端发送）；槽位随子进程链
+    // error/close 释放（release 幂等，两路都挂安全）。
+    const slot = await childProcessGate.acquire();
     // 双向流转发（此后错误只能落 raw 响应——Fastify 错误通道已被 hijack）
     reply.hijack();
     const res = reply.raw;
     const child = spawn('git', ['http-backend'], { env });
     child.on('error', (err) => {
+      slot.release();
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' });
       if (!res.writableEnded) res.end(`git http-backend 启动失败：${err.message}`);
     });
     child.on('close', () => {
+      slot.release();
       if (!res.writableEnded) res.end();
       // S3-T6 中断兜底：推送子进程链已退出，本次 push 仍有 pending 审计行 ⇒ 推送
       // 未能走到 post-receive 终态核对（receive-pack 被杀/异常退出）——标待核对

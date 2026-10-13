@@ -1,0 +1,188 @@
+{
+  "vaults": [
+    {
+      "slug": "v-load01",
+      "head": "3410bc6f686f0fb406a35ab4fc262723b267e7a8",
+      "files": 51
+    },
+    {
+      "slug": "v-load02",
+      "head": "5df52470a63cf87da69f9a05ec3279949a7eadfe",
+      "files": 51
+    },
+    {
+      "slug": "v-load03",
+      "head": "cfcacb10113d86f9a0ea6ff6c3e4079716920611",
+      "files": 51
+    },
+    {
+      "slug": "v-load04",
+      "head": "fb1b341693d092d811e6eec80e5c6a94ad2e4b18",
+      "files": 51
+    }
+  ],
+  "concurrency": [
+    {
+      "concurrency": 1,
+      "wall_ms": 881,
+      "server_cpu_ms": 44,
+      "sync_results": [
+        {
+          "exit": 0,
+          "ms": 880,
+          "ok": true
+        }
+      ],
+      "server_rss_peak_kb": 245312,
+      "git_children_peak": 2,
+      "git_children_rss_peak_kb": 8016,
+      "git_children_peak_detail": "(git)=4000KB,(git-http-backend)=4016KB",
+      "requests": {
+        "git_n": 16,
+        "git_mean_ms": 15,
+        "git_p95_ms": 25,
+        "git_max_ms": 25,
+        "api_n": 1,
+        "api_mean_ms": 0,
+        "git_by_path": {
+          "info/refs": 8,
+          "upload-pack": 8
+        }
+      }
+    },
+    {
+      "concurrency": 2,
+      "wall_ms": 945,
+      "server_cpu_ms": 64,
+      "sync_results": [
+        {
+          "exit": 0,
+          "ms": 945,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 943,
+          "ok": true
+        }
+      ],
+      "server_rss_peak_kb": 248880,
+      "git_children_peak": 4,
+      "git_children_rss_peak_kb": 16080,
+      "git_children_peak_detail": "(git)=4000KB,(git)=4016KB,(git-http-backend)=4032KB,(git-http-backend)=4032KB",
+      "requests": {
+        "git_n": 32,
+        "git_mean_ms": 16,
+        "git_p95_ms": 27,
+        "git_max_ms": 27,
+        "api_n": 2,
+        "api_mean_ms": 0,
+        "git_by_path": {
+          "info/refs": 16,
+          "upload-pack": 16
+        }
+      }
+    },
+    {
+      "concurrency": 3,
+      "wall_ms": 996,
+      "server_cpu_ms": 92,
+      "sync_results": [
+        {
+          "exit": 0,
+          "ms": 996,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 955,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 984,
+          "ok": true
+        }
+      ],
+      "server_rss_peak_kb": 251072,
+      "git_children_peak": 4,
+      "git_children_rss_peak_kb": 15808,
+      "git_children_peak_detail": "(git)=4000KB,(git-http-backend)=4032KB,git=7776KB",
+      "requests": {
+        "git_n": 48,
+        "git_mean_ms": 18,
+        "git_p95_ms": 37,
+        "git_max_ms": 41,
+        "api_n": 3,
+        "api_mean_ms": 0,
+        "git_by_path": {
+          "info/refs": 24,
+          "upload-pack": 24
+        }
+      }
+    },
+    {
+      "concurrency": 4,
+      "wall_ms": 1106,
+      "server_cpu_ms": 137,
+      "sync_results": [
+        {
+          "exit": 0,
+          "ms": 1057,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 1062,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 1104,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 1103,
+          "ok": true
+        }
+      ],
+      "server_rss_peak_kb": 254032,
+      "git_children_peak": 4,
+      "git_children_rss_peak_kb": 16048,
+      "git_children_peak_detail": "(git)=4000KB,(git)=4016KB,(git-http-backend)=4000KB,(git-http-backend)=4032KB",
+      "requests": {
+        "git_n": 64,
+        "git_mean_ms": 21,
+        "git_p95_ms": 43,
+        "git_max_ms": 57,
+        "api_n": 4,
+        "api_mean_ms": 0,
+        "git_by_path": {
+          "info/refs": 32,
+          "upload-pack": 32
+        }
+      }
+    }
+  ],
+  "env": {
+    "node": "v24.21.0",
+    "pid": 81172
+  },
+  "server_totals": {
+    "rss_base_kb": 241568,
+    "rss_final_kb": 254032,
+    "cpu_user_ms": 217,
+    "cpu_system_ms": 140
+  },
+  "world": {
+    "vaults": 4,
+    "files": 204,
+    "content_bytes": 1692220,
+    "employees": 4
+  },
+  "sampler": {
+    "interval_ms": 100,
+    "n": 77
+  }
+}

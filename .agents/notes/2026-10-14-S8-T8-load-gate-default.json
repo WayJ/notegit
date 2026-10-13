@@ -1,0 +1,188 @@
+{
+  "vaults": [
+    {
+      "slug": "v-load01",
+      "head": "e3f03f2d7056e14f3e427f017e4462e30d4c31b7",
+      "files": 51
+    },
+    {
+      "slug": "v-load02",
+      "head": "98c76077a04d9d7f9fa9fcd244cc1d51f5a7d051",
+      "files": 51
+    },
+    {
+      "slug": "v-load03",
+      "head": "424bd87b1be8a2058bdc18697a077ec35c3684e6",
+      "files": 51
+    },
+    {
+      "slug": "v-load04",
+      "head": "380f0dc76a2400f9e3027ea4c8dd66a0182f85c8",
+      "files": 51
+    }
+  ],
+  "concurrency": [
+    {
+      "concurrency": 1,
+      "wall_ms": 882,
+      "server_cpu_ms": 42,
+      "sync_results": [
+        {
+          "exit": 0,
+          "ms": 882,
+          "ok": true
+        }
+      ],
+      "server_rss_peak_kb": 247184,
+      "git_children_peak": 2,
+      "git_children_rss_peak_kb": 8032,
+      "git_children_peak_detail": "(git)=4000KB,(git-http-backend)=4032KB",
+      "requests": {
+        "git_n": 16,
+        "git_mean_ms": 15,
+        "git_p95_ms": 25,
+        "git_max_ms": 25,
+        "api_n": 1,
+        "api_mean_ms": 0,
+        "git_by_path": {
+          "info/refs": 8,
+          "upload-pack": 8
+        }
+      }
+    },
+    {
+      "concurrency": 2,
+      "wall_ms": 959,
+      "server_cpu_ms": 65,
+      "sync_results": [
+        {
+          "exit": 0,
+          "ms": 959,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 956,
+          "ok": true
+        }
+      ],
+      "server_rss_peak_kb": 249424,
+      "git_children_peak": 4,
+      "git_children_rss_peak_kb": 15968,
+      "git_children_peak_detail": "(git)=4000KB,(git)=4000KB,(git-http-backend)=3984KB,(git-http-backend)=3984KB",
+      "requests": {
+        "git_n": 32,
+        "git_mean_ms": 16,
+        "git_p95_ms": 28,
+        "git_max_ms": 29,
+        "api_n": 2,
+        "api_mean_ms": 0,
+        "git_by_path": {
+          "info/refs": 16,
+          "upload-pack": 16
+        }
+      }
+    },
+    {
+      "concurrency": 3,
+      "wall_ms": 977,
+      "server_cpu_ms": 75,
+      "sync_results": [
+        {
+          "exit": 0,
+          "ms": 977,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 976,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 975,
+          "ok": true
+        }
+      ],
+      "server_rss_peak_kb": 251664,
+      "git_children_peak": 6,
+      "git_children_rss_peak_kb": 24032,
+      "git_children_peak_detail": "(git)=3984KB,(git)=3984KB,(git)=3984KB,(git-http-backend)=4016KB,(git-http-backend)=4032KB,(git-http-backend)=4032KB",
+      "requests": {
+        "git_n": 48,
+        "git_mean_ms": 16,
+        "git_p95_ms": 29,
+        "git_max_ms": 30,
+        "api_n": 3,
+        "api_mean_ms": 0,
+        "git_by_path": {
+          "info/refs": 24,
+          "upload-pack": 24
+        }
+      }
+    },
+    {
+      "concurrency": 4,
+      "wall_ms": 1068,
+      "server_cpu_ms": 135,
+      "sync_results": [
+        {
+          "exit": 0,
+          "ms": 1068,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 1066,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 1066,
+          "ok": true
+        },
+        {
+          "exit": 0,
+          "ms": 1065,
+          "ok": true
+        }
+      ],
+      "server_rss_peak_kb": 254368,
+      "git_children_peak": 8,
+      "git_children_rss_peak_kb": 32032,
+      "git_children_peak_detail": "(git)=4000KB,(git)=4000KB,(git)=4000KB,(git)=4016KB,(git-http-backend)=3984KB,(git-http-backend)=4000KB,(git-http-backend)=4000KB,(git-http-backend)=4032KB",
+      "requests": {
+        "git_n": 64,
+        "git_mean_ms": 18,
+        "git_p95_ms": 34,
+        "git_max_ms": 36,
+        "api_n": 4,
+        "api_mean_ms": 0,
+        "git_by_path": {
+          "info/refs": 32,
+          "upload-pack": 32
+        }
+      }
+    }
+  ],
+  "env": {
+    "node": "v24.21.0",
+    "pid": 75940
+  },
+  "server_totals": {
+    "rss_base_kb": 240512,
+    "rss_final_kb": 254368,
+    "cpu_user_ms": 210,
+    "cpu_system_ms": 129
+  },
+  "world": {
+    "vaults": 4,
+    "files": 204,
+    "content_bytes": 1692220,
+    "employees": 4
+  },
+  "sampler": {
+    "interval_ms": 100,
+    "n": 75
+  }
+}

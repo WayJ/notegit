@@ -1,0 +1,14 @@
+# Docker 构建上下文裁剪（deploy/Dockerfile 的上下文 = 仓库根）。
+# 注意 .dockerignore 语义：排除目录内容用 dir/* 而非 dir 本身——后者使
+# Docker 不再下钻，后续 ! 例外无法生效（docs/contracts 两份运行时契约文件
+# 需要进上下文，Dockerfile COPY 引用它们）。
+.git
+.agents
+**/node_modules
+**/.DS_Store
+deploy
+docs/*
+!docs/contracts
+docs/contracts/*
+!docs/contracts/rules-version.json
+!docs/contracts/validation-defaults.json
