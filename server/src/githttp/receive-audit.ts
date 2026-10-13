@@ -168,12 +168,21 @@ export interface SettleByRefStateInput {
  * 只动 pending/unresolved 行，不翻已定终态。
  */
 export async function settlePushByRefState(db: DatabaseSync, input: SettleByRefStateInput): Promise<void> {
-  const ZERO_OID = '0'.repeat(40);
   for (const row of rowsOfPush(db, input.pushId, ['pending', 'unresolved'])) {
     const actual = row.ref_name === null ? null : await input.actualOf(row.ref_name);
-    const achieved = (actual ?? ZERO_OID) === (row.new_commit ?? ZERO_OID);
+    const achieved = refReachedExpected(actual, row.new_commit);
     settleAuditEvent(db, row.id, achieved ? 'succeeded' : 'rejected', input.detail);
   }
+}
+
+/**
+ * 终态判定规则（S8-T6 起导出：恢复对账与 post-receive 同源消费——复用不重写）：
+ * ref 实际 OID == 行 new_commit 即达成（succeeded）；ref 不存在（null）与全零 OID
+ * 同态（删除命令成功删除即达成）。actualOf 语义与本模块注释同源。
+ */
+export function refReachedExpected(actual: string | null, newCommit: string | null): boolean {
+  const ZERO_OID = '0'.repeat(40);
+  return (actual ?? ZERO_OID) === (newCommit ?? ZERO_OID);
 }
 
 /**
