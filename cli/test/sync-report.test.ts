@@ -245,13 +245,13 @@ test('混合场景 --json：逐项 status/reason_code 准确、summary 计数一
     assert.equal(vTip['head'], w.shas['m-tip']!.c1)
 
     const vDirty = byslug.get('m-dirty')!
-    assert.deepEqual(Object.keys(vDirty).sort(), ['path', 'reason', 'reason_code', 'slug', 'status'])
+    assert.deepEqual(Object.keys(vDirty).sort(), ['head', 'last_sync', 'path', 'reason', 'reason_code', 'slug', 'status'])
     assert.equal(vDirty.status, 'skipped')
     assert.equal(vDirty.reason_code, 'dirty')
     assert.match(String(vDirty['reason']), /未提交修改/)
 
     const vAhead = byslug.get('m-ahead')!
-    assert.deepEqual(Object.keys(vAhead).sort(), ['path', 'reason', 'reason_code', 'slug', 'status'])
+    assert.deepEqual(Object.keys(vAhead).sort(), ['head', 'last_sync', 'path', 'reason', 'reason_code', 'slug', 'status'])
     assert.equal(vAhead.status, 'skipped')
     assert.equal(vAhead.reason_code, 'ahead')
     assert.match(String(vAhead['reason']), /领先|未推送/)

@@ -32,7 +32,7 @@ export type VaultReasonCode =
 export type VaultResult =
   | { readonly slug: string; readonly status: 'success'; readonly reason_code: 'cloned' | 'up_to_date'; readonly path: string; readonly head: string }
   | { readonly slug: string; readonly status: 'success'; readonly reason_code: 'fast_forwarded'; readonly path: string; readonly from: string; readonly to: string }
-  | { readonly slug: string; readonly status: 'skipped'; readonly reason_code: 'dirty' | 'ahead' | 'diverged' | 'other_branch'; readonly path: string | null; readonly reason: string }
+  | { readonly slug: string; readonly status: 'skipped'; readonly reason_code: 'dirty' | 'ahead' | 'diverged' | 'other_branch'; readonly path: string | null; readonly reason: string; readonly head: string | null; readonly last_sync: string | null }
   | { readonly slug: string; readonly status: 'failed'; readonly reason_code: SyncFailureCode; readonly path: string | null; readonly message: string }
 
 /** 汇总计数（各计数 == vaults[] 逐项复数；total == vaults.length）。 */
@@ -53,7 +53,7 @@ export function vaultResultOf(outcome: SyncOutcome): VaultResult {
     case 'up_to_date':
       return { slug: outcome.slug, status: 'success', reason_code: 'up_to_date', path: outcome.path, head: outcome.head }
     case 'skipped':
-      return { slug: outcome.slug, status: 'skipped', reason_code: outcome.state, path: outcome.path, reason: outcome.reason }
+      return { slug: outcome.slug, status: 'skipped', reason_code: outcome.state, path: outcome.path, reason: outcome.reason, head: outcome.head, last_sync: outcome.last_sync }
     case 'failed':
       return { slug: outcome.slug, status: 'failed', reason_code: outcome.code, path: outcome.path, message: outcome.message }
   }
@@ -118,7 +118,7 @@ export function renderReportText(results: readonly VaultResult[], summary: SyncS
       else if (r.reason_code === 'cloned') out.push(`${r.slug}：已克隆（HEAD ${short(r.head)}）→ ${r.path}`)
       else out.push(`${r.slug}：已是最新（${short(r.head)}）`)
     } else if (r.status === 'skipped') {
-      err.push(`${r.slug}：跳过——${r.reason}`)
+      err.push(`${r.slug}：跳过——${r.reason}；离线副本 ${r.head === null ? '?' : r.head.slice(0, 7)}，上次同步 ${r.last_sync ?? '未知（该副本未经 notegit 同步）'}`)
     } else {
       err.push(`${r.slug}：失败——${r.message}`)
     }

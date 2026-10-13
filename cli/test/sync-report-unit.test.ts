@@ -28,10 +28,10 @@ const OUTCOMES: SyncOutcome[] = [
   { action: 'cloned', slug: 'w-new', path: DIR, head: SHA2 },
   { action: 'fast_forwarded', slug: 'w-behind', path: DIR, from: SHA1, to: SHA2 },
   { action: 'up_to_date', slug: 'w-tip', path: DIR, head: SHA1 },
-  { action: 'skipped', slug: 'w-dirty', path: DIR, state: 'dirty', reason: '工作区有未提交修改' },
-  { action: 'skipped', slug: 'w-ahead', path: DIR, state: 'ahead', reason: '本地有领先远端的未推送提交' },
-  { action: 'skipped', slug: 'w-diverged', path: DIR, state: 'diverged', reason: '本地与远端分叉' },
-  { action: 'skipped', slug: 'w-other', path: DIR, state: 'other_branch', reason: '当前位于分支 feature' },
+  { action: 'skipped', slug: 'w-dirty', path: DIR, state: 'dirty', reason: '工作区有未提交修改', head: null, last_sync: null },
+  { action: 'skipped', slug: 'w-ahead', path: DIR, state: 'ahead', reason: '本地有领先远端的未推送提交', head: null, last_sync: null },
+  { action: 'skipped', slug: 'w-diverged', path: DIR, state: 'diverged', reason: '本地与远端分叉', head: null, last_sync: null },
+  { action: 'skipped', slug: 'w-other', path: DIR, state: 'other_branch', reason: '当前位于分支 feature', head: null, last_sync: null },
   { action: 'failed', slug: 'w-bad', path: DIR, code: 'status_error', message: '目录存在但不是 git 仓库' },
 ]
 
@@ -55,7 +55,7 @@ test('映射·跳过四态：reason_code=四态枚举，reason 原样透传，pa
     assert.equal(r.reason_code, outcome.state)
     assert.equal(r.reason, outcome.reason)
   }
-  const noDir = vaultResultOf({ action: 'skipped', slug: 'x', path: null, state: 'dirty', reason: 'r' })
+  const noDir = vaultResultOf({ action: 'skipped', slug: 'x', path: null, state: 'dirty', reason: 'r', head: null, last_sync: null })
   assert.equal(noDir.path, null)
 })
 
@@ -133,10 +133,10 @@ test('文本输出：成功行与汇总行走 stdout 侧，跳过/失败行走 s
     '同步完成：共 8 库（成功 3、跳过 4、失败 1）',
   ])
   assert.deepEqual(text.err, [
-    'w-dirty：跳过——工作区有未提交修改',
-    'w-ahead：跳过——本地有领先远端的未推送提交',
-    'w-diverged：跳过——本地与远端分叉',
-    'w-other：跳过——当前位于分支 feature',
+    'w-dirty：跳过——工作区有未提交修改；离线副本 ?，上次同步 未知（该副本未经 notegit 同步）',
+    'w-ahead：跳过——本地有领先远端的未推送提交；离线副本 ?，上次同步 未知（该副本未经 notegit 同步）',
+    'w-diverged：跳过——本地与远端分叉；离线副本 ?，上次同步 未知（该副本未经 notegit 同步）',
+    'w-other：跳过——当前位于分支 feature；离线副本 ?，上次同步 未知（该副本未经 notegit 同步）',
     'w-bad：失败——目录存在但不是 git 仓库',
   ])
 })

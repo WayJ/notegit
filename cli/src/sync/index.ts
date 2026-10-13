@@ -6,6 +6,10 @@
  * （report.ts，S7-T3：--json 结构化逐项 + 文本人读；退出码非零当且仅当有失败）。
  *
  * D7 红线：全链路不存在 stash/reset/rebase；跳过 = 完全不动本地副本。
+ * 报告契约（JSON、逐项结构、汇总口径）= S7-T3 report.ts（唯一渲染器）；
+ * 退出码：非零当且仅当有失败（跳过不判失败）。
+ * S7-T2：成功结局写每库 last-sync 标记（本地形状，T4 状态文件集成点见模块头）；
+ * 跳过原因/离线副本 commit/上次同步时间由 engine 的 skipped outcome 携带进报告。
  */
 import process from 'node:process'
 import path from 'node:path'
@@ -15,7 +19,8 @@ import { cloneUrlOf, fetchVaults } from '../ls/api.ts'
 import { computeSyncStatus, localRootOf, realSyncGitOps } from '../ls/local-status.ts'
 import { applySyncStrategy, realSyncOps, type SyncOutcome } from './engine.ts'
 import { buildSyncReport, exitCodeOf, renderReportJson, renderReportText, summarize, vaultResultOf } from './report.ts'
-import { EXIT_ERROR, EXIT_FAIL } from '../exit-codes.ts'
+import { writeLastSync } from './last-sync.ts'
+import { EXIT_ERROR, EXIT_FAIL } from '../exit-codes.ts' 
 
 interface SyncArgs {
   depth?: number
@@ -43,6 +48,7 @@ function parseArgs(argv: string[]): { ok: true; args: SyncArgs } | { ok: false; 
   }
   return { ok: true, args: { depth, json } }
 }
+
 
 /** 本地根目录下不对应当前任何可见库的 git 副本 → 提示映射变化，不擅动目录（架构 §7.2）。 */
 async function hintOrphanDirs(root: string, visibleSlugs: ReadonlySet<string>, ops: ReturnType<typeof realSyncGitOps>): Promise<void> {
@@ -85,7 +91,12 @@ export async function runSync(argv: string[], env: NodeJS.ProcessEnv = process.e
   for (const v of result.vaults) {
     const cloneUrl = cloneUrlOf(cred.server, v.slug)
     const info = await computeSyncStatus({ root, slug: v.slug, defaultBranch: v.default_branch, cloneUrl, ops })
-    outcomes.push(await applySyncStrategy({ root, slug: v.slug, cloneUrl, defaultBranch: v.default_branch, info, depth: parsed.args.depth, ops: syncOps }))
+    const out = await applySyncStrategy({ root, slug: v.slug, cloneUrl, defaultBranch: v.default_branch, info, depth: parsed.args.depth, ops: syncOps })
+    outcomes.push(out)
+    // 成功结局（克隆/快进/已最新）刷新上次同步时间标记（S7-T2；T4 集成点见 last-sync.ts 头）
+    if (out.action === 'cloned' || out.action === 'fast_forwarded' || out.action === 'up_to_date') {
+      await writeLastSync(out.path)
+    }
   }
   await hintOrphanDirs(root, new Set(result.vaults.map((v) => v.slug)), ops)
   if (parsed.args.json) {
