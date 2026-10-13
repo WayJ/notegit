@@ -30,6 +30,12 @@ function migrationV4Lines(): string[] {
   return v4.statements.join('\n').split('\n').map((l) => l.trimEnd()).filter((l) => l.length > 0);
 }
 
+
+/** 派生版本表（S4-T6 起）：从 1 连续递增即合法——append 新迁移不再需要改本文件 */
+function allVersions(): number[] {
+  return Array.from({ length: MIGRATIONS.length }, (_, i) => i + 1);
+}
+
 test('迁移 0004：与契约 @schema 块逐行等价（D11 同步后无任何增量，防漂移）', () => {
   const contract = contractCredentialsLines();
   const mine = migrationV4Lines();
@@ -50,7 +56,7 @@ test('迁移 0004：schema_version 引导行不在迁移内容中（runner 持�
 test('迁移 0004：在 v2（employees）之上应用，credentials 表与约束落地，重入跳过', () => {
   const db = memory();
   const first = migrate(db, MIGRATIONS);
-  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0007（T8 app_settings）已并入
+  assert.deepEqual(first.applied, allVersions());  // 集成修正：0007（T8 app_settings）已并入
 
   const cols = (db.prepare('PRAGMA table_info(credentials)').all() as { name: string }[]).map((c) => c.name);
   assert.deepEqual(cols.sort(), [
@@ -61,7 +67,7 @@ test('迁移 0004：在 v2（employees）之上应用，credentials 表与约束
 
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0007（T8 app_settings）已并入
+  assert.deepEqual(again.skipped, allVersions());  // 集成修正：0007（T8 app_settings）已并入
   db.close();
 });
 
@@ -88,5 +94,5 @@ test('迁移 0004 约束：token_hash 唯一、scope_access CHECK、employee 外
 
 test('出厂迁移列表：v1 基线、v2（S2-T2）在前、v4 append 在后（0003 为 S2-T3 sessions，已集成于前）', () => {
   const versions = MIGRATIONS.map((m) => m.version);
-  assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0005/0006 已并入；0007（T8 app_settings）append
+  assert.deepEqual(versions, allVersions());  // 集成修正：0005/0006 已并入；0007（T8 app_settings）append
 });

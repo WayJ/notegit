@@ -136,7 +136,26 @@
 - 成功：204（令牌单次失效；该账号会话全部失效）；审计 `employee.password_reset`（detail 记来源）。
 - 错误：401 E-AUTH-001（令牌无效/过期/已用）；422 E-AUTH-008。
 
-### 3.3 规则版本元信息（S6-T7 补录；validation §7.3 三端引用）
+
+### 3.3 维护模式生命周期（实例管理员；backup-recovery §3）
+
+- **POST /api/v1/admin/maintenance**（写；运行态写入——闸门 allowlist 放行自身）：开启维护模式。成功 **204**；幂等（已开启仍 204，不重复记审计）；状态迁移发生时记 `maintenance.enable` 审计行（storage-model §5：运行态写入，不入备份一致性集合）。
+- **DELETE /api/v1/admin/maintenance**（写；运行态写入）：关闭。成功 **204**（同幂等与审计语义；维护期间可关闭）；记 `maintenance.disable`。
+- **GET /api/v1/admin/maintenance**：200 `{maintenance: true|false}`（当前状态查询；只读）。
+- 错误：401（§1 通用）；403 E-AUTHZ-001（非实例管理员）。
+- 开启后的全局效果（写端点 503 E-MAINT-001、receive-pack 403、读与登录放行）见 §1，本节不重复。（2026-10-13 ADR D12 补录；实现自 S2-T7。）
+
+
+### 3.4 实例配置（app_settings；实例管理员）
+
+配置键全集与值域以 [validation-defaults.json](validation-defaults.json) 为唯一源（validation.md §5.1）；变更**热生效**（下一校验请求即用新值）。缺行 = 契约默认值。
+
+- **GET /api/v1/admin/config**：200 `{settings: [{key, value, updated_at}]}`（全部已写行；不含默认值展开）。
+- **PUT /api/v1/admin/config/{key}**（写）：请求 `{value}`（数值键=安全正整数；清单键=字符串数组，空清单合法收紧）。成功 200 `{key, value, updated_at}`；upsert 语义；审计 `config.update`（detail 记 `{key, old, new}`）。
+- 错误：403 E-AUTHZ-001；404 E-RES-001（键不在注册表）；400/422 E-RES-004/007（值域校验失败）；503 E-MAINT-001。（2026-10-13 ADR D12 定稿；HTTP 挂接待后续任务，写入面已实现自 S3-T8。）
+
+
+### 3.5 规则版本元信息（S6-T7 补录；validation §7.3 三端引用）
 #### GET /api/v1/rules-version（需认证）
 - 用途：CLI/程序化客户端探测服务端规则版本——本地旧于服务端时客户端附 N-UPGRADE-001 提示（validation §6：版本差异本身不构成拒绝理由；服务端为运行时权威）。
 - 成功：200 `{rulesVersion, status}`——值取自 [rules-version.json](rules-version.json) 唯一机器来源（服务端运行时经 notegit-validation 读取，与 pre-receive 同源，不另行复制维护）。
@@ -194,6 +213,12 @@
 - 成功：204；**撤权下一请求生效**（该员工此库访问 → 404；在途 push 在执行点复查被拒并记审计，identity §5.2/§5.3）；审计 `member.revoke`。
 - 错误：403 E-AUTHZ-001 / 404 E-RES-001。
 
+
+#### DELETE /api/v1/vaults/{slug}（写；库管理员）
+- 成功：**204**。行侧同灭（vaults 行 + 全部成员行；历史审计行保留、`vault_id` 解除挂靠——storage-model §7「v1 不清理」）；随后删除 bare 仓库目录（幂等）。目录删除失败时行已灭、错误放大；孤儿目录经一致性核对可观测并由 reconcile 处置（backup-recovery §5 不变量 3）。审计 `vault.delete`。slug 随行删除释放，**可复用**（v1 无墓碑）。
+- 错误：403 E-AUTHZ-001（成员但非库管理员）；404 E-RES-001（非成员或不存在）；503 E-MAINT-001。（2026-10-13 ADR D12 定稿；HTTP 挂接待后续任务，服务面已实现自 S3-T1。）
+
+
 ## 6. 内容读取（自 Git 派生，不落库）
 
 角色：reader 及以上。`ref` 可省（默认分支）；显式其他分支时响应标注 `branch`（架构 §2）。commit 的 author/committer 字段是**客户端可填的内容元数据**，仅展示，不作身份判断（identity §8）。
@@ -215,6 +240,8 @@
 - **PUT /api/v1/vaults/{slug}/drafts/{path}**（editor+；写）：请求 `{content, base_commit}`；upsert 每作者每路径一份；成功 200 `{updated_at}`。错误：403 E-AUTHZ-001（reader）；404 E-RES-001；422（路径非法——T2 报告，`E-PATH-001` 等，提前反馈不阻断保存的变体见 §11 开放项）；503 E-MAINT-001。
 - **GET /api/v1/vaults/{slug}/drafts/{path}**（成员）：200 `{content, base_commit, updated_at}`；404 E-RES-001。
 - **DELETE /api/v1/vaults/{slug}/drafts/{path}**（editor+；写）：204；404 E-RES-001；503 E-MAINT-001。
+
+状态流转（S4-T6 落地）：`PUT` 只保存不发布——不产生 Git 版本（架构 §6「自动保存草稿不产生 Git 版本」）。正式提交走 §8.2（S3-T7 发布组件）；发布成功后**提交者本人**该路径的现行草稿标记为已提交（`status='committed'` + `committed_at`，行保留可追溯；他人草稿不受影响——按作者私有）。已提交行不再是现行草稿：列表与单读/删除只作用于 `active` 行（无现行草稿即 404——「私有草稿可恢复」指恢复未发布草稿）；同路径再次 `PUT` 重置为 `active`（每作者每路径一份，覆盖旧稿）。任何阶段的提交拒绝（校验/冲突等）不改变草稿（保留待重提）。
 
 ## 8. 发布：Web 与 Git 两条入口共用检查点序列
 
@@ -252,6 +279,7 @@
   `changes` 至少一项；文件级规则（路径/类型/容量/frontmatter）由检查点 4 按 T2 判定。
 - 成功：201 `{commit, branch, report}`——`report` 为 T2 validation-report（scope=web-submit，`result: pass` 可含 warning，含 `rulesVersion`）；发布成功后草稿按架构 §6 清理或标记。
 - 错误：409 E-RES-003；**422 = T2 报告**（草稿保留）；403 E-AUTHZ-001 / 404 E-RES-001 / 503 E-MAINT-001 / 400 E-RES-004；执行点复查失败（撤权/停用发生在检查后）→ 403 E-AUTHZ-001 或 404 E-RES-001，审计记 `rejected`。
+- S4-T7 接线（`server/src/web/edit/submissions.ts` → submit 面 `submitComposedChanges` → S3-T7 `publishWebSubmit`；冲突保护 = 检查点 3 预期旧 commit CAS 唯一机制）：409 信封 `details={base_commit, current_head}`（当前 tip 提示刷新；update-ref 原子 CAS 竞态同 409；不覆盖、草稿完整保留）；授权前置 = 认证四状态 401 + `authorize` write（reader 403 E-AUTHZ-001、非成员/未知库 404 E-RES-001 同体——组件链仍全量复核）；400 含非 SHA 形状或库外 `base_commit`（组件 candidate 阶段同判库内存在性，此处为 API 语义前置）与请求形态（缺必填/每项须恰一内容形态）；维护双层（app 级 maintenanceGuard 503 E-MAINT-001 第一道 + 组件 execution-point 最后一道）+ CSRF app 级同源校验；发布成功后提交者本人各变更路径的现行草稿经 §7 同一挂点标已提交。
 
 #### POST /api/v1/vaults/{slug}/validations（只读推导；editor+）
 - 请求同上；成功：200 `{report}`（仅校验候选提交，不发布、不记审计、维护模式放行——不写权威数据）。
@@ -343,3 +371,35 @@ src/
 | T6（gates） | `node --test docs/contracts/tools/ddl_smoke.test.mjs`（含本文档 lint）建议登记为 contracts gate（D5 附日期） |
 | S3（发布实现） | §8 共用发布组件为其实施蓝本 |
 | T1/T4 spike | §8.4 引用 docs/s1/spikes/git-http-backend/ 同一规则来源与版本标识（场景 S3 核对） |
+
+## 13. Web 页面路由（非 /api/v1；S4 plan D5 极简形态；2026-10-13 ADR D12 入册）
+
+页面 = 服务端渲染 GET（无前端框架；服务端插值唯一通道 HTML 转义；页面无写操作，全部安全判定在 API 侧端点）。认证：会话 Cookie 经统一缝（identity §5.1）；未认证 302 /login。无权库与不存在一律 404 同页（D-IC-06 页面形态）。GET 免 CSRF。页面 URL 不进 /api/v1 版本化承诺（随产品演进）。
+
+| 路由 | 页面 | 来源 |
+|---|---|---|
+| GET /login | 登录页（提交走 §3 login 端点） | S2-T8 |
+| GET / | 入口页（管理入口仅实例管理员可见） | S2-T8 |
+| GET /admin | 管理页外壳（未认证 302；非实例管理员 403） | S2-T8 |
+| GET /credentials | 员工自助凭据页（数据走 §4） | S2-T8 |
+| GET /vaults | 有权库列表（实时成员关系，与 §5 GET /vaults 同判定面） | S4-T1 |
+| GET /vaults/{slug} | 库根：成员 302 → `/vaults/{slug}/browse`；无权/不存在 404 | S4-T1 |
+| GET /vaults/{slug}/browse[/{path}] | 目录浏览：默认分支实时读 Git tree（每请求无缓存）；条目渲染与 `git ls-tree` 同集同序；面包屑；README.md（大小写不敏感）渲染为目录导航并标注 frontmatter 豁免（架构 §5.2） | S4-T1 |
+| GET /vaults/{slug}/view/{path} | 文件预览占位（元信息 + 如实标注；安全渲染 S4-T2 落地）；目录路径 302 → browse | S4-T1 |
+| GET /vaults/{slug}/view/{path} | 文件预览（S4-T2 落地，接管上行占位）：`.md` 服务端安全渲染（清理唯一通道：原始 HTML 剥离、URL 协议白名单 http/https/相对/锚点、脚本/事件属性不可达；代码块/行内码不二次渲染；frontmatter 不入正文；剥离如实标注）；非 Markdown 仅元信息 + 如实标注（图片附件直开页以鉴权附件通道 URL 嵌 `<img>`——S4-T8 T4 遗留收口：仅对附件通道以 image/* 服务的类型（png/jpg/jpeg/gif/webp）内嵌，svg 等 octet-stream 服务类型标注不内嵌；超上限（1 MiB）仅元信息）；仓库相对图片经鉴权附件通道（S4-T4 落地：`server/src/web/view/attachments.ts` 两遍法装配，解析不到保留占位标注）；目录路径 302 → browse | S4-T2 |
+
+| GET /vaults/{slug}/edit/{path} | 编辑页（S4-T3）：`.md` 知识文档六字段元数据表单（title 必填提示 required+maxlength、新建时 title 自文件名生成提交前可改、status 下拉封闭集防呆（active/draft/deprecated/缺省，非法旧值如实保留标注）、tags 逗号分隔输入、额外字段=安全 YAML 值文本区）+ 正文 textarea（多行纯文本，无富文本）；既有文件回填（六字段+额外字段+正文），新建路径=空表单；表单错误按 E-FM 码映射到字段与行定位（映射权威在服务端 `server/src/web/edit/errors.ts`，错误单一来源=发布组件 scope=web-submit 报告——缺 title 阻断含 E-FM-003 与行、W-FM-101 仅温和提示不阻断）；保存=§7 草稿 PUT（S4-T6 存储已落地：按作者私有、不产生 Git 版本，见 §7 状态流转）、提交=§8.2 submissions（S4-T7 已接线：编辑页提交按钮 → `server/src/web/edit/submissions.ts` → submit 面（`submitComposedChanges` 同源挂点）→ S3-T7 发布组件；409 冲突响应含当前 tip、内容保留表单与草稿，刷新本页取最新基线重提；发布成功后提交者本人草稿由服务端标已提交——§7 状态流转同一挂点）；base commit=打开编辑器时默认分支 HEAD 嵌入页面（S4-T7 冲突保护落地：提交时预期旧 commit CAS 比对，不符 409 E-RES-003 不静默覆盖——见 §8.2 接线注）；打开时回填本人现行草稿（T6 遗留接页：草稿内容优先于库内文件进表单、README 页回填正文，同时呈现草稿 base_commit 旧值与保存时间——分支已前进如实标注提示核对；按作者私有，§7 GET 同一存储面）；README（大小写不敏感）豁免=仅正文编辑并如实标注；非 `.md` 404（附件上传属 S4-T4）；目录路径 302 → browse；页面门槛=read 成员（D-IC-06 无权=不存在 404 同页；写权限由提交时发布组件 authorization 阶段判定——页面无写操作，安全判定在 API 侧） | S4-T3 |
+
+| GET /vaults/{slug}/upload[/{dir}] | 上传 UI 页（S4-T8，T4 遗留收口）：目标目录上下文 + 文件选择 + 相对路径输入（选文件自动预填）+ 页内脚本 fetch 直发 `application/octet-stream`（T4 契约形态，不引 multipart）；上传结果呈现 blob 寻址附件 URL 与 Markdown 引用片段，拒绝响应呈现统一错误提示（error.code + 修正建议 hint，见本表尾注）；目录页（库根/子目录）与编辑页（六字段/README，指向文档所在目录）均有入口；目标目录可为不存在路径（POST 走组件路径判定——页面零校验）；畸形路径 404 同页（D-IC-06）；页面门槛=read 成员（写权限在 POST 提交时判定） | S4-T8 |
+| POST /vaults/{slug}/upload/{path} | 上传端点（S4-T4，页面域首个写端点——安全判定同 API 侧端点形态）：请求体=原始字节（唯一契约内容类型 `application/octet-stream`，其余 415；传输护栏随生效 `validation.limits.maxAttachmentBytes` 只升不降，正式判定在发布组件）；上传即走候选提交（S3-T7 发布组件 `publishWebSubmit` 单文件 upsert——T3 定形的形状，附件与引用它的 Markdown 变更分步提交）；判定单一来源=组件 validation 阶段（`.md` 套 frontmatter 规则；非 `.md` 扩展名清单制 E-LIMIT-002、附件容量 E-LIMIT-003——错误映射携带 limit/limitKey/expected 定位字段）；base commit=请求时默认分支 HEAD（CAS 旧值，并发冲突 409 E-RES-003 不静默覆盖——冲突保护已由 S4-T7 组件落地）；reader 403（组件 branch-rules 拒）、无权/不存在/畸形路径 404 同页（D-IC-06）；会话 Cookie 载体受 CSRF 同源校验（identity §4）；成功 200 `{ok,path,commit,url}`（url=blob 寻址附件 URL）；维护模式 gate 已接线（S4-T5 缝：HTTP 层 webWriteGuard 第一道 503、组件层 maintenanceGate 注入最后一道——双层同构）；拒绝信封统一携带 `error.code` 与修正建议 `error.hint`（S4-T8 统一提示，见本表尾注） | S4-T4 |
+| GET /vaults/{slug}/attach/{oid}[/{name}] | 附件读取端点（S4-T4）：一律经鉴权（authorize read；未认证 302 /login；无权/库不存在/伪造或库内缺失 OID 一律 404 同页反存在性——持有效 URL 也不例外，撤权下一请求即 404）；**按 blob 寻址**（URL 不可枚举选型记录：40 hex blob OID 为不可猜测成分、无列表面，鉴权逐请求判定与不可枚举互补）；响应不绕库权限（同 vaults 域 authorize 面）+ `X-Content-Type-Options: nosniff` + `Cache-Control: private, no-store`（库内容不落共享缓存）；内容类型按文件名段仅升格已知安全类型（png/jpg/jpeg/gif/webp/pdf/md；svg 一律 octet-stream 纵深防御——纵使管理员加进清单也不以 image/svg+xml 出面；未知/缺名 octet-stream + attachment）；预览页仓库相对图片引用经此通道装配（`server/src/web/view/attachments.ts` 两遍法解析，缺库/越界引用保留占位标注） | S4-T4 |
+| GET /vaults/{slug}/rename/{path} | 重命名表单页（S4-T5）：原路径展示 + 新路径输入（预填源路径，库内绝对路径可含子目录）+ 目标路径重判定规则提示（改 `.md` 须有合法 frontmatter、改名 `README.md` 豁免——大小写不敏感）；源不存在/畸形 404 同页（反存在性）、目录路径 302 → browse、子模块 404；页面门槛=read 成员（D-IC-06；写权限由提交时发布组件判定） | S4-T5 |
+| POST /vaults/{slug}/rename/{path} | 重命名端点（S4-T5）：`application/x-www-form-urlencoded`（字段 `to`=新路径）；单变更集 upsert(新路径, 内容逐字节保留) + delete(旧路径) 走 S3-T7 发布组件 `publishWebSubmit`——目标路径重新判定知识文档规则（validation §2.5：改 `.md` 须有合法 frontmatter，E-FM 码+行定位映射回表单；改名 `README.md` 即豁免；README 改普通 `.md` 不再豁免），本端点不设第二套校验（sprint D7）；目标已存在 409 拒绝不覆盖、同路径无操作 400、畸形路径 404；base commit=请求时默认分支 HEAD（CAS 旧值，409 不静默覆盖）；拒绝按阶段映射同页回显（validation 422 / authorization·branch-rules 403 / base-commit·目标已存在 409 / execution-point 403·维护 503）；成功 302 → 新路径预览页；维护模式 503 同页提示（S4-T5 web 写缝） | S4-T5 |
+| GET /vaults/{slug}/delete/{path} | 删除确认页（S4-T5）：待删路径展示 + 「Git 历史保留（旧提交可查旧版本）」如实标注 + 确认/取消；源不存在/畸形 404 同页、目录路径 302 → browse；页面门槛=read 成员（D-IC-06） | S4-T5 |
+| POST /vaults/{slug}/delete/{path} | 删除端点（S4-T5）：单条 delete 变更走 S3-T7 发布组件 `publishWebSubmit`——**不做元数据校验**（validation §2.5 第 5 点）；Git 历史不动（旧提交与对象原样保留，S5 历史页可查旧版本）；base commit=CAS 旧值；拒绝按阶段映射同页回显（同上行）；成功 302 → 所在目录 browse；维护模式 503 同页提示（S4-T5 web 写缝）；会话 Cookie 载体受 CSRF 同源校验（identity §4） | S4-T5 |
+
+维护模式 web 写缝（S4-T5，backup-recovery §3 矩阵 web 行）：`WebRoutesOptions.maintenanceGate` 注入——本表全部写端点（upload/rename/delete，未来 edit submit POST 自动覆盖——凡 `/vaults/` 下非安全方法）维护模式 503；程序化上传（octet-stream）返 JSON 结构化错误（E-MAINT-001 + `details.maintenance` 标志），页面流程返 503 HTML 同页提示；读路径与登录放行。组件层第二道=发布组件 execution-point 复查（双层同构）。
+
+统一错误提示（S4-T8，breakdown §2.3 S4-T8 行「权限不足/格式错误统一提示」）：页面域写端点（upload POST / rename·delete POST）拒绝响应统一携带错误码与修正建议——错误码取自注册表单一来源（validation §6.2 `ERROR_REGISTRY` ∪ 本契约 §1 错误码表；映射见 `server/src/web/hints.ts`，测试约束不杜撰码）：upload JSON 信封为 `error.{code,hint}`（validation 取报告 issue 码并保留 limit/limitKey 等定位字段；branch-rules→E-AUTHZ-001、authorization→E-RES-001、base-commit→E-RES-003、维护→E-MAINT-001），rename/delete 同页 notice 附 code 与「建议：」行；candidate/audit/update-ref/settle 内部失败 500 无注册码不杜撰（T7 注记）。§8.2 submissions 422 保持裸 T2 报告（与 `examples/report-web-submit-draft-rejected.json` 同构——报告 message 模板自身已含修正指引），409 信封 §8.2 已定形不扩字段。
+
+S4-T2 起各任务在本表 append 各自页面行；模块注册单点见 `server/src/web/routes.ts`。

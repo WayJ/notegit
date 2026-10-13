@@ -13,6 +13,7 @@ import { credentialsPlugin } from './credentials/routes.ts';
 import { createDbMembershipSource } from './vaults/membership.ts';
 import { VaultService } from './vaults/service.ts';
 import { vaultsPlugin } from './vaults/routes.ts';
+import { draftsPlugin } from './drafts/routes.ts';
 import { createVaultRepoOps } from './gitrepo/lifecycle.ts';
 import { gitHttpPlugin } from './githttp/http-backend.ts';
 import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
@@ -154,11 +155,22 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       authenticateRequest: wired.authenticateRequest,
       membershipSource: createDbMembershipSource(wired.db),
     });
-    // S2-T8 最小页面（/login、/、/admin、/credentials——GET 外壳 + 页内 fetch 既有
-    // API 端点；页面无写操作，安全判定全部在 API 侧复用 authorize/管理员门槛）
+    // S4-T6 草稿域路由（api.md §7）：按作者私有 CRUD + 发布后状态流转面；
+    // 授权经同一 authorize/membershipSource（三入口同源），维护/CSRF 由 app 级
+    // 闸门自动覆盖（gate.ts 注记明列「草稿」写端点）。
+    app.register(draftsPlugin, {
+      db: wired.db,
+      authenticateRequest: wired.authenticateRequest,
+    });
+    // S2-T8 最小页面 + S4 浏览族（/login、/、/admin、/credentials、/vaults…——GET
+    // 外壳/数据页；页面无写操作，安全判定全部在 API 侧复用 authorize/管理员门槛）。
+    // S4-T1 骨架裁决：web 域此后只在 server/src/web/ 内 append 模块，本调用是
+    // 唯一接入点（dataDir 供目录浏览/预览读 bare 仓库；缺省 = S2 测试形态）。
     registerWebRoutes(app, {
       db: wired.db,
       authenticateRequest: wired.authenticateRequest,
+      dataDir: deps.dataDir,
+      maintenanceGate, // S4-T5 缝：web 写操作（upload/rename/delete/未来 edit POST）维护模式 503（backup §3 web 行）
     });
     // S6-T7 规则版本元信息端点（api.md §3.3 补录；ADR 由 master 落）：
     // GET /api/v1/rules-version → 200 {rulesVersion, status}，需认证（统一缝双载体）；
