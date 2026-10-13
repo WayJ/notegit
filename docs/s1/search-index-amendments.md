@@ -1,8 +1,8 @@
 # 搜索索引契约补正建议（S5-T3）
 
-- **状态**：S5-T3 起草（2026-10-13），待 master 评审。评审通过后由 master 落对应契约原文并在 epic 的 Decisions (ADR) 记录——按仓库约束，本文件不改契约。先例：api-md-amendments.md（S4-T1，A1–A5）。
-- **范围**：S5-T3 落地的两处契约外事实面——派生索引表的 DDL 归属（storage-model.md 目前明示「派生（不在本 schema）」）与索引可观测管理端点（api.md 无定义）。另附实现形态选型记录（进程内异步 vs 队列）供 ADR 归档。
-- **实现状态**：全部已实现并测试（迁移 0009；`server/src/search/`；26 项新测试；npm test 635+106+193 全绿）。
+- **状态**：S5-T3 起草（2026-10-13），待 master 评审。评审通过后由 master 落对应契约原文并在 epic 的 Decisions (ADR) 记录——按仓库约束，本文件不改契约。先例：api-md-amendments.md（S4-T1，A1–A5）。**C3 由 S5-T4 追加（2026-10-13，coordinator 批复建议稿形态）——三节一并待 D13 裁决。**
+- **范围**：S5-T3 落地的两处契约外事实面——派生索引表的 DDL 归属（storage-model.md 目前明示「派生（不在本 schema）」）与索引可观测管理端点（api.md 无定义）；S5-T4 追加查询端点与搜索页的入册文本（api.md §3 查询端点 + §13 页面行）。另附实现形态选型记录（进程内异步 vs 队列；LIKE vs 全文引擎）供 ADR 归档。
+- **实现状态**：全部已实现并测试（迁移 0009；`server/src/search/`；`server/src/web/search/`；35 项新测试；npm test 全绿）。
 
 ## C1 派生索引表的 DDL 归属（storage-model.md）
 
@@ -74,6 +74,33 @@ CREATE TABLE search_index_state (
 
 **待裁决**：(a) 是否补 `POST /api/v1/admin/search-index/rebuild`（T5 全量重建入口的端点形态——当前 T5 未启动，留待其任务定义）；(b) `pollMs` 是否作为 app_settings 配置键暴露（当前仅 `NOTEGIT_SEARCH_POLL_MS` 环境变量）。
 
+## C3 元数据查找：查询端点与搜索页（api.md，S5-T4）
+
+**现状**：S5-T4 已实现两处查找入口（消费 C1 的 search_index 表）：
+- **GET /api/v1/search?q=**（`server/src/search/routes.ts` + `server/src/search/query.ts`）：任意认证员工；鉴权过滤 = 查询 SQL 实时 JOIN `vault_members`（identity §5.1 第 2 层同一张表、逐请求查库——D7「过滤与授权层同一无缓存原则」，不建权限缓存；撤权下一查询即消失）+ token scope 交集（identity §3.4，与 §5 GET /vaults 同一收窄面）。api.md 无定义（C2 同款「已实现、未入册」形态）。
+- **GET /search?q=**（`server/src/web/search/`，S4 骨架 append）：会话认证（未认证 302 /login）；与 API 端点同一查询面同一判定面；§13 表行待入册。
+
+**建议 api.md 文本**（§3 新增小节，编号建议 §3.6；§13 表 append 一行）：
+
+```markdown
+### 3.6 元数据查找（任意认证员工；架构 §9 派生索引按权限过滤、§4.2 未授权的库不进搜索结果）
+
+- **GET /api/v1/search?q=<关键词>**（读）：按标题/标签/摘要关键词查找**本人有权库**的已发布元数据（S5-T4）。
+  - 匹配语义：SQL LIKE 子串（不引全文引擎——当前容量选型，见 search-index-amendments 选型记录）；`%`/`_`/`\` 一律字面化不充当通配符；ASCII 大小写不敏感（SQLite LIKE 内建语义），其他文字精确子串。
+  - **鉴权过滤**：实时 JOIN 当前成员关系（identity §5.1 第 2 层同一无缓存判定面；撤权下一查询即消失，§5.2 行 4 同源）；token scope 清单非空时再取交集（§3.4）。
+  - 成功 200：`{q, truncated, results: [{vault_slug, vault_name, path, commit_oid, title, tags, summary, matched}]}`。结果行 = 库/路径/commit 三要素 + 标题 + 标签序列 + 摘要片段（首段、≤500 字符）+ 命中字段（`matched ⊆ {title, tags, summary}`，逐标签精确——跨标签 JSON 边界的子串不算命中）；title=null = frontmatter 豁免文件（README 等，如实记录）。确定性排序（vault slug → path）；上限 100 行，超出 `truncated: true`（不承诺分页）。
+  - 错误：401（§1 通用）；400 E-RES-004（缺/空 q）；422 E-RES-007（q 超 200 字符）。
+  - 审计：只读端点，不记审计行。索引滞后语义见 §3.5（最终一致，不阻断发布）。
+```
+
+§13 表 append 行（页面路由族）：
+
+```markdown
+| GET /search[?q=] | 元数据查找页（S5-T4）：标题/标签/摘要关键词表单（maxlength=200）+ 结果表（库→browse、路径→view 链接；行含 库/路径/commit 三要素、标题、标签、摘要片段、命中字段标注；frontmatter 豁免文件如实标注无标题）；与 §3.6 GET /api/v1/search 同一查询面同一鉴权判定面（实时成员关系，撤权下一渲染即消失）；结果超 100 行如实标注截断；空 q 表单空态、超长 q 422 同页提示；插值唯一通道 HTML 转义（XSS 诱饵不执行）；未认证 302 /login；GET 免 CSRF | S5-T4 |
+```
+
+**待裁决**：(a) 端点落点节号（§3.6 建议）；(b) 上限 100 行与 q 上界 200 字符是否入契约常量（当前在 `server/src/search/query.ts` 的 `SEARCH_RESULT_LIMIT`/`SEARCH_MAX_Q_CHARS`）；(c) 是否需要分页参数（当前 truncated 如实标注、不承诺分页——容量证明需要时再议）。
+
 ## 实现形态选型记录（供 epic ADR 归档；breakdown 第 5 点）
 
 **选型：进程内异步（审计尾随轮询 + 逐库串行重索引），不引队列服务。**
@@ -90,10 +117,23 @@ CREATE TABLE search_index_state (
   settle 原位置终态」生命周期（id 不变），按 id 单调推进会漏看本轮 pending、settle 后
   永不再扫的行。扫描上界 = min(max(id), min(pending id) − 1)。
 
+### 查找匹配选型（S5-T4，breakdown 第 1 点「SQL LIKE 或等价——规模内不做全文引擎」）
+
+- **选型：SQLite LIKE 子串匹配**（`server/src/search/query.ts`），不引 FTS5/外部全文引擎：
+  当前容量（单实例、库级千行量级派生表）LIKE 全表扫即可满足；`%`/`_`/`\` 字面化
+  （ESCAPE '\'）后语义即「子串包含」，无注入面。ASCII 大小写不敏感 = SQLite 内建语义；
+  CJK 等其他文字精确子串（如实记录，不做音形归一）。
+- tags 匹配两段式：候选行按 JSON 文本 LIKE 粗筛（与 title/summary 同一模式），命中字段
+  在应用层**逐标签**精确复核（跨标签 JSON 边界的子串不算命中），无精确认证的候选行
+  整行丢弃——粗筛只放大候选集，不产生假阳性结果。
+- 升级路径：容量/负载证明需要时迁 FTS5（T5 重建入口同源可灰度重建），授权过滤语义
+  （实时 JOIN 成员关系）不变。
+
 ## 落点汇总
 
 | id | 契约文件 | 落点 | 性质 | 实现状态 |
 |---|---|---|---|---|
 | C1 | storage-model.md | §3.11（建议，非权威面登记）或维持现状（migrations.ts 为 DDL 家） | 派生表 DDL 归属 | 已实现（迁移 0009） |
 | C2 | api.md | §3.5（建议） | 补录已实现端点 | 已实现（search/routes.ts） |
-| — | 架构 §13 / epic ADR | — | 实现形态选型（进程内异步审计尾随） | 已实现（search/indexer.ts） |
+| C3 | api.md | §3.6（建议）+ §13 表行 | 补录已实现查询端点与搜索页 | 已实现（search/routes.ts + search/query.ts + web/search/） |
+| — | 架构 §13 / epic ADR | — | 实现形态选型（进程内异步审计尾随；LIKE 子串不做全文引擎） | 已实现（search/indexer.ts、search/query.ts） |

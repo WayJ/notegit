@@ -188,8 +188,11 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       });
     }
     // S5-T3 最小可观测端点：GET /api/v1/admin/search-index（实例管理员）——延迟
-    // 指标/时间戳/失败告警/实时新鲜度（api.md 未入册——D11 建议稿 docs/s1/）
+    // 指标/时间戳/失败告警/实时新鲜度 + S5-T4 查询端点：GET /api/v1/search?q=
+    // （任意认证员工，成员关系实时过滤——两端点 api.md 均未入册，D11 建议稿
+    // docs/s1/ C2/C3，表行待 D13 由 master 落）
     registerSearchRoutes(app, {
+      db: wired.db,
       authenticateRequest: wired.authenticateRequest,
       ...(searchIndexer !== undefined ? { indexer: searchIndexer } : {}),
     });
