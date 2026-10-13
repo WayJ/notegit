@@ -204,13 +204,20 @@ export function registerUploadRoutes(app: FastifyInstance, opts: UploadRoutesOpt
     const { slug } = req.params as { slug: string };
     const guard = await requireVault(req, reply, slug);
     if (!guard) return reply;
-    const { vault } = guard;
+    const { who, vault } = guard;
     if (opts.dataDir === undefined) {
       return html(reply, uploadStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
     }
     const dirPath = (((req.params as Record<string, string>)['*'] ?? '')).replace(/\/+$/, '');
     if (dirPath !== '' && !treePathOk(dirPath)) return sendPageNotFound(reply); // 畸形=不存在（与 POST 同判）
-    return html(reply, uploadPage({ vault, dirPath }));
+    return html(
+      reply,
+      uploadPage({
+        vault,
+        dirPath,
+        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+      }),
+    );
   };
   app.get('/vaults/:slug/upload', uploadPageHandler);
   app.get('/vaults/:slug/upload/*', uploadPageHandler);

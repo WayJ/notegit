@@ -3,10 +3,15 @@ import type { CommitEntry } from './log.ts';
 import { formatCitation } from './cite.ts';
 
 /**
- * S5-T1 历史族页面模板（D6：S4 web 骨架同规——服务端渲染、无框架；插值唯一
- * 通道 escapeHtml）。安全不变量同 S4-T2 渲染管：输出中的标签/属性全部由本
- * 模板生成，文本（提交主题/作者/路径/diff 行）仅经 escapeHtml 进入输出——
- * diff 视图据此满足「diff 文本转义」（原文 HTML 永不被解释执行）。
+ * S5-T1 历史族页面模板（服务端渲染、无框架；插值唯一通道 escapeHtml）。
+ * 安全不变量同 S4-T2 渲染管：输出中的标签/属性全部由本模板生成，文本（提交
+ * 主题/作者/路径/diff 行）仅经 escapeHtml 进入输出——diff 视图据此满足「diff
+ * 文本转义」（原文 HTML 永不被解释执行）。
+ *
+ * UI-RESTYLE：DESIGN.md 视觉契约落位——diff/引用代码视图走深色代码窗卡
+ * （code-window 形态：surface-dark + 等宽），提交行为卡列表；还原拒绝回显
+ * error 语义色（E-码 + 修正建议）。行类 data-kind 与提交行 data-* 属性为
+ * 一致性断言所依——原样保留。
  */
 
 /** 历史页 URL（逐段编码；空路径 = 库级历史） */
@@ -34,7 +39,7 @@ export function restoreUrl(slug: string, commitOid: string, treePath: string): s
 function breadcrumb(vault: { slug: string; name: string }, treePath: string): string {
   const parts = [
     `<a href="/vaults">知识库</a>`,
-    `<a href="/vaults/${encodeURIComponent(vault.slug)}/browse">${escapeHtml(vault.name)}</a>`,
+    `<a href="${browseHref(vault.slug)}">${escapeHtml(vault.name)}</a>`,
     `<a href="${historyUrl(vault.slug, '')}">提交历史</a>`,
   ];
   let acc = '';
@@ -43,6 +48,10 @@ function breadcrumb(vault: { slug: string; name: string }, treePath: string): st
     parts.push(`<a href="${historyUrl(vault.slug, acc)}">${escapeHtml(seg)}</a>`);
   }
   return parts.join(' <span aria-hidden="true">›</span> ');
+}
+
+function browseHref(slug: string): string {
+  return `/vaults/${encodeURIComponent(slug)}/browse`;
 }
 
 /** DOD-03 主体标注（库级/路径级历史页共用）：作者=可填写元数据，主体=认证员工 */
@@ -56,7 +65,7 @@ const AUTHOR_NOTE =
 export function historyPage(input: {
   vault: { slug: string; name: string };
   /** 当前认证员工（主体视角呈现——与作者元数据区分） */
-  viewer: { username: string };
+  viewer: { username: string; is_instance_admin?: boolean };
   treePath: string;
   commits: readonly CommitEntry[];
   page: number;
@@ -75,7 +84,7 @@ export function historyPage(input: {
     .join('\n');
   const listing =
     commits.length === 0
-      ? '<p>没有提交记录（路径可能从未存在或未在默认分支出现）。</p>'
+      ? '<p class="state-note">没有提交记录（路径可能从未存在或未在默认分支出现）。</p>'
       : `<ul class="commits">\n${rows}\n</ul>`;
   const pager =
     `<nav class="pager" aria-label="分页">` +
@@ -84,13 +93,22 @@ export function historyPage(input: {
     `</nav>`;
   return layout(
     `${vault.name} 提交历史`,
-    `<h1>${escapeHtml(vault.name)} 提交历史${scope}</h1>
-<p>当前登录：${escapeHtml(viewer.username)} · 默认分支实时读 Git · <a href="/vaults/${encodeURIComponent(vault.slug)}/browse${treePath === '' ? '' : '/' + treePath.split('/').map(encodeURIComponent).join('/')}">返回目录</a></p>
-<nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
-${listing}
-${pager}
-${AUTHOR_NOTE}
+    `<div class="page">
+  <div class="page-head">
+  <h1>${escapeHtml(vault.name)} 提交历史${scope}</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
+  <p class="page-meta">当前登录：${escapeHtml(viewer.username)} · 默认分支实时读 Git · <a href="/vaults/${encodeURIComponent(vault.slug)}/browse${treePath === '' ? '' : '/' + treePath.split('/').map(encodeURIComponent).join('/')}">返回目录</a></p>
+  </div>
+  ${listing}
+  ${pager}
+  ${AUTHOR_NOTE}
+</div>
 `,
+    '',
+    {
+      user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true },
+      active: 'vaults',
+    },
   );
 }
 
@@ -98,9 +116,11 @@ ${AUTHOR_NOTE}
 export function historyStatePage(vault: { slug: string; name: string }, message: string): string {
   return layout(
     `${vault.name} 提交历史`,
-    `<h1>${escapeHtml(vault.name)} 提交历史</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, '')}</nav>
-<p>${escapeHtml(message)}</p>
+    `<div class="page">
+  <h1>${escapeHtml(vault.name)} 提交历史</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, '')}</nav>
+  <p class="state-note">${escapeHtml(message)}</p>
+</div>
 `,
   );
 }
@@ -123,7 +143,7 @@ function diffLineKind(line: string): 'add' | 'del' | 'ctx' | 'meta' {
 
 /** 逐文件 diff 页（父提交↔目标）：diff 原文逐行转义呈现（data-kind 标注行类，
  *  行序列与 `git diff --no-color <父> <目标> -- <路径>` 原文一致——一致性断言
- *  所依）；空 diff = 该提交未触及此路径，如实标注。 */
+ *  所依）；空 diff = 该提交未触及此路径，如实标注。深色代码窗卡呈现。 */
 export function diffPage(input: {
   vault: { slug: string; name: string };
   commitOid: string;
@@ -133,7 +153,7 @@ export function diffPage(input: {
   const { vault, commitOid, treePath, diff } = input;
   const body =
     diff === ''
-      ? '<p>该提交未修改此文件（diff 为空）。</p>'
+      ? '<p class="state-note">该提交未修改此文件（diff 为空）。</p>'
       : `<pre class="diff-body">${diff
           .split('\n')
           .filter((l, idx, arr) => !(l === '' && idx === arr.length - 1)) // 去尾空行（git 输出行尾换行）
@@ -141,11 +161,15 @@ export function diffPage(input: {
           .join('')}</pre>`;
   return layout(
     `${treePath} diff — ${vault.name}`,
-    `<h1>diff — ${escapeHtml(treePath)}</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
-<p>提交 ${escapeHtml(commitOid)}（父提交 ↔ 目标）· <a href="${historyUrl(vault.slug, treePath)}">该路径历史</a></p>
-<p>diff 内容按纯文本转义呈现（原文 HTML 不被解释执行——S4-T2 安全管不变量）。</p>
-${body}
+    `<div class="page">
+  <div class="page-head">
+  <h1>diff — ${escapeHtml(treePath)}</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
+  <p class="page-meta">提交 ${escapeHtml(commitOid)}（父提交 ↔ 目标）· <a href="${historyUrl(vault.slug, treePath)}">该路径历史</a></p>
+  <p class="page-meta">diff 内容按纯文本转义呈现（原文 HTML 不被解释执行——S4-T2 安全管不变量）。</p>
+  </div>
+  ${body}
+</div>
 `,
   );
 }
@@ -177,24 +201,28 @@ export function versionPage(input: {
   const name = treePath.includes('/') ? treePath.slice(treePath.lastIndexOf('/') + 1) : treePath;
   const notice =
     body.kind === 'rendered' && body.strippedHtml
-      ? '\n<p>注：原文含 HTML 标签，已按安全子集剥离（预览不解释 HTML；脚本/事件属性不执行）。</p>'
+      ? '\n<p class="notice">注：原文含 HTML 标签，已按安全子集剥离（预览不解释 HTML；脚本/事件属性不执行）。</p>'
       : '';
   const article =
     body.kind === 'rendered'
       ? `<article id="doc">\n${body.html}\n</article>`
       : body.kind === 'image'
-        ? `<p><img src="${escapeHtml(body.imageUrl)}" alt="${escapeHtml(name)}" loading="lazy"></p>\n<p>展示与加载一律经鉴权附件通道（blob 寻址、URL 不可枚举；撤权下一请求即 404）。</p>`
+        ? `<p><img src="${escapeHtml(body.imageUrl)}" alt="${escapeHtml(name)}" loading="lazy"></p>\n<p class="page-meta">展示与加载一律经鉴权附件通道（blob 寻址、URL 不可枚举；撤权下一请求即 404）。</p>`
         : body.kind === 'too-large'
-          ? `<p>文件过大（超过渲染上限 ${body.limitBytes} 字节），未渲染正文。</p>`
-          : '<p>该文件类型不提供在线预览（v1 预览仅渲染 Markdown 正文）。</p>';
+          ? `<p class="state-note">文件过大（超过渲染上限 ${body.limitBytes} 字节），未渲染正文。</p>`
+          : '<p class="state-note">该文件类型不提供在线预览（v1 预览仅渲染 Markdown 正文）。</p>';
   return layout(
     `${name} 历史版本 — ${vault.name}`,
-    `<h1>${escapeHtml(name)}（历史版本）</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
-<p>类型：文件 · 大小：${sizeBytes ?? '?'} 字节 · 历史版本 @ ${escapeHtml(commitOid)}（只读预览——以新提交还原入口见下）${notice}</p>
-<p><a href="${historyUrl(vault.slug, treePath)}">该路径历史</a> · <a href="${diffUrl(vault.slug, commitOid, treePath)}">diff</a> · <a href="${restoreUrl(vault.slug, commitOid, treePath)}">还原到此版本</a></p>
-<p class="cite">复制引用（库 / 路径 @ commit 三要素——与 Agent 报告引用格式一致，经 <a href="/cite">引用解析</a> 可回放本页）：<code class="citation">${escapeHtml(formatCitation(vault.slug, treePath, commitOid))}</code></p>
-${article}
+    `<div class="page">
+  <div class="page-head">
+  <h1>${escapeHtml(name)}（历史版本）</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
+  <p class="page-meta">类型：文件 · 大小：${sizeBytes ?? '?'} 字节 · 历史版本 @ ${escapeHtml(commitOid)}（只读预览——以新提交还原入口见下）${notice}</p>
+  <p class="page-meta"><a href="${historyUrl(vault.slug, treePath)}">该路径历史</a> · <a href="${diffUrl(vault.slug, commitOid, treePath)}">diff</a> · <a href="${restoreUrl(vault.slug, commitOid, treePath)}">还原到此版本</a></p>
+  </div>
+  <p class="cite-line">复制引用（库 / 路径 @ commit 三要素——与 Agent 报告引用格式一致，经 <a href="/cite">引用解析</a> 可回放本页）：<code class="citation">${escapeHtml(formatCitation(vault.slug, treePath, commitOid))}</code></p>
+  ${article}
+</div>
 `,
   );
 }
@@ -221,17 +249,23 @@ export function restorePage(input: {
   const noticeHtml =
     notice === undefined
       ? ''
-      : `\n<p class="notice">${escapeHtml(notice.message)}${notice.code !== undefined ? `（code: ${escapeHtml(notice.code)}）` : ''}${notice.hint !== undefined ? `<br>建议：${escapeHtml(notice.hint)}` : ''}</p>`;
+      : `\n<p class="op-error" role="alert"><strong>${escapeHtml(notice.message)}${notice.code !== undefined ? `（code: ${escapeHtml(notice.code)}）` : ''}</strong>${notice.line !== undefined ? `（第 ${notice.line} 行）` : ''}${notice.hint !== undefined ? `<br><small>建议：${escapeHtml(notice.hint)}</small>` : ''}</p>`;
   return layout(
     `还原 ${treePath} — ${vault.name}`,
-    `<h1>还原到 ${escapeHtml(treePath)} 的历史版本</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
-<p>目标版本：${escapeHtml(treePath)} @ ${escapeHtml(commitOid)} · 类型：文件 · 大小：${sizeBytes ?? '?'} 字节</p>
-<p>还原将以<b>新提交</b>把该路径恢复到此版本内容（提交以当前最新内容为基线；<b>不删除历史</b>——旧版本仍可在历史与版本预览中查看）。</p>${noticeHtml}
-<p><a href="${versionUrl(vault.slug, commitOid, treePath)}">先预览该版本</a> · <a href="${historyUrl(vault.slug, treePath)}">返回该路径历史</a></p>
-<form method="post" action="${restoreUrl(vault.slug, commitOid, treePath)}">
-  <button type="submit">还原到此版本</button>
-</form>
+    `<div class="page page-narrow">
+  <div class="page-head">
+  <h1>还原到 ${escapeHtml(treePath)} 的历史版本</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
+  <p class="page-meta">目标版本：${escapeHtml(treePath)} @ ${escapeHtml(commitOid)} · 类型：文件 · 大小：${sizeBytes ?? '?'} 字节</p>
+  <p class="page-meta">还原将以<b>新提交</b>把该路径恢复到此版本内容（提交以当前最新内容为基线；<b>不删除历史</b>——旧版本仍可在历史与版本预览中查看）。</p>
+  </div>${noticeHtml}
+  <p class="page-meta"><a href="${versionUrl(vault.slug, commitOid, treePath)}">先预览该版本</a> · <a href="${historyUrl(vault.slug, treePath)}">返回该路径历史</a></p>
+  <form method="post" action="${restoreUrl(vault.slug, commitOid, treePath)}" class="form-card">
+  <div class="form-actions">
+  <button type="submit" class="btn-primary">还原到此版本</button>
+  </div>
+  </form>
+</div>
 `,
   );
 }
@@ -245,14 +279,23 @@ const CITE_FORMAT_HINT = '库 / 路径 @ commit（例：v-handbook / docs/gettin
 export function citeEntryPage(): string {
   return layout(
     '引用解析',
-    `<h1>引用解析</h1>
-<p>粘贴文档引用（三要素），解析到对应历史版本页：</p>
-<form method="get" action="/cite">
-  <input type="text" name="c" size="64" placeholder="v-handbook / docs/getting-started.md @ 4c55b7a0d1e2f3a4">
-  <button type="submit">解析</button>
-</form>
-<p>期望格式：${escapeHtml(CITE_FORMAT_HINT)}——与 Agent 报告引用格式一致（回答引用可对应到 Web 历史）。</p>
+    `<div class="page page-narrow">
+  <h1>引用解析</h1>
+  <p>粘贴文档引用（三要素），解析到对应历史版本页：</p>
+  <div class="form-card">
+  <form method="get" action="/cite">
+  <label for="c">引用（库 / 路径 @ commit）</label>
+  <input type="text" name="c" id="c" size="64" placeholder="v-handbook / docs/getting-started.md @ 4c55b7a0d1e2f3a4">
+  <div class="form-actions">
+  <button type="submit" class="btn-primary">解析</button>
+  </div>
+  </form>
+  </div>
+  <p class="page-meta">期望格式：${escapeHtml(CITE_FORMAT_HINT)}——与 Agent 报告引用格式一致（回答引用可对应到 Web 历史）。</p>
+</div>
 `,
+    '',
+    { active: 'cite' },
   );
 }
 
@@ -260,11 +303,15 @@ export function citeEntryPage(): string {
 export function citeFormatErrorPage(): string {
   return layout(
     '引用格式无法解析',
-    `<h1>引用格式无法解析</h1>
-<p>收到的引用不是「库 / 路径 @ commit」三要素形态，无法解析。</p>
-<p>期望格式：${escapeHtml(CITE_FORMAT_HINT)}。</p>
-<p><a href="/cite">返回引用解析入口</a></p>
+    `<div class="page page-narrow">
+  <h1>引用格式无法解析</h1>
+  <p class="state-note">收到的引用不是「库 / 路径 @ commit」三要素形态，无法解析。</p>
+  <p class="page-meta">期望格式：${escapeHtml(CITE_FORMAT_HINT)}。</p>
+  <p><a href="/cite">返回引用解析入口</a></p>
+</div>
 `,
+    '',
+    { active: 'cite' },
   );
 }
 
@@ -274,9 +321,13 @@ export function citeFormatErrorPage(): string {
 export function citeUnresolvablePage(): string {
   return layout(
     '引用无法解析',
-    `<h1>引用无法解析</h1>
-<p>引用未能对应到任何历史版本页（提交未知、非提交对象，或该路径在该提交处不存在——按反存在性语义不区分原因）。</p>
-<p>可核对引用三要素后经 <a href="/cite">引用解析入口</a> 重试，或在对应库的提交历史页查证。</p>
+    `<div class="page page-narrow">
+  <h1>引用无法解析</h1>
+  <p class="state-note">引用未能对应到任何历史版本页（提交未知、非提交对象，或该路径在该提交处不存在——按反存在性语义不区分原因）。</p>
+  <p class="page-meta">可核对引用三要素后经 <a href="/cite">引用解析入口</a> 重试，或在对应库的提交历史页查证。</p>
+</div>
 `,
+    '',
+    { active: 'cite' },
   );
 }

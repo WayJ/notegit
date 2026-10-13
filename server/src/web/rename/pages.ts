@@ -53,29 +53,39 @@ export interface RenamePageInput {
   /** 当前输入值（GET 预填源路径；失败回显用户提交值） */
   readonly to: string;
   readonly notice?: OpNotice;
+  /** UI-RESTYLE：顶部导航登录态（呈现层透传） */
+  readonly viewer?: { username: string; is_instance_admin: boolean };
 }
 
 /** 重命名表单页（GET 无写操作；POST 走发布组件——写权限在提交时判定） */
 export function renamePage(input: RenamePageInput): string {
-  const { vault, from, to, notice } = input;
+  const { vault, from, to, notice, viewer } = input;
   const action = `/vaults/${encodeURIComponent(vault.slug)}/rename/${encPath(from)}`;
   const cancelHref = from.includes('/')
     ? `/vaults/${encodeURIComponent(vault.slug)}/browse/${encPath(from.slice(0, from.lastIndexOf('/')))}`
     : `/vaults/${encodeURIComponent(vault.slug)}/browse`;
   return layout(
     `重命名 ${from}`,
-    `<h1>重命名</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, from)}</nav>
-${noticeHtml(notice)}
-<form method="post" action="${action}">
-<p>原路径：<code>${escapeHtml(from)}</code></p>
-<label>新路径（库内绝对路径，可含子目录；文件名须含扩展名）<br>
-<input type="text" name="to" value="${escapeHtml(to)}" required maxlength="1024"></label>
-<p><small>规则：改为 <code>.md</code> 须有合法 frontmatter（title 必填）；改名为 <code>README.md</code> 豁免 frontmatter（大小写不敏感）。</small></p>
-<button type="submit">保存重命名</button>
-<a href="${cancelHref}">取消</a>
-</form>
+    `<div class="page page-narrow">
+  <div class="page-head">
+  <h1>重命名</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, from)}</nav>
+  </div>
+  ${noticeHtml(notice)}
+  <form method="post" action="${action}" class="form-card">
+  <p class="page-meta">原路径：<code>${escapeHtml(from)}</code></p>
+  <label>新路径（库内绝对路径，可含子目录；文件名须含扩展名）<br>
+  <input type="text" name="to" value="${escapeHtml(to)}" required maxlength="1024"></label>
+  <p><small>规则：改为 <code>.md</code> 须有合法 frontmatter（title 必填）；改名为 <code>README.md</code> 豁免 frontmatter（大小写不敏感）。</small></p>
+  <div class="form-actions">
+  <button type="submit" class="btn-primary">保存重命名</button>
+  <a href="${cancelHref}">取消</a>
+  </div>
+  </form>
+</div>
 `,
+    '',
+    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -83,27 +93,37 @@ export interface DeleteConfirmInput {
   readonly vault: { slug: string; name: string };
   readonly path: string;
   readonly notice?: OpNotice;
+  /** UI-RESTYLE：顶部导航登录态（呈现层透传） */
+  readonly viewer?: { username: string; is_instance_admin: boolean };
 }
 
 /** 删除确认页（GET 无写操作；历史保留如实标注——S5 历史页可查旧版本） */
 export function deleteConfirmPage(input: DeleteConfirmInput): string {
-  const { vault, path, notice } = input;
+  const { vault, path, notice, viewer } = input;
   const action = `/vaults/${encodeURIComponent(vault.slug)}/delete/${encPath(path)}`;
   const cancelHref = path.includes('/')
     ? `/vaults/${encodeURIComponent(vault.slug)}/browse/${encPath(path.slice(0, path.lastIndexOf('/')))}`
     : `/vaults/${encodeURIComponent(vault.slug)}/browse`;
   return layout(
     `删除 ${path}`,
-    `<h1>删除确认</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, path)}</nav>
-${noticeHtml(notice)}
-<p>将删除：<code>${escapeHtml(path)}</code></p>
-<p><small>说明：删除不做元数据校验；Git 历史保留——旧提交中的历史版本仍可查（后续历史/还原功能基于此）。</small></p>
-<form method="post" action="${action}">
-<button type="submit">确认删除</button>
-<a href="${cancelHref}">取消</a>
-</form>
+    `<div class="page page-narrow">
+  <div class="page-head">
+  <h1>删除确认</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, path)}</nav>
+  </div>
+  ${noticeHtml(notice)}
+  <p class="page-meta">将删除：<code>${escapeHtml(path)}</code></p>
+  <p class="warn-block"><small>说明：删除不做元数据校验；Git 历史保留——旧提交中的历史版本仍可查（后续历史/还原功能基于此）。</small></p>
+  <form method="post" action="${action}" class="form-card">
+  <div class="form-actions">
+  <button type="submit" class="btn-primary">确认删除</button>
+  <a href="${cancelHref}">取消</a>
+  </div>
+  </form>
+</div>
 `,
+    '',
+    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -111,9 +131,11 @@ ${noticeHtml(notice)}
 export function opStatePage(vault: { slug: string; name: string }, message: string): string {
   return layout(
     `${vault.name} 操作`,
-    `<h1>${escapeHtml(vault.name)}</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, '')}</nav>
-<p>${escapeHtml(message)}</p>
+    `<div class="page">
+  <h1>${escapeHtml(vault.name)}</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, '')}</nav>
+  <p class="state-note">${escapeHtml(message)}</p>
+</div>
 `,
   );
 }

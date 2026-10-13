@@ -186,6 +186,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     page: 'rename' | 'delete',
     path: string,
     to: string,
+    viewer?: { username: string; is_instance_admin: boolean },
   ): FastifyReply {
     const stageCode = codeOfStage(publish.stage, publish.reason);
     const notice: OpNotice =
@@ -199,8 +200,8 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     const status = statusOfStage(publish.stage, publish.reason);
     return reply.code(status).send(
       page === 'rename'
-        ? renamePage({ vault, from: path, to, notice })
-        : deleteConfirmPage({ vault, path, notice }),
+        ? renamePage({ vault, from: path, to, notice, ...(viewer !== undefined ? { viewer } : {}) })
+        : deleteConfirmPage({ vault, path, notice, ...(viewer !== undefined ? { viewer } : {}) }),
     );
   }
 
@@ -209,7 +210,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     const { slug } = req.params as { slug: string };
     const guard = await requireVault(req, reply, slug);
     if (!guard) return reply;
-    const { vault } = guard;
+    const { who, vault } = guard;
     if (opts.dataDir === undefined) {
       return html(reply, opStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
     }
@@ -217,7 +218,15 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     if (entryPath === '' || !treePathOk(entryPath)) return sendPageNotFound(reply);
     const entry = await requireSourceEntry(reply, vault, entryPath);
     if (!entry) return reply;
-    return html(reply, renamePage({ vault, from: entryPath, to: entryPath }));
+    return html(
+      reply,
+      renamePage({
+        vault,
+        from: entryPath,
+        to: entryPath,
+        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+      }),
+    );
   });
 
   app.post('/vaults/:slug/rename/*', async (req, reply) => {
@@ -231,8 +240,9 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     const entryPath = ((req.params as Record<string, string>)['*'] ?? '').replace(/\/+$/, '');
     const form = (req.body ?? {}) as Record<string, string>;
     const to = String(form['to'] ?? '').trim();
+    const viewer = { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin };
     const fail = (status: number, notice: OpNotice) =>
-      reply.code(status).send(renamePage({ vault, from: entryPath, to, notice }));
+      reply.code(status).send(renamePage({ vault, from: entryPath, to, notice, viewer }));
 
     if (entryPath === '' || !treePathOk(entryPath) || to === '' || !treePathOk(to)) {
       return sendPageNotFound(reply); // 畸形路径=不存在（与 upload 同判，D-IC-06）
@@ -279,7 +289,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     });
 
     if (publish.kind === 'rejected') {
-      return renderRejected(reply, vault, publish, 'rename', entryPath, to);
+      return renderRejected(reply, vault, publish, 'rename', entryPath, to, viewer);
     }
     return reply.redirect(viewUrl(vault.slug, to), 302);
   });
@@ -289,7 +299,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     const { slug } = req.params as { slug: string };
     const guard = await requireVault(req, reply, slug);
     if (!guard) return reply;
-    const { vault } = guard;
+    const { who, vault } = guard;
     if (opts.dataDir === undefined) {
       return html(reply, opStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
     }
@@ -297,7 +307,14 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     if (entryPath === '' || !treePathOk(entryPath)) return sendPageNotFound(reply);
     const entry = await requireSourceEntry(reply, vault, entryPath);
     if (!entry) return reply;
-    return html(reply, deleteConfirmPage({ vault, path: entryPath }));
+    return html(
+      reply,
+      deleteConfirmPage({
+        vault,
+        path: entryPath,
+        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+      }),
+    );
   });
 
   app.post('/vaults/:slug/delete/*', async (req, reply) => {
@@ -316,6 +333,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
 
     const repoPath = vaultRepoPath(opts.dataDir, vault.id);
     const baseCommit = await headCommit(repoPath, vault.defaultBranch);
+    const viewer = { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin };
     const publish = await publishWebSubmit({
       db: opts.db,
       dataDir: opts.dataDir,
@@ -332,7 +350,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     });
 
     if (publish.kind === 'rejected') {
-      return renderRejected(reply, vault, publish, 'delete', entryPath, entryPath);
+      return renderRejected(reply, vault, publish, 'delete', entryPath, entryPath, viewer);
     }
     return reply.redirect(browseUrl(vault.slug, parentOf(entryPath)), 302);
   });

@@ -160,7 +160,10 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
       reply,
       historyPage({
         vault,
-        viewer: { username: who.subject.username },
+        viewer: {
+          username: who.subject.username,
+          is_instance_admin: who.subject.is_instance_admin,
+        },
         treePath,
         commits: read.commits,
         page,

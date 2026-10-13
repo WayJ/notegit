@@ -37,6 +37,8 @@ export interface UploadPageInput {
   readonly vault: { slug: string; name: string };
   /** 上传目标目录（库内相对路径；''=库根）。目录可不存在——路径判定在 POST 走发布组件 */
   readonly dirPath: string;
+  /** UI-RESTYLE：顶部导航登录态（呈现层透传） */
+  readonly viewer?: { username: string; is_instance_admin: boolean };
 }
 
 export function uploadUrl(slug: string, dirPath: string): string {
@@ -45,7 +47,7 @@ export function uploadUrl(slug: string, dirPath: string): string {
 }
 
 export function uploadPage(input: UploadPageInput): string {
-  const { vault, dirPath } = input;
+  const { vault, dirPath, viewer } = input;
   const apiBase = `/vaults/${encodeURIComponent(vault.slug)}/upload`;
   const script = `
 const DIR = ${JSON.stringify(dirPath)};
@@ -100,21 +102,28 @@ document.getElementById('upload-form').addEventListener('submit', async (ev) => 
 `;
   return layout(
     `上传 — ${vault.name}${dirPath === '' ? '' : ` / ${dirPath}`}`,
-    `<h1>上传</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, dirPath)} <span aria-hidden="true">›</span> 上传</nav>
-<p>目标目录：<code>${dirPath === '' ? '（库根）' : escapeHtml(dirPath)}</code> · 传输契约：<code>application/octet-stream</code>（原始字节，fetch 直发）</p>
-<form id="upload-form">
-<label>文件<br><input type="file" id="file" required></label><br>
-<label>上传路径（相对本页目录，可含子目录；须含扩展名）<br>
-<input type="text" id="relpath" placeholder="文件名（选择文件后自动预填）" required maxlength="1024"></label>
-<p><small>规则：附件受扩展名清单与容量限制（E-LIMIT-002/003）；<code>.md</code> 上传须含合法 frontmatter（<code>README.md</code> 豁免——大小写不敏感）；写入需 editor 及以上角色。</small></p>
-<p id="upload-msg" role="alert"></p>
-<div id="upload-result"></div>
-<button type="submit">上传</button>
-<a href="/vaults/${encodeURIComponent(vault.slug)}/browse${dirPath === '' ? '' : '/' + encPath(dirPath)}">取消</a>
-</form>
+    `<div class="page page-narrow">
+  <div class="page-head">
+  <h1>上传</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, dirPath)} <span aria-hidden="true">›</span> 上传</nav>
+  <p class="page-meta">目标目录：<code>${dirPath === '' ? '（库根）' : escapeHtml(dirPath)}</code> · 传输契约：<code>application/octet-stream</code>（原始字节，fetch 直发）</p>
+  </div>
+  <form id="upload-form" class="form-card">
+  <label>文件<br><input type="file" id="file" required></label>
+  <label>上传路径（相对本页目录，可含子目录；须含扩展名）<br>
+  <input type="text" id="relpath" placeholder="文件名（选择文件后自动预填）" required maxlength="1024"></label>
+  <p><small>规则：附件受扩展名清单与容量限制（E-LIMIT-002/003）；<code>.md</code> 上传须含合法 frontmatter（<code>README.md</code> 豁免——大小写不敏感）；写入需 editor 及以上角色。</small></p>
+  <p id="upload-msg" role="alert"></p>
+  <div id="upload-result"></div>
+  <div class="form-actions">
+  <button type="submit" class="btn-primary">上传</button>
+  <a href="/vaults/${encodeURIComponent(vault.slug)}/browse${dirPath === '' ? '' : '/' + encPath(dirPath)}">取消</a>
+  </div>
+  </form>
+</div>
 `,
     script,
+    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -122,9 +131,11 @@ document.getElementById('upload-form').addEventListener('submit', async (ev) => 
 export function uploadStatePage(vault: { slug: string; name: string }, note: string): string {
   return layout(
     `上传 — ${vault.name}`,
-    `<h1>上传</h1>
-<nav aria-label="面包屑"><a href="/vaults">知识库</a> <span aria-hidden="true">›</span> <a href="/vaults/${encodeURIComponent(vault.slug)}/browse">${escapeHtml(vault.name)}</a></nav>
-<p>${escapeHtml(note)}</p>
+    `<div class="page">
+  <h1>上传</h1>
+  <nav aria-label="面包屑"><a href="/vaults">知识库</a> <span aria-hidden="true">›</span> <a href="/vaults/${encodeURIComponent(vault.slug)}/browse">${escapeHtml(vault.name)}</a></nav>
+  <p class="state-note">${escapeHtml(note)}</p>
+</div>
 `,
   );
 }

@@ -11,7 +11,16 @@ import type { ParsedForForm } from './form.ts';
  * =§8.2 submissions POST（S3-T7 发布组件，HTTP 接线 S4-T7；发布成功后提交者
  * 本人草稿由服务端标已提交）。422 报告的字段定位渲染为服务端 errors.ts 映射
  * 规则的页内镜像（显示胶水；权威映射在服务端，由发布组件报告驱动）。
+ *
+ * UI-RESTYLE：DESIGN.md 视觉契约落位——表单卡（form-card）、提交=珊瑚主按钮、
+ * 保存草稿=米色描边按钮、行内错误位 error 语义色；viewer 透传顶部导航登录态。
  */
+
+/** 顶部导航登录态（呈现层透传） */
+export interface PageViewer {
+  readonly username: string;
+  readonly is_instance_admin: boolean;
+}
 
 /** 面包屑（与 view/pages.ts 同构——模块各自持有，不改共享文件，D5） */
 function breadcrumb(vault: { slug: string; name: string }, entryPath: string): string {
@@ -60,6 +69,8 @@ export interface EditPageInput {
   readonly prefill: ParsedForForm;
   /** S4-T7 草稿预填信息（本人现行草稿回填时呈现；缺省 = 无草稿） */
   readonly draft?: { baseCommit: string | null; updatedAt: string; stale: boolean };
+  /** UI-RESTYLE：顶部导航登录态（可选——测试直调形态缺省） */
+  readonly viewer?: PageViewer;
 }
 
 /** 回填标注（T6 移交：呈现草稿 base_commit 旧值；stale=分支已前进如实提示） */
@@ -86,7 +97,7 @@ function js(v: string): string {
 }
 
 export function editPage(input: EditPageInput): string {
-  const { vault, entryPath, mode, baseCommit, prefill, draft } = input;
+  const { vault, entryPath, mode, baseCommit, prefill, draft, viewer } = input;
   const name = nameOf(entryPath);
   const isNew = mode === 'new';
   const statusEnum = ['active', 'draft', 'deprecated'];
@@ -206,11 +217,14 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
 
   return layout(
     `${isNew ? '新建' : '编辑'}：${name} — ${vault.name}`,
-    `<h1>${isNew ? '新建' : '编辑'}：${escapeHtml(name)}</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
-<p>类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath)}${isNew ? (draft ? ' · <strong>新建</strong>' : ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）') : ''}</p>
-${draft ? draftNote(draft) : ''}
-<form id="edit-form">
+    `<div class="page page-narrow">
+  <div class="page-head">
+  <h1>${isNew ? '新建' : '编辑'}：${escapeHtml(name)}</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
+  <p class="page-meta">类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath)}${isNew ? (draft ? ' · <strong>新建</strong>' : ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）') : ''}</p>
+  </div>
+  ${draft ? draftNote(draft) : ''}
+  <form id="edit-form" class="form-card">
 ${fieldRow('标题 <strong>（必填）</strong>', `<input name="title" required maxlength="200" value="${attr(prefill.fields.title)}">`, 'title')}
 ${fieldRow('负责人（可选，知识负责人）', `<input name="owner" maxlength="100" value="${attr(prefill.fields.owner)}">`, 'owner')}
 ${fieldRow('摘要（可选，简短摘要）', `<textarea name="description" rows="2" maxlength="500">${attr(prefill.fields.description)}</textarea>`, 'description')}
@@ -218,22 +232,26 @@ ${fieldRow('标签（可选，逗号分隔）', `<input name="tags" value="${att
 ${fieldRow('状态（可选，下拉封闭集）', `<select name="status">${statusOptions.join('')}</select>`, 'status')}
 ${fieldRow('来源（可选，原始资料或依据）', `<input name="source" maxlength="500" value="${attr(prefill.fields.source)}">`, 'source')}
 ${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</code>；允许标量/列表/映射）', `<textarea name="extra" rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
-<label>正文（Markdown，多行纯文本）<br><textarea name="body" rows="18">${attr(prefill.body)}</textarea></label>
-<label>提交说明（可选）<br><input name="message" placeholder="缺省：Web 编辑：${attr(entryPath)}"></label>
-<p id="form-warn" class="form-warn"></p>
-<p id="form-msg" role="alert"></p>
-<button type="button" id="save-draft">保存草稿</button>
-<button type="submit">提交</button>
-</form>
-<p><small>保存=草稿（按作者私有、不产生 Git 版本，可再保存覆盖）；提交=正式发布（走统一校验与发布组件）——提交成功后草稿标记为已提交。</small></p>
+  <label>正文（Markdown，多行纯文本）<br><textarea name="body" rows="18">${attr(prefill.body)}</textarea></label>
+  <label>提交说明（可选）<br><input name="message" placeholder="缺省：Web 编辑：${attr(entryPath)}"></label>
+  <p id="form-warn" class="form-warn"></p>
+  <p id="form-msg" role="alert"></p>
+  <div class="form-actions">
+  <button type="button" id="save-draft">保存草稿</button>
+  <button type="submit">提交</button>
+  </div>
+  </form>
+  <p class="form-foot"><small>保存=草稿（按作者私有、不产生 Git 版本，可再保存覆盖）；提交=正式发布（走统一校验与发布组件）——提交成功后草稿标记为已提交。</small></p>
+</div>
 `,
     script,
+    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
 /** README 豁免页（架构 §5.2：导航文档豁免 frontmatter）——仅正文编辑 */
 export function readmeEditPage(input: Omit<EditPageInput, 'prefill'> & { body: string }): string {
-  const { vault, entryPath, mode, baseCommit, body, draft } = input;
+  const { vault, entryPath, mode, baseCommit, body, draft, viewer } = input;
   const name = nameOf(entryPath);
   const apiBase = `/api/v1/vaults/${encodeURIComponent(vault.slug)}`;
   const script = `
@@ -281,18 +299,25 @@ document.getElementById('readme-form').addEventListener('submit', async (ev) => 
 `;
   return layout(
     `编辑：${name} — ${vault.name}`,
-    `<h1>编辑：${escapeHtml(name)}</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
-<p>类型：README 导航文档 · <strong>frontmatter 豁免</strong>（架构 §5.2——不套用六字段表单，正文直接编辑） · base commit：<code>${baseCommit === null ? '（空库）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath)}${mode === 'new' ? ' · 新建' : ''}</p>
-${draft ? draftNote(draft) : ''}
-<form id="readme-form">
-<label>正文（Markdown，多行纯文本）<br><textarea id="readme-body" name="body" rows="18">${escapeHtml(body)}</textarea></label>
-<p id="form-msg" role="alert"></p>
-<button type="button" id="save-draft">保存草稿</button>
-<button type="submit">提交</button>
-</form>
+    `<div class="page page-narrow">
+  <div class="page-head">
+  <h1>编辑：${escapeHtml(name)}</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
+  <p class="page-meta">类型：README 导航文档 · <strong>frontmatter 豁免</strong>（架构 §5.2——不套用六字段表单，正文直接编辑） · base commit：<code>${baseCommit === null ? '（空库）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath)}${mode === 'new' ? ' · 新建' : ''}</p>
+  </div>
+  ${draft ? draftNote(draft) : ''}
+  <form id="readme-form" class="form-card">
+  <label>正文（Markdown，多行纯文本）<br><textarea id="readme-body" name="body" rows="18">${escapeHtml(body)}</textarea></label>
+  <p id="form-msg" role="alert"></p>
+  <div class="form-actions">
+  <button type="button" id="save-draft">保存草稿</button>
+  <button type="submit">提交</button>
+  </div>
+  </form>
+</div>
 `,
     script,
+    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -300,9 +325,11 @@ ${draft ? draftNote(draft) : ''}
 export function editStatePage(vault: { slug: string; name: string }, note: string): string {
   return layout(
     `编辑 — ${vault.name}`,
-    `<h1>编辑</h1>
-<nav aria-label="面包屑"><a href="/vaults">知识库</a> <span aria-hidden="true">›</span> <a href="/vaults/${encodeURIComponent(vault.slug)}/browse">${escapeHtml(vault.name)}</a></nav>
-<p>${escapeHtml(note)}</p>
+    `<div class="page">
+  <h1>编辑</h1>
+  <nav aria-label="面包屑"><a href="/vaults">知识库</a> <span aria-hidden="true">›</span> <a href="/vaults/${encodeURIComponent(vault.slug)}/browse">${escapeHtml(vault.name)}</a></nav>
+  <p class="state-note">${escapeHtml(note)}</p>
+</div>
 `,
   );
 }

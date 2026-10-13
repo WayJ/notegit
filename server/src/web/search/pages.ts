@@ -3,15 +3,19 @@ import { browseUrl, viewUrl } from '../browse/pages.ts';
 import type { SearchHit } from '../../search/query.ts';
 
 /**
- * S5-T4 搜索页模板（D5/D6 骨架裁决：服务端渲染、无框架；插值唯一通道
- * escapeHtml——与 S2-T8/S4 各 pages.ts 同规）。结果行带 data-vault/data-path/
- * data-commit/data-matched 属性（断言与一致性对账所依）；q 回显一律转义。
+ * S5-T4 搜索页模板（服务端渲染、无框架；插值唯一通道 escapeHtml——与 S2-T8/
+ * S4 各 pages.ts 同规）。结果行带 data-vault/data-path/data-commit/data-matched
+ * 属性（断言与一致性对账所依）；q 回显一律转义。
+ *
+ * UI-RESTYLE：DESIGN.md 视觉契约落位——表单行（输入 + 珊瑚主按钮）、结果表
+ * 包裹层（<768px 卡内横滚不溢出）、提示块语义色。结果行 data-* 属性序列为
+ * 断言所依——原样保留。
  */
 
 const MATCH_LABELS: Readonly<Record<string, string>> = { title: '标题', tags: '标签', summary: '摘要' };
 
 export interface SearchPageInput {
-  readonly viewer: { username: string };
+  readonly viewer: { username: string; is_instance_admin?: boolean };
   /** 查询关键词（缺省/null=空态表单页）；页内回显须转义 */
   readonly q: string | null;
   /** 查询结果（q 非空时给定） */
@@ -25,7 +29,7 @@ export function searchPage(input: SearchPageInput): string {
   const form = `<form method="get" action="/search" class="search-form">
   <label for="q">关键词（标题 / 标签 / 摘要）</label>
   <input type="search" id="q" name="q" value="${q === null ? '' : escapeHtml(q)}" maxlength="200" required>
-  <button type="submit">查找</button>
+  <button type="submit" class="btn-primary">查找</button>
 </form>`;
 
   let resultHtml = '';
@@ -46,25 +50,36 @@ export function searchPage(input: SearchPageInput): string {
       .join('\n');
     const listing =
       hits.length === 0
-        ? '<p>无匹配结果（仅搜索你有权访问的库）。</p>'
-        : `<table>
+        ? '<p class="state-note">无匹配结果（仅搜索你有权访问的库）。</p>'
+        : `<div class="table-wrap">
+<table>
   <thead><tr><th>库</th><th>路径</th><th>标题</th><th>标签</th><th>摘要片段</th><th>命中字段</th></tr></thead>
   <tbody>
 ${rows}
   </tbody>
 </table>
-${truncated ? '<p>结果超过 100 条，仅显示前 100 条（请用更精确的关键词收窄）。</p>' : ''}`;
+</div>
+${truncated ? '<p class="notice">结果超过 100 条，仅显示前 100 条（请用更精确的关键词收窄）。</p>' : ''}`;
     resultHtml = `<h2>「${escapeHtml(q)}」的查找结果</h2>
 ${listing}`;
   }
 
   return layout(
     '查找',
-    `<h1>查找</h1>
-<p>当前登录：${escapeHtml(input.viewer.username)} · <a href="/">返回首页</a> · <a href="/vaults">知识库</a></p>
-${input.notice === undefined ? '' : `<p class="notice">${escapeHtml(input.notice)}</p>`}
-${form}
-${resultHtml}
+    `<div class="page">
+  <div class="page-head">
+  <h1>查找</h1>
+  <p class="page-meta">当前登录：${escapeHtml(input.viewer.username)} · <a href="/">返回首页</a> · <a href="/vaults">知识库</a></p>
+  </div>
+  ${input.notice === undefined ? '' : `<p class="warn-block">${escapeHtml(input.notice)}</p>`}
+  ${form}
+  ${resultHtml}
+</div>
 `,
+    '',
+    {
+      user: { username: input.viewer.username, isAdmin: input.viewer.is_instance_admin === true },
+      active: 'search',
+    },
   );
 }

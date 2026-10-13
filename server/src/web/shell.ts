@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthSuccess } from '../auth/lifecycle.ts';
-import { indexPage, loginPage, adminPage, credentialsPage } from './pages.ts';
+import { indexPage, loginPage, adminPage, credentialsPage, layout } from './pages.ts';
 import { html } from './page-kit.ts';
 
 /**
@@ -19,7 +19,9 @@ import { html } from './page-kit.ts';
  * 本身（页面无写操作；未初始化时登录不可用即自然引导至 bootstrap 流程）。
  *
  * S4-T1 起自 routes.ts 迁入本文件（routes.ts 改为纯组装点——D5 骨架裁决，行为
- * 不变，既有 web-pages/web-e2e 测试为守卫）。
+ * 不变，既有 web-pages/web-e2e 测试为守卫）。UI-RESTYLE：admin/credentials 页
+ * 增传 viewer（顶部导航登录态/管理项落位——呈现层，判定不变）；403 兜底页套
+ * layout 壳（DESIGN.md 视觉契约）。
  */
 
 export interface ShellRoutesOptions {
@@ -51,17 +53,34 @@ export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptio
     const outcome = await opts.requirePageUser(req, reply);
     if (!outcome) return reply;
     if (!outcome.subject.is_instance_admin) {
-      return reply
-        .code(403)
-        .type('text/html; charset=utf-8')
-        .send('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><body><h1>403</h1><p>需要实例管理员身份。<a href="/">返回</a></p></body></html>');
+      return html(
+        reply
+          .code(403),
+        layout(
+          '403',
+          `<div class="center-card-wrap">
+  <div class="center-card">
+    <h1>403</h1>
+    <p>需要实例管理员身份。</p>
+    <p><a href="/">返回</a></p>
+  </div>
+</div>
+`,
+        ),
+      );
     }
-    return html(reply, adminPage());
+    return html(
+      reply,
+      adminPage({ username: outcome.subject.username, is_instance_admin: outcome.subject.is_instance_admin }),
+    );
   });
 
   app.get('/credentials', async (req, reply) => {
     const outcome = await opts.requirePageUser(req, reply);
     if (!outcome) return reply;
-    return html(reply, credentialsPage());
+    return html(
+      reply,
+      credentialsPage({ username: outcome.subject.username, is_instance_admin: outcome.subject.is_instance_admin }),
+    );
   });
 }
