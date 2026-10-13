@@ -32,9 +32,18 @@ export interface MaintenanceGate {
   disable(): boolean;
 }
 
+/**
+ * 恢复流程的启动初态（backup §7 步骤 1「部署容器（保持维护模式启动）」，S8-T5）：
+ * `NOTEGIT_MAINTENANCE_ON_START=1` → 闸门以开启态创建——全新环境恢复在装载产物后、
+ * §8 清单全绿前不得接收业务写。env 只设**初态**：生命周期端点语义不变（POST/DELETE
+ * 仍可切换；POST 对已开闸门为幂等无迁移、不记审计行）。缺省不设/非 '1' 与 S2-T7
+ * 行为完全一致（普通部署不触发）。
+ */
+export const MAINTENANCE_ON_START_ENV = 'NOTEGIT_MAINTENANCE_ON_START';
+
 /** 进程内同步标志（每应用实例一个；生产单实例单进程） */
 export function createMaintenanceGate(): MaintenanceGate {
-  let enabled = false;
+  let enabled = process.env[MAINTENANCE_ON_START_ENV] === '1';
   return {
     isEnabled: () => enabled,
     enable: () => {

@@ -5,10 +5,11 @@ import { DRAIN_TIMEOUT_DEFAULT_MS } from '../maintenance/drain.ts';
 import { runBackup, httpMaintenanceControl } from './run.ts';
 import { DEFAULT_FSCK_SAMPLE_SIZE } from './snapshot.ts';
 import { verifyBackupSet } from './verify.ts';
+import { restoreOffline, restoreFinalize } from './restore.ts';
 
 /**
- * 备份 CLI 入口（S8-T4；备份触发 = 脚本模式——运行形态与理由见
- * docs/s1/backup-face-amendments.md B1）。
+ * 备份/恢复 CLI 入口（S8-T4 备份；S8-T5 恢复。备份触发 = 脚本模式——运行形态与
+ * 理由见 docs/s1/backup-face-amendments.md B1；恢复运行手册见 restore-face-amendments）。
  *
  * 用法（容器内 WORKDIR=/app/server；主机侧同仓 `node src/backup/cli.ts`）：
  *
@@ -20,18 +21,25 @@ import { verifyBackupSet } from './verify.ts';
  *   node src/backup/cli.ts verify --data-item <数据件目录> \
  *     [--keys-item <密钥件目录>] [--fsck]
  *
- * 备份触发流程（backup-recovery §4）：经运行实例维护端点开闸（t0）→ 排空
- * （T3 原语，超时中止且保持维护）→ 快照核（VACUUM INTO / git 复制+fsck / config
- * 与 keys 分置两件）→ manifest → 关闸 → 健康检查 → backup.completed 审计行
- * （指标面「备份完成时间」随即更新）。步骤 8 离线验证独立执行（verify）。
+ *   node src/backup/cli.ts restore --data-item <数据件目录> --keys-item <密钥件目录> \
+ *     --data-dir </data（目标须四域全新）>
+ *
+ *   node src/backup/cli.ts finalize --data-dir /data --url http://127.0.0.1:3000 \
+ *     --token-file <file>
+ *
+ * 恢复流程（backup-recovery §7 十步，S8-T5 两相位）：restore（离线：pre-verify
+ * 复用 T4 离线验证 → 目标全新 → 版本兼容 → §7 顺序装载 → 装载后完整性）→
+ * 以 NOTEGIT_MAINTENANCE_ON_START=1 启动实例（§7 步骤 1）→ finalize（维护内：
+ * §7 步骤 7 只读对账 + 步骤 9 触发 S5-T5 全量重建；不退出维护）→ §8 R1–R14
+ * 清单全绿 → 显式退出维护（§7 步骤 10）。
  *
  * 凭据卫生：管理令牌只接受 --token-file 或 NOTEGIT_ADMIN_TOKEN 环境变量（argv
  * 明文在 ps/历史里可见，不提供）；输出一律不含令牌。
  */
 
 export interface ParsedArgs {
-  command: 'backup' | 'verify';
-  /** backup：实例数据目录；verify：数据件目录 */
+  command: 'backup' | 'verify' | 'restore' | 'finalize';
+  /** backup/finalize/restore：实例数据目录（restore 为目标目录）；verify：数据件目录 */
   dataDir?: string;
   dataItem?: string;
   out?: string;
@@ -51,6 +59,10 @@ const USAGE = `用法：
         --token-file <file> [--keys-out <dir>] [--drain-timeout-ms 300000] \\
         [--fsck sample|sample:N|all|none] [--force-drain-timeout]
   node src/backup/cli.ts verify --data-item <数据件目录> [--keys-item <密钥件目录>] [--fsck]
+  node src/backup/cli.ts restore --data-item <数据件目录> --keys-item <密钥件目录> --data-dir </data>
+        （离线相位：装载前复用离线验证；目标四域须全新——§7 步骤 2–6）
+  node src/backup/cli.ts finalize --data-dir /data --url http://127.0.0.1:3000 --token-file <file>
+        （实例侧相位：实例以 NOTEGIT_MAINTENANCE_ON_START=1 启动后执行——§7 步骤 7/9）
 令牌来源：--token-file 或环境变量 NOTEGIT_ADMIN_TOKEN（不接受 argv 明文）。`;
 
 function parseFsck(value: string): { mode: 'sample' | 'all' | 'none'; sampleSize?: number } {
@@ -62,22 +74,26 @@ function parseFsck(value: string): { mode: 'sample' | 'all' | 'none'; sampleSize
   throw new Error(`--fsck 形态非法：${value}（可用 sample|sample:N|all|none）`);
 }
 
+/** 各子命令接受的值参数（互不混用：restore 不吃 --fsck，finalize 不吃 --out 等） */
+const COMMAND_FLAGS: Readonly<Record<'backup' | 'verify' | 'restore' | 'finalize', ReadonlySet<string>>> = {
+  backup: new Set(['--data-dir', '--out', '--keys-out', '--url', '--token-file', '--drain-timeout-ms', '--fsck']),
+  verify: new Set(['--data-item', '--keys-item']),
+  restore: new Set(['--data-item', '--keys-item', '--data-dir']),
+  finalize: new Set(['--data-dir', '--url', '--token-file']),
+};
+
 /** 参数解析（纯函数；执行面在 main——测试直接消费本函数） */
 export function parseBackupArgs(argv: readonly string[]): ParsedArgs {
   const [command, ...rest] = argv;
-  if (command !== 'backup' && command !== 'verify') {
+  if (command !== 'backup' && command !== 'verify' && command !== 'restore' && command !== 'finalize') {
     throw new Error(`未知子命令「${command ?? '(空)'}」\n${USAGE}`);
   }
   const flags = new Map<string, string>();
   const bools = new Set<string>();
-  const known = new Set([
-    '--data-dir', '--out', '--keys-out', '--url', '--token-file',
-    '--drain-timeout-ms', '--fsck', '--data-item', '--keys-item',
-  ]);
-  const knownBools = new Set(['--force-drain-timeout', '--fsck-bool']);
+  const known = COMMAND_FLAGS[command];
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i]!;
-    if (arg === '--force-drain-timeout') {
+    if (arg === '--force-drain-timeout' && command === 'backup') {
       bools.add(arg);
       continue;
     }
@@ -86,9 +102,9 @@ export function parseBackupArgs(argv: readonly string[]): ParsedArgs {
       continue;
     }
     if (!arg.startsWith('--')) throw new Error(`未知参数「${arg}」\n${USAGE}`);
+    if (!known.has(arg)) throw new Error(`未知参数「${arg}」（子命令 ${command} 不接受）\n${USAGE}`);
     const value = rest[i + 1];
     if (value === undefined) throw new Error(`参数 ${arg} 缺值\n${USAGE}`);
-    if (!known.has(arg)) throw new Error(`未知参数「${arg}」\n${USAGE}`);
     flags.set(arg, value);
     i++;
   }
@@ -124,6 +140,29 @@ export function parseBackupArgs(argv: readonly string[]): ParsedArgs {
     };
   }
 
+  if (command === 'restore') {
+    const dataItem = flags.get('--data-item');
+    const keysItem = flags.get('--keys-item');
+    const dataDir = flags.get('--data-dir');
+    if (!dataItem) throw new Error('restore 需要 --data-item <数据件目录>\n' + USAGE);
+    if (!keysItem) throw new Error('restore 需要 --keys-item <密钥件目录>（分置两件——不猜测同级）\n' + USAGE);
+    if (!dataDir) throw new Error('restore 需要 --data-dir <目标数据目录>（须四域全新——§7 前置）\n' + USAGE);
+    return { command, dataItem, keysItem, dataDir };
+  }
+
+  if (command === 'finalize') {
+    const dataDir = flags.get('--data-dir');
+    const url = flags.get('--url');
+    if (!dataDir) throw new Error('finalize 需要 --data-dir <实例数据目录>\n' + USAGE);
+    if (!url) throw new Error('finalize 需要 --url <恢复实例基地址>\n' + USAGE);
+    const tokenFile = flags.get('--token-file');
+    const envToken = process.env.NOTEGIT_ADMIN_TOKEN;
+    if (tokenFile === undefined && (envToken === undefined || envToken.length === 0)) {
+      throw new Error('缺少管理令牌来源：--token-file <file> 或环境变量 NOTEGIT_ADMIN_TOKEN\n' + USAGE);
+    }
+    return { command, dataDir, url, tokenFile, envToken };
+  }
+
   const dataItem = flags.get('--data-item');
   if (!dataItem) throw new Error('verify 需要 --data-item <数据件目录>\n' + USAGE);
   return {
@@ -137,6 +176,9 @@ export function parseBackupArgs(argv: readonly string[]): ParsedArgs {
 /** CLI 主入口（返回进程退出码；打印不含令牌材料） */
 export async function main(argv: readonly string[]): Promise<number> {
   const args = parseBackupArgs(argv);
+  if (args.command === 'restore' || args.command === 'finalize') {
+    return runRestoreSubcommand(args);
+  }
   if (args.command === 'backup') {
     const token = args.tokenFile !== undefined ? (await readFile(args.tokenFile, 'utf8')).trim() : args.envToken!;
     const control = httpMaintenanceControl({ baseUrl: args.url!, token });
@@ -178,6 +220,39 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   console.log(res.ok ? '离线验证：全部通过' : '离线验证：存在失败项（见上）');
   return res.ok ? 0 : 1;
+}
+
+/** restore / finalize 执行面（§7 两相位——runbook 见文件头注释） */
+async function runRestoreSubcommand(args: ParsedArgs): Promise<number> {
+  if (args.command === 'restore') {
+    const result = await restoreOffline({
+      dataItemDir: args.dataItem!,
+      keysItemDir: args.keysItem!,
+      dataDir: args.dataDir!,
+    });
+    for (const c of result.checks) {
+      console.log(`${c.ok ? '✓' : '✗'} ${c.name}${c.detail !== undefined ? ` — ${c.detail}` : ''}`);
+    }
+    console.log(`离线装载完成：backup_id=${result.manifest.backup_id}（${result.manifest.vault_count} 库）→ ${args.dataDir}`);
+    console.log('下一步（backup §7）：');
+    console.log(`  1. 以维护态启动实例：NOTEGIT_MAINTENANCE_ON_START=1（数据目录 ${args.dataDir}）`);
+    console.log(`  2. node src/backup/cli.ts finalize --data-dir ${args.dataDir} --url http://127.0.0.1:3000 --token-file <恢复实例的管理员令牌>`);
+    console.log('  3. §8 R1–R14 恢复验证清单全绿后，显式退出维护（DELETE /api/v1/admin/maintenance）');
+    return 0;
+  }
+
+  const token = args.tokenFile !== undefined ? (await readFile(args.tokenFile, 'utf8')).trim() : args.envToken!;
+  const result = await restoreFinalize({
+    baseUrl: args.url!,
+    token,
+    dataDir: args.dataDir!,
+  });
+  console.log(`✓ 对账（§7 步骤 7）：无残留；${result.reconcile.refsChecked} 个 ref 与审计 old→new 成链一致`);
+  console.log(
+    `✓ 索引全量重建（§7 步骤 9）：state=${result.rebuild.state} done=${result.rebuild.done}/${result.rebuild.total}（finished_at=${result.rebuild.finished_at ?? '—'}）`,
+  );
+  console.log('finalize 完成：实例仍处维护模式——执行 §8 R1–R14 清单，全绿后显式退出维护（§7 步骤 10）');
+  return 0;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
