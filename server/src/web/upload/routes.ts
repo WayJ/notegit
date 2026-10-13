@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Issue, Report } from 'notegit-validation';
 import type { AuthSuccess } from '../../auth/lifecycle.ts';
 import { authorize } from '../../auth/lifecycle.ts';
+import type { MaintenanceGate } from '../../maintenance/gate.ts';
 import { createDbMembershipSource } from '../../vaults/membership.ts';
 import { VaultService } from '../../vaults/service.ts';
 import { effectiveConfig } from '../../limits/engine.ts';
@@ -29,8 +30,9 @@ import { readEntryAt, treePathOk } from '../browse/tree.ts';
  *   寻址（URL 不可枚举——选型记录见 view/attachments.ts 文件头）。
  * - base commit：请求时解析默认分支 HEAD 作 CAS 旧值（并发写入由组件
  *   base-commit 阶段拒绝 409——完整冲突保护/草稿语义属 S4-T7）。
- * - 维护模式：本路由未接 gate 实例（WebRoutesOptions 无此缝——同 T3 占位
- *   调用面形态；HTTP 层统一接线属 S4-T7，见 pipeline.ts maintenanceGate 注）。
+ * - 维护模式（S4-T5 缝接线，T4 遗留清偿）：HTTP 层第一道=组装点
+ *   webWriteGuard（/vaults/ 非安全方法 503）；组件层最后一道=maintenanceGate
+ *   注入（execution-point 复查，双层同构——backup §3 矩阵 web 行）。
  *
  * D5 模块自声明：不改 web/routes.ts 既有行（组装点 append 一行注册本模块）。
  */
@@ -39,6 +41,9 @@ export interface UploadRoutesOptions {
   readonly db: DatabaseSync;
   readonly dataDir?: string;
   readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<AuthSuccess | null>;
+  /** 维护闸门（S4-T5 缝，T4 遗留移交）：HTTP 层第一道=组装点 webWriteGuard，
+   *  此处注入组件为最后一道（pipeline execution-point 复查——双层同构）。 */
+  readonly maintenanceGate?: MaintenanceGate;
 }
 
 /**
@@ -206,6 +211,7 @@ export function registerUploadRoutes(app: FastifyInstance, opts: UploadRoutesOpt
       changes: [{ kind: 'upsert', path: entryPath, mode: '100644', content: bytes }],
       message: `Web 上传：${entryPath}`,
       identity: identityOf(who),
+      ...(opts.maintenanceGate !== undefined ? { maintenanceGate: opts.maintenanceGate } : {}),
     });
 
     if (publish.kind === 'rejected') {

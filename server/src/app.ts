@@ -161,6 +161,7 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       db: wired.db,
       authenticateRequest: wired.authenticateRequest,
       dataDir: deps.dataDir,
+      maintenanceGate, // S4-T5 缝：web 写操作（upload/rename/delete/未来 edit POST）维护模式 503（backup §3 web 行）
     });
     // S3-T2 Git Smart HTTP 入口（api.md §8.4）：CGI 包装 git http-backend，认证
     // 经 Basic→token（同一凭据域服务）、授权经同一 authorize/membershipSource、
