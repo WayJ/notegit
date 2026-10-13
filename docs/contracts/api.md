@@ -69,6 +69,8 @@
 | E-AUTH-008 | 422 | 口令策略不满足（长度 12–64 可配，无组合规则） | identity §2 |
 | E-AUTHZ-001 | 403 | 已认证、已知资源存在，但角色/身份不足（reader 写库、非库管理员改设置、非实例管理员用管理端点） | 架构 §4.2 |
 | E-MAINT-001 | 503 | 维护模式拒绝写入（`maintenance: true`；backup-recovery §3 待定项在此定稿） | backup-recovery §3 |
+| E-RES-008 | 409 | 索引重建已在进行（触发被拒，进度可查；details.rebuild 携带进度面） | S5-T5；backup §7 步骤 9；D13 |
+| E-SRCH-001 | 503 | 搜索索引未接线（无 dataDir 形态），索引域管理端点不可用 | S5-T5；D13 |
 | E-RES-001 | 404 | 资源不存在或无权访问（库/文档/凭据/成员等，统一 404 不泄露存在性） | identity §5.2/D-IC-06 |
 | E-RES-002 | 409 | 资源标识已占用（username、vault slug） | 架构 §7.2；identity §2 |
 | E-RES-003 | 409 | base commit 冲突：分支已前进（预期旧 commit 不匹配；草稿保留） | 架构 §5.4/§6 |
@@ -155,11 +157,22 @@
 - 错误：403 E-AUTHZ-001；404 E-RES-001（键不在注册表）；400/422 E-RES-004/007（值域校验失败）；503 E-MAINT-001。（2026-10-13 ADR D12 定稿；HTTP 挂接待后续任务，写入面已实现自 S3-T8。）
 
 
-### 3.5 规则版本元信息（S6-T7 补录；validation §7.3 三端引用）
+### 3.7 规则版本元信息（S6-T7 补录；validation §7.3 三端引用）
 #### GET /api/v1/rules-version（需认证）
 - 用途：CLI/程序化客户端探测服务端规则版本——本地旧于服务端时客户端附 N-UPGRADE-001 提示（validation §6：版本差异本身不构成拒绝理由；服务端为运行时权威）。
 - 成功：200 `{rulesVersion, status}`——值取自 [rules-version.json](rules-version.json) 唯一机器来源（服务端运行时经 notegit-validation 读取，与 pre-receive 同源，不另行复制维护）。
 - 错误：401 E-AUTH-001（§1 通用 401 映射；Bearer/会话双载体）。
+
+
+### 3.5 搜索索引状态与全量重建（实例管理员；架构 §9；backup-recovery §7 步骤 9）
+
+- **GET /api/v1/admin/search-index**（读）：200 `{running, pollMs, vaults: [{vault_id, slug, branch, head_commit, live_commit, up_to_date, indexed_at, triggered_by, triggered_at, duration_ms, lag_ms, updates, consecutive_failures, last_error, last_error_at, rows}]}`。`head_commit`=索引已反映头、`live_commit`=当前实际头、`up_to_date`=相等；`lag_ms`=发布→索引完成延迟；失败告警面 `consecutive_failures`/`last_error`（索引失败不阻断发布——架构 §9/D7）；无 dataDir 形态 `{running:false, pollMs:null, vaults:[]}`。
+- **POST /api/v1/admin/search-index/rebuild**（写；运行态写入——派生数据不入备份一致性集合，维护模式内可触发）：触发全量重建（逐库强制重派生，不比对头一致性；进度并入 GET 面，逐库 `triggered_by:"manual"`、`lag_ms:null`）。成功 **202** `{rebuild:{state,total,done,started_at,finished_at}}`（异步在途；逐库失败不阻断收口，经 vaults 面 `up_to_date=false` 单独可见）；重建中再触发 **409 E-RES-008**（拒绝不排队，`details.rebuild` 携带进度；触发成功记 `search.rebuild` 审计行，409 不记）；重建期间查询降级=部分结果（鉴权过滤不降级——查询面逐请求实时 JOIN 成员关系）。
+- 错误：401（§1 通用）；403 E-AUTHZ-001；409 E-RES-008；503 E-SRCH-001（无 dataDir 接线形态）。（2026-10-13 ADR D13 补录；实现自 S5-T3/T5。）
+
+### 3.6 元数据查找（任意认证员工；架构 §9 派生索引按权限过滤、§4.2 未授权的库不进搜索结果）
+
+- **GET /api/v1/search?q=<关键词>**（读）：按标题/标签/摘要关键词查找**本人有权库**的已发布元数据。匹配=SQL LIKE 子串（`%`/`_`/`\` 字面化；ASCII 大小写不敏感，其他文字精确子串；不引全文引擎——容量选型）；鉴权过滤=实时 JOIN 当前成员关系（identity §5.1 同一无缓存判定面，撤权下一查询即消失）+ token scope 交集（§3.4）。成功 200 `{q, truncated, results:[{vault_slug, vault_name, path, commit_oid, title, tags, summary, matched}]}`（title=null=frontmatter 豁免文件如实记录；确定性排序 vault→path；上限 100 行超出 truncated:true，不承诺分页）。错误：401；400 E-RES-004（缺/空 q）；422 E-RES-007（q 超 200 字符）。只读不记审计；索引滞后语义见 §3.5。（2026-10-13 ADR D13 补录；实现自 S5-T4。）
 
 ## 4. 访问凭据（ngt_ token）
 

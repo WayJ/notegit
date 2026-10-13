@@ -242,6 +242,11 @@ CREATE TABLE app_settings (
 ) STRICT;
 ```
 
+
+### 3.11 派生数据表（非权威面；D13 登记）
+
+标题/标签/摘要搜索索引（架构 §3.1 派生、可从 Git 全量重建、不入备份一致性集合）。**权威 DDL = 迁移 0009**（server/src/db/migrations.ts，逐字防漂移对照见 server/test/search-migration.test.ts——契约侧不复制全文防双源漂移）：`search_index`（逐库逐路径一行，新版本全量替换；无外键——vaults 行删除不被陈旧派生行阻塞，孤儿行由启动对账清理）与 `search_index_state`（可观测状态行：head/live commit、lag/duration、失败告警面）。重建入口与语义见 api.md §3.5（backup §7 步骤 9）。
+
 ## 4. 运行时检查查询（`-- @query`，实时查库、无缓存）
 
 以下查询是 [identity §5.1](identity-credentials.md) 两层检查的规范 SQL，认证/授权实现不得加任何缓存（D-IC-05）。参数按 `?` 顺序由应用层绑定；`now` 一律服务端时钟。
@@ -326,6 +331,8 @@ ORDER BY occurred_at, id;
 | `config.update` | 直接终态 | 否 | storage-model §3.10（变更走管理端点并记审计）；validation §5.1 |
 
 （2026-10-13 ADR D12 追加两行。）
+
+| `search.rebuild` | 直接终态（succeeded；运行态写入，不入备份一致性集合） | 否 | backup §7 步骤 9（S5-T5）；D13 |
 
 ## 6. 跨存储一致性与发布审计模式
 
