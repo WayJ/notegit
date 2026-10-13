@@ -1,5 +1,5 @@
 // THROWAWAY spike code — pre-receive hook for route B evidence (docs/s1/selection.md).
-// Rules source & version: docs/contracts/rules-version.json (rulesVersion 1.0.0-draft.1,
+// Rules source & version: docs/contracts/rules-version.json (rulesVersion 1.0.0-draft.2,
 // S1-T2 validation contract — same machine source api.md cites; sprint scenario S3).
 // Reads push ref commands from stdin, enforces:
 //  - per-ref authorization (REMOTE_USER propagated by http-backend CGI env)
@@ -22,7 +22,7 @@ const git = (args) => execFileSync('git', args, { cwd: process.env.GIT_DIR || '.
 
 // G1/G2: single rules-version source (docs/contracts/rules-version.json), resolved
 // relative to this file (<repo-root>/docs/s1/spikes/git-http-backend/ → root is 4 up).
-const RULES_VERSION_CONSTANT = '1.0.0-draft.1';
+const RULES_VERSION_CONSTANT = '1.0.0-draft.2';
 const MANIFEST_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..',
   'docs', 'contracts', 'rules-version.json'
