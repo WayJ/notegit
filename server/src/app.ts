@@ -16,6 +16,7 @@ import { vaultsPlugin } from './vaults/routes.ts';
 import { draftsPlugin } from './drafts/routes.ts';
 import { createVaultRepoOps } from './gitrepo/lifecycle.ts';
 import { gitHttpPlugin } from './githttp/http-backend.ts';
+import { createGitChildGate, effectiveGitLimits } from './limits/git-gate.ts';
 import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
 import { registerMaintenanceRoutes } from './maintenance/routes.ts';
 import { registerRulesVersionRoutes } from './rulesversion/routes.ts';
@@ -234,14 +235,19 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     });
     // S3-T2 Git Smart HTTP 入口（api.md §8.4）：CGI 包装 git http-backend，认证
     // 经 Basic→token（同一凭据域服务）、授权经同一 authorize/membershipSource、
-    // 维护模式 write 403——与 Web/API 三入口共用组件；dataDir 注入时注册
+    // 维护模式 write 403——与 Web/API 三入口共用组件；dataDir 注入时注册。
+    // S8-T8：每请求 git 子进程并发闸门（git.maxConcurrentChildren，FIFO 排队，
+    // 容量热生效）在此装配并挂观察缝 app.childProcessGate（测试与未来指标接线）。
     if (deps.dataDir !== undefined) {
+      const childProcessGate = createGitChildGate(() => effectiveGitLimits({ db: deps.db }).maxConcurrentChildren);
+      app.childProcessGate = childProcessGate;
       app.register(gitHttpPlugin, {
         dataDir: deps.dataDir,
         dbFile: deps.dbFile,
         membershipSource: createDbMembershipSource(deps.db),
         authenticateToken: (token) => credentialsService.authenticate(token),
         maintenanceGate,
+        childProcessGate,
         db: deps.db, // S3-T6：receive 子进程退出后的中断清扫（pending → 待核对）
       });
     }
