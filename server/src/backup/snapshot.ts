@@ -83,8 +83,9 @@ function stampOf(d: Date): string {
   return `${d.toISOString().slice(0, 19).replace(/[-:]/g, '')}Z`;
 }
 
-/** 缺省应用版本：server 包 package.json（本模块 = <server>/src/backup/ 下两层） */
-async function readAppVersion(): Promise<string> {
+/** 缺省应用版本：server 包 package.json（本模块 = <server>/src/backup/ 下两层）。
+ *  S8-T5 起导出：restore 的版本兼容核对（§7 步骤 6）与此同源。 */
+export async function readAppVersion(): Promise<string> {
   const file = path.resolve(import.meta.dirname, '..', '..', 'package.json');
   try {
     const pkg = JSON.parse(await readFile(file, 'utf8')) as { version?: string };
