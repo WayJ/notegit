@@ -9,10 +9,13 @@
  *
  * D7 红线：本模块不存在任何 stash/reset/rebase 路径——跳过即完全不动本地副本。
  * 报告契约（JSON/逐项结构/汇总口径）属 S7-T3；本层只产出结构化 outcome。
+ * S7-T2：skipped outcome 携带离线副本 head 与上次同步时间（last-sync 本地形状，
+ * T4 状态文件集成点见该模块头）——供报告层呈现「原因+commit+时间」。
  */
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import type { SyncInfo, SyncState } from '../ls/local-status.ts'
+import { readLastSync } from './last-sync.ts'
 
 /** 变更操作缝（clone/快进；单元测试注入假件，真实实现见 realSyncOps）。 */
 export interface SyncOps {
@@ -28,7 +31,17 @@ export type SyncOutcome =
   | { readonly action: 'cloned'; readonly slug: string; readonly path: string; readonly head: string }
   | { readonly action: 'fast_forwarded'; readonly slug: string; readonly path: string; readonly from: string; readonly to: string }
   | { readonly action: 'up_to_date'; readonly slug: string; readonly path: string; readonly head: string }
-  | { readonly action: 'skipped'; readonly slug: string; readonly path: string | null; readonly state: Exclude<SyncState, 'new' | 'clean'>; readonly reason: string }
+  | {
+    readonly action: 'skipped'
+    readonly slug: string
+    readonly path: string | null
+    readonly state: Exclude<SyncState, 'new' | 'clean'>
+    readonly reason: string
+    /** 离线副本当前 commit（本地 head；不可读为 null）。 */
+    readonly head: string | null
+    /** 上次成功同步时间（ISO；未经 notegit 同步为 null）。T4 集成点见 last-sync.ts。 */
+    readonly last_sync: string | null
+    }
   | { readonly action: 'failed'; readonly slug: string; readonly path: string | null; readonly message: string }
 
 /** 四类跳过态的原因文案（§7.3 枚举顺序；T3 收口报告契约时可再精化）。 */
@@ -90,7 +103,15 @@ export async function applySyncStrategy(args: {
       return { action: 'failed', slug, path: dir, message: `快进失败：${firstLine(err instanceof Error ? err.message : String(err))}` }
     }
   }
-  return { action: 'skipped', slug, path: info.path, state: info.state, reason: skipReason(info, defaultBranch) }
+  return {
+    action: 'skipped',
+    slug,
+    path: info.path,
+    state: info.state,
+    reason: skipReason(info, defaultBranch),
+    head: info.head,
+    last_sync: info.path === null ? null : readLastSync(info.path),
+  }
 }
 
 /** 真实变更 ops（execFile 异步；GIT_TERMINAL_PROMPT=0；凭据经 credential helper，不进 URL）。 */

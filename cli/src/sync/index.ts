@@ -7,6 +7,9 @@
  * D7 红线：全链路不存在 stash/reset/rebase；跳过 = 完全不动本地副本。
  * 报告契约（JSON、逐项结构、汇总口径）属 S7-T3；当前为最小 stdout/stderr 行，
  * 退出码语义先按 T3 验收口径落地：非零当且仅当有失败（跳过不判失败）。
+ * S7-T2 最小报告扩展：跳过行附离线副本 commit 与上次同步时间（数据来自
+ * engine 的 skipped outcome）；成功结局写每库时间标记（last-sync 本地形状，
+ * T4 状态文件集成点见该模块头）。
  */
 import process from 'node:process'
 import path from 'node:path'
@@ -15,6 +18,7 @@ import { credentialSourceFromEnv } from '../ls/credential-source.ts'
 import { cloneUrlOf, fetchVaults } from '../ls/api.ts'
 import { computeSyncStatus, localRootOf, realSyncGitOps } from '../ls/local-status.ts'
 import { applySyncStrategy, realSyncOps, type SyncOutcome } from './engine.ts'
+import { writeLastSync } from './last-sync.ts'
 import { EXIT_ERROR, EXIT_FAIL, EXIT_OK } from '../exit-codes.ts'
 
 interface SyncArgs {
@@ -57,7 +61,7 @@ function reportLine(out: SyncOutcome): void {
       process.stdout.write(`${out.slug}：已是最新（${short(out.head)}）\n`)
       break
     case 'skipped':
-      process.stderr.write(`${out.slug}：跳过——${out.reason}\n`)
+      process.stderr.write(`${out.slug}：跳过——${out.reason}；离线副本 ${short(out.head)}，上次同步 ${out.last_sync ?? '未知（该副本未经 notegit 同步）'}\n`)
       break
     case 'failed':
       process.stderr.write(`${out.slug}：失败——${out.message}\n`)
@@ -109,6 +113,10 @@ export async function runSync(argv: string[], env: NodeJS.ProcessEnv = process.e
     const out = await applySyncStrategy({ root, slug: v.slug, cloneUrl, defaultBranch: v.default_branch, info, depth: parsed.args.depth, ops: syncOps })
     reportLine(out)
     outcomes.push(out)
+    // 成功结局（克隆/快进/已最新）刷新上次同步时间标记（S7-T2；T4 集成点见 last-sync.ts 头）
+    if (out.action === 'cloned' || out.action === 'fast_forwarded' || out.action === 'up_to_date') {
+      await writeLastSync(out.path)
+    }
   }
   await hintOrphanDirs(root, new Set(result.vaults.map((v) => v.slug)), ops)
   const ok = outcomes.filter((o) => o.action === 'cloned' || o.action === 'fast_forwarded' || o.action === 'up_to_date').length
