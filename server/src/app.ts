@@ -13,6 +13,7 @@ import { credentialsPlugin } from './credentials/routes.ts';
 import { createDbMembershipSource } from './vaults/membership.ts';
 import { VaultService } from './vaults/service.ts';
 import { vaultsPlugin } from './vaults/routes.ts';
+import { draftsPlugin } from './drafts/routes.ts';
 import { createVaultRepoOps } from './gitrepo/lifecycle.ts';
 import { gitHttpPlugin } from './githttp/http-backend.ts';
 import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
@@ -152,6 +153,13 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       service: new VaultService({ db: wired.db, ...(deps.dataDir ? { repoOps: createVaultRepoOps(deps.dataDir) } : {}) }),
       authenticateRequest: wired.authenticateRequest,
       membershipSource: createDbMembershipSource(wired.db),
+    });
+    // S4-T6 草稿域路由（api.md §7）：按作者私有 CRUD + 发布后状态流转面；
+    // 授权经同一 authorize/membershipSource（三入口同源），维护/CSRF 由 app 级
+    // 闸门自动覆盖（gate.ts 注记明列「草稿」写端点）。
+    app.register(draftsPlugin, {
+      db: wired.db,
+      authenticateRequest: wired.authenticateRequest,
     });
     // S2-T8 最小页面 + S4 浏览族（/login、/、/admin、/credentials、/vaults…——GET
     // 外壳/数据页；页面无写操作，安全判定全部在 API 侧复用 authorize/管理员门槛）。

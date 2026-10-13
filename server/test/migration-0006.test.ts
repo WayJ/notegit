@@ -33,6 +33,12 @@ function migrationV6Lines(): string[] {
   return v6.statements.join('\n').split('\n').map((l) => l.trimEnd()).filter((l) => l.length > 0);
 }
 
+
+/** 派生版本表（S4-T6 起）：从 1 连续递增即合法——append 新迁移不再需要改本文件 */
+function allVersions(): number[] {
+  return Array.from({ length: MIGRATIONS.length }, (_, i) => i + 1);
+}
+
 test('迁移 0006：与契约 @schema 块逐行等价（防漂移，D6）', () => {
   assert.deepEqual(
     migrationV6Lines(),
@@ -50,7 +56,7 @@ test('迁移 0006：schema_version 引导行不在迁移内容中（runner 持�
 test('迁移 0006：在 v4 之上应用，audit_events 表/列/索引落地，重入跳过', () => {
   const db = memory();
   const first = migrate(db, MIGRATIONS);
-  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0007（T8 app_settings）已并入
+  assert.deepEqual(first.applied, allVersions());  // 集成修正：0007（T8 app_settings）已并入
 
   const cols = (db.prepare('PRAGMA table_info(audit_events)').all() as { name: string }[]).map((c) => c.name);
   assert.deepEqual(cols.sort(), [
@@ -68,7 +74,7 @@ test('迁移 0006：在 v4 之上应用，audit_events 表/列/索引落地，�
 
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0007（T8 app_settings）已并入
+  assert.deepEqual(again.skipped, allVersions());  // 集成修正：0007（T8 app_settings）已并入
   db.close();
 });
 

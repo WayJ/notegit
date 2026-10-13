@@ -7,8 +7,9 @@ import type { ParsedForForm } from './form.ts';
  *
  * 页面 = GET 表单（无写操作，api.md §13/D5）：六字段 + 额外字段文本区 +
  * 正文 textarea（多行纯文本，无富文本）；保存/提交按钮经页内脚本调用 API 端点
- * ——保存=§7 草稿 PUT（存储 S4-T6 落地），提交=§8.2 submissions POST（S3-T7
- * 发布组件，HTTP 接线 S4-T7）。422 报告的字段定位渲染为服务端 errors.ts 映射
+ * ——保存=§7 草稿 PUT（S4-T6 存储已落地：按作者私有、不产生 Git 版本），提交
+ * =§8.2 submissions POST（S3-T7 发布组件，HTTP 接线 S4-T7；发布成功后提交者
+ * 本人草稿由服务端标已提交）。422 报告的字段定位渲染为服务端 errors.ts 映射
  * 规则的页内镜像（显示胶水；权威映射在服务端，由发布组件报告驱动）。
  */
 
@@ -148,7 +149,7 @@ document.getElementById('save-draft').addEventListener('click', async () => {
     const r = await api('PUT', DRAFT_URL, { content: composeDoc(), base_commit: BASE });
     msg.textContent = '草稿已保存' + (r && r.updated_at ? '（' + r.updated_at + '）' : '') + '。';
   } catch (err) {
-    msg.textContent = '保存草稿失败：' + err.message + (err.status === 404 ? '（草稿存储未接入——S4-T6 落地）' : '');
+    msg.textContent = '保存草稿失败：' + err.message;
   }
 });
 
@@ -162,7 +163,7 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
       message: f.message.value.trim() || ('Web 编辑：' + PATH),
       changes: [{ path: PATH, content: composeDoc() }],
     });
-    msg.textContent = '已发布（commit ' + (r.commit || '?') + '）——草稿按架构 §6 清理或标记（S4-T6/T7 接线）。';
+    msg.textContent = '已发布（commit ' + (r.commit || '?') + '）——草稿已标记为已提交。';
     setTimeout(() => { location.href = VIEW_URL; }, 600);
   } catch (err) {
     if (err.status === 422 && err.data && err.data.files) {
@@ -197,7 +198,7 @@ ${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</c
 <button type="button" id="save-draft">保存草稿</button>
 <button type="submit">提交</button>
 </form>
-<p><small>保存=草稿（不产生 Git 版本，S4-T6 存储落地）；提交=正式发布（走统一校验与发布组件，S4-T7 完整接线）。</small></p>
+<p><small>保存=草稿（按作者私有、不产生 Git 版本，可再保存覆盖）；提交=正式发布（走统一校验与发布组件）——提交成功后草稿标记为已提交。</small></p>
 `,
     script,
   );
@@ -227,7 +228,7 @@ document.getElementById('save-draft').addEventListener('click', async () => {
     await api('PUT', DRAFT_URL, { content: document.getElementById('readme-body').value, base_commit: BASE });
     document.getElementById('form-msg').textContent = '草稿已保存。';
   } catch (err) {
-    document.getElementById('form-msg').textContent = '保存草稿失败：' + err.message + (err.status === 404 ? '（草稿存储未接入——S4-T6 落地）' : '');
+    document.getElementById('form-msg').textContent = '保存草稿失败：' + err.message;
   }
 });
 document.getElementById('readme-form').addEventListener('submit', async (ev) => {
@@ -238,7 +239,7 @@ document.getElementById('readme-form').addEventListener('submit', async (ev) => 
       message: 'Web 编辑：' + PATH,
       changes: [{ path: PATH, content: document.getElementById('readme-body').value }],
     });
-    document.getElementById('form-msg').textContent = '已发布（commit ' + (r.commit || '?') + '）。';
+    document.getElementById('form-msg').textContent = '已发布（commit ' + (r.commit || '?') + '）——草稿已标记为已提交。';
     setTimeout(() => { location.href = VIEW_URL; }, 600);
   } catch (err) {
     document.getElementById('form-msg').textContent = '提交失败：' + err.message;

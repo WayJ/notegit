@@ -3,7 +3,7 @@
  * DDL 唯一来源是 docs/contracts/storage-model.md 的 -- @schema 块（D6 只读纪律）；
  * S2-T1 只带空基线；S2-T2 落 v2（employees/one_time_tokens）；S2-T4 落 v4（credentials）；
  * S2-T6 落 v5（vaults/vault_members）；v3 为 S2-T3（sessions）；v6 为 S2-T7（audit_events）；
- * v7 为 S3-T8（app_settings）。后续版本按任务 append。
+ * v7 为 S3-T8（app_settings）；v8 为 S4-T6（drafts）。后续版本按任务 append。
  */
 export interface Migration {
   readonly version: number;
@@ -180,6 +180,31 @@ CREATE TABLE app_settings (
   value      TEXT    NOT NULL,                 -- JSON 值（与 validation-defaults.json 的类型一致）
   updated_by INTEGER REFERENCES employees(id),
   updated_at TEXT    NOT NULL
+) STRICT;`,
+    ],
+  },
+  {
+    // S4-T6（迁移 0008，本任务独占）：drafts（网页草稿——按作者私有）。DDL 逐字
+    // 取自 storage-model.md §3.7 的 -- @schema 块（D6 只读纪律；契约先行——S1-T5
+    // 已定表，本迁移落表 + 防漂移，migration-0006 同款 D11 模式）。0007 之后
+    // append（迁移独占约束同前任务）。
+    version: 8,
+    description: 'S4-T6: drafts — per-author private web drafts with commit-state transition (storage-model §3.7; api.md §7; 架构 §6)',
+    statements: [
+      `-- 草稿保存在数据库、按作者私有（架构 §3.1/§6）。访问时再次检查库权限（应用层，
+-- identity §5.1 第 2 层同源）。发布后清理或标为已提交（架构 §6）。
+CREATE TABLE drafts (
+  id           INTEGER NOT NULL PRIMARY KEY,
+  vault_id     INTEGER NOT NULL REFERENCES vaults(id),
+  employee_id  INTEGER NOT NULL REFERENCES employees(id),  -- 依据：架构 §6 按作者私有
+  path         TEXT    NOT NULL,               -- 目标路径；重命名按目标路径重新判定（架构 §5.2）
+  content      TEXT    NOT NULL,               -- 草稿全文（含 frontmatter 文本）
+  base_commit  TEXT    NOT NULL,               -- 依据：架构 §6 打开编辑器时记录 base commit；提交时分支已变 → 保留草稿提示冲突，不静默覆盖
+  status       TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active','committed')),  -- 依据：架构 §6「发布后清理或标为已提交」
+  committed_at TEXT,                           -- 标记已提交的时间（T5 建议）
+  created_at   TEXT    NOT NULL,
+  updated_at   TEXT    NOT NULL,
+  UNIQUE (vault_id, employee_id, path)         -- 每作者每路径一份现行草稿（T5 建议：同路径新草稿覆盖旧稿，配合 updated_at）
 ) STRICT;`,
     ],
   },
