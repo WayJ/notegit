@@ -10,7 +10,8 @@ import { evaluateWatermark, scanDiskUsage } from './disk.ts';
  * - **GET /api/v1/admin/metrics**（实例管理员；只读）：架构 §10 最低清单——
  *   磁盘水位（/data 四分域用量 + statfs 容量比值水位）、失败推送计数、校验
  *   耗时分布（P50/P95 累计）、认证失败计数（identity §8「不逐条入审计」的
- *   替代呈现）、备份完成时间（S8-T4 落地后接线——预留字段如实 null）。
+ *   替代呈现）、备份完成时间（S8-T4 接线：最新 backup.completed 审计行，
+ *   尚无备份如实 null）。
  * - **失败类持久指标以审计行为唯一计数来源**（storage-model §5/§6 终态语义；
  *   不另立账本——重启不丢、与恢复对账同源）：pushes.failed/unresolved 取
  *   vault.push 终态行；web_submits.failed 取 vault.web_submit；validation.failed
@@ -96,6 +97,15 @@ export function registerMetricsRoutes(app: FastifyInstance, opts: MetricsRoutesO
     const auth = metricsCollector.authFailureSnapshot();
     const timing = metricsCollector.validationTimingSnapshot();
     const disk = opts.dataDir === undefined ? { wired: false } : await diskFace(opts.dataDir);
+    // S8-T4 接线（C2 定稿）：备份完成时间以审计行为唯一来源（与失败计数同一选型——
+    // 不另立账本），呈现最新 backup.completed 成功行的 occurred_at（backup §4 步骤 7）。
+    const lastBackup = opts.db
+      .prepare(
+        `SELECT occurred_at FROM audit_events
+         WHERE event_kind = 'backup.completed' AND status = 'succeeded'
+         ORDER BY id DESC LIMIT 1`,
+      )
+      .get() as { occurred_at: string } | undefined;
 
     reply.send({
       disk,
@@ -108,8 +118,9 @@ export function registerMetricsRoutes(app: FastifyInstance, opts: MetricsRoutesO
         last_at: auth.last_at,
       },
       backup: {
-        wired: false, // S8-T4 一致备份落地后接线（完成时间/产物状态）
-        last_completed_at: null,
+        // S8-T4 已接线：完成时间 = 最新 backup.completed 审计行（尚无备份 → 如实 null）
+        wired: true,
+        last_completed_at: lastBackup?.occurred_at ?? null,
       },
     });
   });

@@ -208,8 +208,9 @@ test('面形：架构 §10 最低清单字段齐备（磁盘分域/水位、失�
   assert.ok('failed' in f.web_submits);
   assert.ok('failed' in f.validation);
   assert.ok(f.validation.timing['web-submit'] && f.validation.timing['pre-receive'], '两判定 scope 的耗时分位齐备');
-  // 备份完成时间：T4 落地前预留（如实 null + 未接线标注）
-  assert.equal(f.backup.wired, false);
+  // 备份完成时间：S8-T4 接线（wired 恒 true；完成时间 = 最新 backup.completed
+  // 审计行——本测试无备份运行，如实 null；行到值的接线断言在 backup-run.test.ts）
+  assert.equal(f.backup.wired, true);
   assert.equal(f.backup.last_completed_at, null);
 });
 
