@@ -1,0 +1,77 @@
+[0.0s] S8-T1 首次初始化演练开始（port 39087，keep=false，no-build=false）
+[0.0s] ✓ 01 Docker 可用（server 29.5.2）
+[0.0s] ✓ 02 清场完成（上一轮容器/卷已移除）
+[0.2s] ✓ 03 镜像构建完成（0s；构建期断言已在镜像内执行）
+[0.3s] ✓ 04 容器已启动（notegit-s8t1-drill，卷 notegit-s8t1-drill-data）
+[6.4s] ✓ 05 健康检查通过（HEALTHCHECK=healthy + /healthz 200 {"status":"ok"}）
+[6.5s] ✓ 06 运行态抽检：非 root（uid=10001）、git-http-backend 在位、v24.21.0 / git version 2.54.0
+[6.6s] ✓ 07 管理员初始化完成（employee_id=1；token 文件已删，打印脱敏 HTuNVI…fI）
+[6.6s] ✓ 08 管理员登录成功（ngt_sid 会话建立）
+[6.6s] ✓ 09 员工 alice 已邀请（重置令牌脱敏 aNiM88…AM）
+[6.6s] ✓ 10 员工 alice 口令已设并登录（首页无管理入口）
+[6.6s] ✓ 11 库 team-kb 已创建（alice = 库管理员，默认分支 main）
+[6.6s] ✓ 12 Git 凭据已创建（明文仅一次，脱敏 ngt_K4…U4）
+[7.1s] ✓ 13 Git 通道冒烟通过（push main → ba73110c34…，pre-receive 校验链全过）
+[7.1s] ✓ 14 网页通道冒烟通过（列表可见、笔记可读、未认证被拒）
+[23.5s] ✓ 15 重启后数据仍在（账号/权限/历史/知识四项 + bootstrap 已永久关闭）
+[23.6s] ✓ 16 演练全链绿（15 步）。容器与卷已清理（--keep 可保留实例检查）
+[23.6s] S8-T1 首次初始化演练：PASS
+
+==== re-run (exit-code capture, --no-build, same frozen image) ====
+[0.0s] S8-T1 首次初始化演练开始（port 39087，keep=false，no-build=true）
+[0.0s] ✓ 01 Docker 可用（server 29.5.2）
+[0.0s] ✓ 02 清场完成（上一轮容器/卷已移除）
+[0.1s] ✓ 03 容器已启动（notegit-s8t1-drill，卷 notegit-s8t1-drill-data）
+[6.2s] ✓ 04 健康检查通过（HEALTHCHECK=healthy + /healthz 200 {"status":"ok"}）
+[6.3s] ✓ 05 运行态抽检：非 root（uid=10001）、git-http-backend 在位、v24.21.0 / git version 2.54.0
+[6.4s] ✓ 06 管理员初始化完成（employee_id=1；token 文件已删，打印脱敏 -61XYV…KY）
+[6.4s] ✓ 07 管理员登录成功（ngt_sid 会话建立）
+[6.4s] ✓ 08 员工 alice 已邀请（重置令牌脱敏 1Hi0rb…y4）
+[6.4s] ✓ 09 员工 alice 口令已设并登录（首页无管理入口）
+[6.4s] ✓ 10 库 team-kb 已创建（alice = 库管理员，默认分支 main）
+[6.4s] ✓ 11 Git 凭据已创建（明文仅一次，脱敏 ngt_fV…kE）
+[6.9s] ✓ 12 Git 通道冒烟通过（push main → ea01b51bd0…，pre-receive 校验链全过）
+[6.9s] ✓ 13 网页通道冒烟通过（列表可见、笔记可读、未认证被拒）
+[23.6s] ✓ 14 重启后数据仍在（账号/权限/历史/知识四项 + bootstrap 已永久关闭）
+[23.8s] ✓ 15 演练全链绿（14 步）。容器与卷已清理（--keep 可保留实例检查）
+[23.8s] S8-T1 首次初始化演练：PASS
+
+==== final-HEAD verification run (post materials commit, full build) ====
+[0.0s] S8-T1 首次初始化演练开始（port 39087，keep=false，no-build=false）
+[0.1s] ✓ 01 Docker 可用（server 29.5.2）
+[0.2s] ✓ 02 清场完成（上一轮容器/卷已移除）
+[0.9s] ✓ 03 镜像构建完成（1s；构建期断言已在镜像内执行）
+[1.2s] ✓ 04 容器已启动（notegit-s8t1-drill，卷 notegit-s8t1-drill-data）
+[7.4s] ✓ 05 健康检查通过（HEALTHCHECK=healthy + /healthz 200 {"status":"ok"}）
+[7.7s] ✓ 06 运行态抽检：非 root（uid=10001）、git-http-backend 在位、v24.21.0 / git version 2.54.0
+[7.9s] ✓ 07 管理员初始化完成（employee_id=1；token 文件已删，打印脱敏 gmVIE5…7I）
+[7.9s] ✓ 08 管理员登录成功（ngt_sid 会话建立）
+[8.0s] ✓ 09 员工 alice 已邀请（重置令牌脱敏 VJ_y0j…YA）
+[8.0s] ✓ 10 员工 alice 口令已设并登录（首页无管理入口）
+[8.0s] ✓ 11 库 team-kb 已创建（alice = 库管理员，默认分支 main）
+[8.0s] ✓ 12 Git 凭据已创建（明文仅一次，脱敏 ngt_Ok…kg）
+[9.7s] ✓ 13 Git 通道冒烟通过（push main → 003d581297…，pre-receive 校验链全过）
+[9.8s] ✓ 14 网页通道冒烟通过（列表可见、笔记可读、未认证被拒）
+[26.4s] ✓ 15 重启后数据仍在（账号/权限/历史/知识四项 + bootstrap 已永久关闭）
+[26.6s] ✓ 16 演练全链绿（15 步）。容器与卷已清理（--keep 可保留实例检查）
+[26.6s] S8-T1 首次初始化演练：PASS
+
+==== post-rebase combined-state run (sprint/S9 @ 6b726bf incl. S9-T5, full build) ====
+[0.0s] S8-T1 首次初始化演练开始（port 39087，keep=false，no-build=false）
+[0.0s] ✓ 01 Docker 可用（server 29.5.2）
+[0.0s] ✓ 02 清场完成（上一轮容器/卷已移除）
+[5.3s] ✓ 03 镜像构建完成（5s；构建期断言已在镜像内执行）
+[5.4s] ✓ 04 容器已启动（notegit-s8t1-drill，卷 notegit-s8t1-drill-data）
+[11.6s] ✓ 05 健康检查通过（HEALTHCHECK=healthy + /healthz 200 {"status":"ok"}）
+[11.7s] ✓ 06 运行态抽检：非 root（uid=10001）、git-http-backend 在位、v24.21.0 / git version 2.54.0
+[11.8s] ✓ 07 管理员初始化完成（employee_id=1；token 文件已删，打印脱敏 5hK_9-…cQ）
+[11.8s] ✓ 08 管理员登录成功（ngt_sid 会话建立）
+[11.8s] ✓ 09 员工 alice 已邀请（重置令牌脱敏 RLdgVK…nA）
+[11.8s] ✓ 10 员工 alice 口令已设并登录（首页无管理入口）
+[11.8s] ✓ 11 库 team-kb 已创建（alice = 库管理员，默认分支 main）
+[11.8s] ✓ 12 Git 凭据已创建（明文仅一次，脱敏 ngt_Nu…dE）
+[12.2s] ✓ 13 Git 通道冒烟通过（push main → 02ff07a06e…，pre-receive 校验链全过）
+[12.3s] ✓ 14 网页通道冒烟通过（列表可见、笔记可读、未认证被拒）
+[28.6s] ✓ 15 重启后数据仍在（账号/权限/历史/知识四项 + bootstrap 已永久关闭）
+[28.7s] ✓ 16 演练全链绿（15 步）。容器与卷已清理（--keep 可保留实例检查）
+[28.7s] S8-T1 首次初始化演练：PASS
