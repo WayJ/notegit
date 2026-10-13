@@ -49,6 +49,15 @@ export function viewUrl(slug: string, treePath: string): string {
   return `/vaults/${encodeURIComponent(slug)}/view/${treePath.split('/').map(encodeURIComponent).join('/')}`;
 }
 
+/** 整理操作入口（S4-T5：目录页最小可用——重命名表单页 / 删除确认页；GET 无写操作） */
+export function renameUrl(slug: string, treePath: string): string {
+  return `/vaults/${encodeURIComponent(slug)}/rename/${treePath.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+export function deleteUrl(slug: string, treePath: string): string {
+  return `/vaults/${encodeURIComponent(slug)}/delete/${treePath.split('/').map(encodeURIComponent).join('/')}`;
+}
+
 const TYPE_LABELS: Readonly<Record<string, string>> = { tree: '目录', blob: '文件', commit: '引用' };
 
 /** 面包屑：知识库 → 库根 → 逐级目录（当前段不加链接） */
@@ -82,7 +91,11 @@ export function browsePage(input: BrowsePageInput): string {
       const child = dirPath === '' ? e.name : `${dirPath}/${e.name}`;
       const label = escapeHtml(e.name) + (e.type === 'tree' ? '/' : '');
       const link = e.type === 'tree' ? `<a href="${browseUrl(vault.slug, child)}">${label}</a>` : e.type === 'blob' ? `<a href="${viewUrl(vault.slug, child)}">${label}</a>` : label;
-      return `  <li data-type="${e.type}" data-name="${escapeHtml(e.name)}"${e.size !== undefined ? ` data-size="${e.size}"` : ''}>${TYPE_LABELS[e.type]} ${link}</li>`;
+      // S4-T5：文件条目附整理操作入口（页面无写操作——写权限在 POST 提交时判定）
+      const ops = e.type === 'blob'
+        ? ` <span class="entry-ops">(<a href="${renameUrl(vault.slug, child)}">重命名</a> · <a href="${deleteUrl(vault.slug, child)}">删除</a>)</span>`
+        : '';
+      return `  <li data-type="${e.type}" data-name="${escapeHtml(e.name)}"${e.size !== undefined ? ` data-size="${e.size}"` : ''}>${TYPE_LABELS[e.type]} ${link}${ops}</li>`;
     })
     .join('\n');
   const readmeHtml =
