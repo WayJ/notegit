@@ -37,6 +37,19 @@ function nameOf(entryPath: string): string {
   return entryPath.includes('/') ? entryPath.slice(entryPath.lastIndexOf('/') + 1) : entryPath;
 }
 
+/** 文档所在目录（上传附件入口落点——S4-T8 T4 遗留收口） */
+function parentDirOf(entryPath: string): string {
+  const slash = entryPath.lastIndexOf('/');
+  return slash === -1 ? '' : entryPath.slice(0, slash);
+}
+
+/** 上传附件入口（编辑页头部：指向文档所在目录的上传页） */
+function uploadAttachmentLink(vault: { slug: string }, entryPath: string): string {
+  const dir = parentDirOf(entryPath);
+  const href = `/vaults/${encodeURIComponent(vault.slug)}/upload${dir === '' ? '' : '/' + dir.split('/').map(encodeURIComponent).join('/')}`;
+  return ` · <a href="${href}">上传附件</a>`;
+}
+
 export interface EditPageInput {
   readonly vault: { slug: string; name: string };
   readonly entryPath: string;
@@ -195,7 +208,7 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
     `${isNew ? '新建' : '编辑'}：${name} — ${vault.name}`,
     `<h1>${isNew ? '新建' : '编辑'}：${escapeHtml(name)}</h1>
 <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
-<p>类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${isNew ? (draft ? ' · <strong>新建</strong>' : ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）') : ''}</p>
+<p>类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath)}${isNew ? (draft ? ' · <strong>新建</strong>' : ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）') : ''}</p>
 ${draft ? draftNote(draft) : ''}
 <form id="edit-form">
 ${fieldRow('标题 <strong>（必填）</strong>', `<input name="title" required maxlength="200" value="${attr(prefill.fields.title)}">`, 'title')}
@@ -270,7 +283,7 @@ document.getElementById('readme-form').addEventListener('submit', async (ev) => 
     `编辑：${name} — ${vault.name}`,
     `<h1>编辑：${escapeHtml(name)}</h1>
 <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
-<p>类型：README 导航文档 · <strong>frontmatter 豁免</strong>（架构 §5.2——不套用六字段表单，正文直接编辑） · base commit：<code>${baseCommit === null ? '（空库）' : escapeHtml(baseCommit)}</code>${mode === 'new' ? ' · 新建' : ''}</p>
+<p>类型：README 导航文档 · <strong>frontmatter 豁免</strong>（架构 §5.2——不套用六字段表单，正文直接编辑） · base commit：<code>${baseCommit === null ? '（空库）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath)}${mode === 'new' ? ' · 新建' : ''}</p>
 ${draft ? draftNote(draft) : ''}
 <form id="readme-form">
 <label>正文（Markdown，多行纯文本）<br><textarea id="readme-body" name="body" rows="18">${escapeHtml(body)}</textarea></label>

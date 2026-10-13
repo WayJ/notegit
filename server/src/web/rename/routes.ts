@@ -11,6 +11,7 @@ import { vaultRepoPath } from '../../vaults/repo-path.ts';
 import { publishWebSubmit, type RejectedResult } from '../../publish/index.ts';
 import { execGit } from '../../publish/git-exec.ts';
 import { html, sendPageNotFound } from '../page-kit.ts';
+import { hintFor } from '../hints.ts';
 import { browseUrl, viewUrl } from '../browse/pages.ts';
 import { readEntryAt, treePathOk } from '../browse/tree.ts';
 import { renamePage, deleteConfirmPage, opStatePage, type OpNotice } from './pages.ts';
@@ -54,7 +55,8 @@ function statusOfStage(stage: RejectedResult['stage'], reason: string): number {
   return 500; // candidate/audit/update-ref/settle：组件内部失败（fail-closed，不发布）
 }
 
-/** 报告首个 error 级 issue → 表单 notice（E-FM 码 + 行定位——单文件变更取首个） */
+/** 报告首个 error 级 issue → 表单 notice（E-FM 码 + 行定位——单文件变更取首个；
+ *  S4-T8 统一提示：附修正建议 hint） */
 function firstErrorNotice(report: Report | undefined): OpNotice | undefined {
   if (report === undefined) return undefined;
   for (const file of report.files) {
@@ -64,10 +66,21 @@ function firstErrorNotice(report: Report | undefined): OpNotice | undefined {
         code: issue.code,
         message: issue.message,
         ...(issue.line !== undefined ? { line: issue.line } : {}),
+        ...(hintFor(issue.code) !== undefined ? { hint: hintFor(issue.code) } : {}),
       };
     }
   }
   return undefined;
+}
+
+/** 拒绝阶段 → 错误码（S4-T8 统一提示：api.md §1 注册码；同页不泄露额外信息——
+ *  404/403 形态不变，仅 notice 携带 code+hint） */
+function codeOfStage(stage: RejectedResult['stage'], reason: string): string | undefined {
+  if (stage === 'authorization') return 'E-RES-001';
+  if (stage === 'branch-rules') return 'E-AUTHZ-001';
+  if (stage === 'base-commit') return 'E-RES-003';
+  if (stage === 'execution-point') return reason.includes('维护') ? 'E-MAINT-001' : 'E-AUTHZ-001';
+  return undefined; // validation（取报告 issue 码）/ candidate·audit·update-ref·settle（无注册码——T7 注记不杜撰）
 }
 
 /** 服务端注入的提交身份（identity §8：同 upload 形态） */
@@ -164,7 +177,8 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     return sendPageNotFound(reply), null; // missing / not-found / no-commits：不存在（反存在性同页）
   }
 
-  /** 组件拒绝 → 表单/确认页回显（同页提示；状态码按阶段映射） */
+  /** 组件拒绝 → 表单/确认页回显（同页提示；状态码按阶段映射；S4-T8 统一提示
+   *  附错误码+修正建议——validation 取报告 issue 码，其余按阶段映射注册码） */
   function renderRejected(
     reply: FastifyReply,
     vault: { slug: string; name: string },
@@ -173,10 +187,15 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     path: string,
     to: string,
   ): FastifyReply {
+    const stageCode = codeOfStage(publish.stage, publish.reason);
     const notice: OpNotice =
       publish.stage === 'validation'
         ? (firstErrorNotice(publish.report) ?? { message: publish.reason })
-        : { message: publish.reason };
+        : {
+            message: publish.reason,
+            ...(stageCode !== undefined ? { code: stageCode } : {}),
+            ...(stageCode !== undefined && hintFor(stageCode) !== undefined ? { hint: hintFor(stageCode) } : {}),
+          };
     const status = statusOfStage(publish.stage, publish.reason);
     return reply.code(status).send(
       page === 'rename'

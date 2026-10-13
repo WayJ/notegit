@@ -35,13 +35,16 @@ export interface OpNotice {
   readonly message: string;
   /** 校验 issue 的行定位（E-FM 码映射——validation §6.2 fields） */
   readonly line?: number;
+  /** 修正建议（S4-T8 统一提示：错误码 → 行动指引，见 web/hints.ts） */
+  readonly hint?: string;
 }
 
 function noticeHtml(notice: OpNotice | undefined): string {
   if (notice === undefined) return '';
   const code = notice.code === undefined ? '' : `<code>${escapeHtml(notice.code)}</code> `;
   const line = notice.line === undefined ? '' : `（第 ${notice.line} 行）`;
-  return `<p class="op-error" role="alert"><strong>${code}</strong>${escapeHtml(notice.message)}${escapeHtml(line)}</p>`;
+  const hint = notice.hint === undefined ? '' : `<br><small>建议：${escapeHtml(notice.hint)}</small>`;
+  return `<p class="op-error" role="alert"><strong>${code}</strong>${escapeHtml(notice.message)}${escapeHtml(line)}${hint}</p>`;
 }
 
 export interface RenamePageInput {

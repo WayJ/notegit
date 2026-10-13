@@ -149,7 +149,7 @@ test('view：frontmatter 未闭合不崩溃，按正文如实渲染（lenient �
   }
 });
 
-test('view：非 Markdown 如实标注——图片附件指向鉴权通道占位（S4-T4 接口）', async () => {
+test('view：非 Markdown 如实标注——图片附件经鉴权通道嵌入（S4-T8 直开页收口）', async () => {
   const h = await browseHarness();
   try {
     const alice = addEmployee(h.db, { username: 'alice' });
@@ -160,7 +160,8 @@ test('view：非 Markdown 如实标注——图片附件指向鉴权通道占位
     assert.ok(res.body.includes('logo.png'), '文件名元信息');
     assert.ok(/大小：\d+ 字节/.test(res.body), '大小元信息');
     assert.ok(res.body.includes('附件'), '图片附件如实标注附件通道');
-    assert.ok(res.body.includes('S4-T4'), '指向附件路由任务（接口占位）');
+    // S4-T8：占位退役——直开页以 blob 寻址鉴权 URL 嵌 <img>
+    assert.ok(/<img src="\/vaults\/alpha\/attach\/[0-9a-f]{40}\/logo\.png"/.test(res.body), '嵌鉴权附件通道 URL');
     assert.ok(!res.body.includes('<article'), '非 Markdown 不渲染正文区');
   } finally {
     await h.close();
