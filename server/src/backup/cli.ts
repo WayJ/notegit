@@ -6,10 +6,12 @@ import { runBackup, httpMaintenanceControl } from './run.ts';
 import { DEFAULT_FSCK_SAMPLE_SIZE } from './snapshot.ts';
 import { verifyBackupSet } from './verify.ts';
 import { restoreOffline, restoreFinalize } from './restore.ts';
+import { preUpgradeBackup, enforcePreUpgradeBackupGate, verifyUpgradeMigration, UpgradeError } from './upgrade.ts';
 
 /**
- * 备份/恢复 CLI 入口（S8-T4 备份；S8-T5 恢复。备份触发 = 脚本模式——运行形态与
- * 理由见 docs/s1/backup-face-amendments.md B1；恢复运行手册见 restore-face-amendments）。
+ * 备份/恢复/升级 CLI 入口（S8-T4 备份；S8-T5 恢复；S8-T7 升级。备份触发 = 脚本
+ * 模式——运行形态与理由见 docs/s1/backup-face-amendments.md B1；恢复运行手册见
+ * restore-face-amendments；升级运行手册见 upgrade-face-amendments）。
  *
  * 用法（容器内 WORKDIR=/app/server；主机侧同仓 `node src/backup/cli.ts`）：
  *
@@ -27,18 +29,35 @@ import { restoreOffline, restoreFinalize } from './restore.ts';
  *   node src/backup/cli.ts finalize --data-dir /data --url http://127.0.0.1:3000 \
  *     --token-file <file>
  *
+ *   node src/backup/cli.ts upgrade pre-backup --data-dir /data --out /backup \
+ *     --url http://127.0.0.1:3000 --token-file <file> [--keys-out <dir>] \
+ *     [--drain-timeout-ms 300000] [--fsck sample|sample:N|all|none]
+ *   node src/backup/cli.ts upgrade gate --data-item <升级前备份数据件目录> \
+ *     [--keys-item <密钥件目录>] [--skip-pre-upgrade-backup（必被拒——D-BR-08 断言位）]
+ *   node src/backup/cli.ts upgrade post --data-dir /data --url http://127.0.0.1:3000 \
+ *     --token-file <file>
+ *
  * 恢复流程（backup-recovery §7 十步，S8-T5 两相位）：restore（离线：pre-verify
  * 复用 T4 离线验证 → 目标全新 → 版本兼容 → §7 顺序装载 → 装载后完整性）→
  * 以 NOTEGIT_MAINTENANCE_ON_START=1 启动实例（§7 步骤 1）→ finalize（维护内：
  * §7 步骤 7 只读对账 + 步骤 9 触发 S5-T5 全量重建；不退出维护）→ §8 R1–R14
  * 清单全绿 → 显式退出维护（§7 步骤 10）。
  *
+ * 升级流程（backup-recovery §9，S8-T7）：upgrade pre-backup（开维护→排空→快照；
+ * **维护不关闭**）→ upgrade gate（D-BR-08：无/假/跳过备份证据必拒；可信证据 =
+ * T4 离线验证全绿）→ 换镜像 → 以 NOTEGIT_MAINTENANCE_ON_START=1 启动（自动
+ * 迁移随启动执行）→ upgrade post（维护断言 + schema_version 有序可重入核对）→
+ * 恢复对账（src/audit/reconcile-cli.ts）→ 冒烟 → 显式退出维护。回退 = 恢复
+ * 升级前备份（restore 两相位），不做 schema 降级（D-BR-05）。
+ *
  * 凭据卫生：管理令牌只接受 --token-file 或 NOTEGIT_ADMIN_TOKEN 环境变量（argv
  * 明文在 ps/历史里可见，不提供）；输出一律不含令牌。
  */
 
 export interface ParsedArgs {
-  command: 'backup' | 'verify' | 'restore' | 'finalize';
+  command: 'backup' | 'verify' | 'restore' | 'finalize' | 'upgrade';
+  /** upgrade：相位（pre-backup | gate | post） */
+  phase?: 'pre-backup' | 'gate' | 'post';
   /** backup/finalize/restore：实例数据目录（restore 为目标目录）；verify：数据件目录 */
   dataDir?: string;
   dataItem?: string;
@@ -52,6 +71,8 @@ export interface ParsedArgs {
   /** backup：fsck 抽样形态；verify：全量 fsck 复核开关 */
   fsck?: { mode: 'sample' | 'all' | 'none'; sampleSize?: number } | boolean;
   forceAfterDrainTimeout?: boolean;
+  /** upgrade gate：显式跳过请求——解析面可表达，执行面必拒（D-BR-08） */
+  skipPreBackup?: boolean;
 }
 
 const USAGE = `用法：
@@ -63,6 +84,14 @@ const USAGE = `用法：
         （离线相位：装载前复用离线验证；目标四域须全新——§7 步骤 2–6）
   node src/backup/cli.ts finalize --data-dir /data --url http://127.0.0.1:3000 --token-file <file>
         （实例侧相位：实例以 NOTEGIT_MAINTENANCE_ON_START=1 启动后执行——§7 步骤 7/9）
+  node src/backup/cli.ts upgrade pre-backup --data-dir /data --out /backup --url http://127.0.0.1:3000 \\
+        --token-file <file> [--keys-out <dir>] [--drain-timeout-ms 300000] \\
+        [--fsck sample|sample:N|all|none]
+        （§9 升级前一致备份：开闸→排空→快照；维护保持开启——升级继续）
+  node src/backup/cli.ts upgrade gate --data-item <升级前备份数据件目录> [--keys-item <密钥件目录>]
+        （D-BR-08 强制面：无/假/跳过（--skip-pre-upgrade-backup）备份证据必拒）
+  node src/backup/cli.ts upgrade post --data-dir /data --url http://127.0.0.1:3000 --token-file <file>
+        （新版本以 NOTEGIT_MAINTENANCE_ON_START=1 启动后：维护断言 + 迁移核对）
 令牌来源：--token-file 或环境变量 NOTEGIT_ADMIN_TOKEN（不接受 argv 明文）。`;
 
 function parseFsck(value: string): { mode: 'sample' | 'all' | 'none'; sampleSize?: number } {
@@ -82,12 +111,90 @@ const COMMAND_FLAGS: Readonly<Record<'backup' | 'verify' | 'restore' | 'finalize
   finalize: new Set(['--data-dir', '--url', '--token-file']),
 };
 
+/** upgrade 各相位接受的值参数（pre-backup 无 --force-drain-timeout：升级前备份是回退唯一依据，无「显式继续」异常通道） */
+const UPGRADE_PHASE_FLAGS: Readonly<Record<'pre-backup' | 'gate' | 'post', ReadonlySet<string>>> = {
+  'pre-backup': new Set(['--data-dir', '--out', '--keys-out', '--url', '--token-file', '--drain-timeout-ms', '--fsck']),
+  gate: new Set(['--data-item', '--keys-item']),
+  post: new Set(['--data-dir', '--url', '--token-file']),
+};
+
 /** 参数解析（纯函数；执行面在 main——测试直接消费本函数） */
 export function parseBackupArgs(argv: readonly string[]): ParsedArgs {
   const [command, ...rest] = argv;
-  if (command !== 'backup' && command !== 'verify' && command !== 'restore' && command !== 'finalize') {
+  if (command !== 'backup' && command !== 'verify' && command !== 'restore' && command !== 'finalize' && command !== 'upgrade') {
     throw new Error(`未知子命令「${command ?? '(空)'}」\n${USAGE}`);
   }
+
+  // upgrade：<相位> + 相位专属参数集（结构同前：未知相位/参数即拒）
+  if (command === 'upgrade') {
+    const [phase, ...phaseRest] = rest;
+    if (phase !== 'pre-backup' && phase !== 'gate' && phase !== 'post') {
+      throw new Error(`未知 upgrade 相位「${phase ?? '(空)'}」（可用 pre-backup | gate | post）\n${USAGE}`);
+    }
+    const known = UPGRADE_PHASE_FLAGS[phase];
+    const flags = new Map<string, string>();
+    let skipPreBackup = false;
+    for (let i = 0; i < phaseRest.length; i++) {
+      const arg = phaseRest[i]!;
+      if (arg === '--skip-pre-upgrade-backup' && phase === 'gate') {
+        skipPreBackup = true; // 解析面可表达——执行面必拒（D-BR-08 断言位）
+        continue;
+      }
+      if (!arg.startsWith('--')) throw new Error(`未知参数「${arg}」\n${USAGE}`);
+      if (!known.has(arg)) throw new Error(`未知参数「${arg}」（upgrade ${phase} 不接受）\n${USAGE}`);
+      const value = phaseRest[i + 1];
+      if (value === undefined) throw new Error(`参数 ${arg} 缺值\n${USAGE}`);
+      flags.set(arg, value);
+      i++;
+    }
+    if (phase === 'pre-backup') {
+      const dataDir = flags.get('--data-dir');
+      const out = flags.get('--out');
+      const url = flags.get('--url');
+      if (!dataDir) throw new Error('upgrade pre-backup 需要 --data-dir <实例数据目录>\n' + USAGE);
+      if (!out) throw new Error('upgrade pre-backup 需要 --out <备份输出根目录>\n' + USAGE);
+      if (!url) throw new Error('upgrade pre-backup 需要 --url <实例基地址>（维护端点经实例——backup §3）\n' + USAGE);
+      const tokenFile = flags.get('--token-file');
+      const envToken = process.env.NOTEGIT_ADMIN_TOKEN;
+      if (tokenFile === undefined && (envToken === undefined || envToken.length === 0)) {
+        throw new Error('缺少管理令牌来源：--token-file <file> 或环境变量 NOTEGIT_ADMIN_TOKEN\n' + USAGE);
+      }
+      const drainRaw = flags.get('--drain-timeout-ms');
+      const drainTimeoutMs = drainRaw === undefined ? DRAIN_TIMEOUT_DEFAULT_MS : Number(drainRaw);
+      if (!Number.isFinite(drainTimeoutMs) || drainTimeoutMs <= 0) {
+        throw new Error(`--drain-timeout-ms 形态非法：${drainRaw}`);
+      }
+      const fsckRaw = flags.get('--fsck');
+      return {
+        command,
+        phase,
+        dataDir,
+        out,
+        url,
+        tokenFile,
+        envToken,
+        drainTimeoutMs,
+        fsck: fsckRaw === undefined ? { mode: 'sample', sampleSize: DEFAULT_FSCK_SAMPLE_SIZE } : parseFsck(fsckRaw),
+      };
+    }
+    if (phase === 'post') {
+      const dataDir = flags.get('--data-dir');
+      const url = flags.get('--url');
+      if (!dataDir) throw new Error('upgrade post 需要 --data-dir <实例数据目录>\n' + USAGE);
+      if (!url) throw new Error('upgrade post 需要 --url <实例基地址>（维护态断言经实例端点——backup §3）\n' + USAGE);
+      const tokenFile = flags.get('--token-file');
+      const envToken = process.env.NOTEGIT_ADMIN_TOKEN;
+      if (tokenFile === undefined && (envToken === undefined || envToken.length === 0)) {
+        throw new Error('缺少管理令牌来源：--token-file <file> 或环境变量 NOTEGIT_ADMIN_TOKEN\n' + USAGE);
+      }
+      return { command, phase, dataDir, url, tokenFile, envToken };
+    }
+    const dataItem = flags.get('--data-item');
+    // gate 相位不强制 --data-item：无证据/跳过同为 D-BR-08 拒绝面，统一在执行面
+    // （enforcePreUpgradeBackupGate）以同一族文案拒绝——解析只认形不判据。
+    return { command, phase, dataItem, keysItem: flags.get('--keys-item'), skipPreBackup };
+  }
+
   const flags = new Map<string, string>();
   const bools = new Set<string>();
   const known = COMMAND_FLAGS[command];
@@ -176,6 +283,9 @@ export function parseBackupArgs(argv: readonly string[]): ParsedArgs {
 /** CLI 主入口（返回进程退出码；打印不含令牌材料） */
 export async function main(argv: readonly string[]): Promise<number> {
   const args = parseBackupArgs(argv);
+  if (args.command === 'upgrade') {
+    return runUpgradeSubcommand(args);
+  }
   if (args.command === 'restore' || args.command === 'finalize') {
     return runRestoreSubcommand(args);
   }
@@ -222,8 +332,89 @@ export async function main(argv: readonly string[]): Promise<number> {
   return res.ok ? 0 : 1;
 }
 
-/** restore / finalize 执行面（§7 两相位——runbook 见文件头注释） */
-async function runRestoreSubcommand(args: ParsedArgs): Promise<number> {
+/** upgrade 三相位执行面（§9——runbook 见文件头注释；拒绝一律退出 1 并点名 D-BR-08/stage） */
+async function runUpgradeSubcommand(args: ParsedArgs): Promise<number> {
+  if (args.phase === 'pre-backup') {
+    const token = args.tokenFile !== undefined ? (await readFile(args.tokenFile, 'utf8')).trim() : args.envToken!;
+    const control = httpMaintenanceControl({ baseUrl: args.url!, token });
+    const db = openDatabase(path.join(args.dataDir!, 'db', 'notegit.sqlite')); // 独立连接（backup 同款约定）
+    try {
+      const result = await preUpgradeBackup({
+        db,
+        dataDir: args.dataDir!,
+        outRoot: args.out!,
+        ...(args.keysOut !== undefined ? { keysOutRoot: args.keysOut } : {}),
+        control,
+        ...(args.drainTimeoutMs !== undefined ? { drainTimeoutMs: args.drainTimeoutMs } : {}),
+        ...(args.fsck !== undefined && typeof args.fsck === 'object' ? { fsck: args.fsck } : {}),
+      });
+      console.log(`升级前备份完成：backup_id=${result.manifest.backup_id}（schema v${result.manifest.db.schema_version}）`);
+      console.log(`  数据件：${result.dataItemDir}`);
+      console.log(`  密钥件：${result.keysItemDir}（回退唯一依据——分置独立介质保管）`);
+      console.log(
+        `  库数：${result.manifest.vault_count}；排空：${result.manifest.drain.outcome}（${result.manifest.drain.waited_ms}ms）；fsck：${result.manifest.fsck.checked.length} 库`,
+      );
+      console.log('维护模式保持开启（§9 升级全程维护——换镜像/迁移/冒烟/对账仍在维护内）。');
+      console.log('下一步（backup §9 升级流程）：');
+      console.log(`  1. node src/backup/cli.ts upgrade gate --data-item ${result.dataItemDir}（D-BR-08 核验放行）`);
+      console.log('  2. 更新镜像 → 以 NOTEGIT_MAINTENANCE_ON_START=1 启动新版本（自动迁移随启动执行）');
+      console.log(`  3. node src/backup/cli.ts upgrade post --data-dir ${args.dataDir} --url ${args.url} --token-file <file>`);
+      console.log('  4. node src/audit/reconcile-cli.ts reconcile --data-dir <dir> --url <url> --token-file <file>（§7 步骤 7 对账）');
+      console.log('  5. 冒烟（healthz/关键读面；退出维护后一次 push 与网页提交）→ 全绿后显式退出维护');
+      return 0;
+    } finally {
+      db.close();
+    }
+  }
+
+  if (args.phase === 'gate') {
+    try {
+      const gate = await enforcePreUpgradeBackupGate({
+        ...(args.skipPreBackup === true ? { skipBackup: true } : {}),
+        ...(args.dataItem !== undefined ? { dataItemDir: args.dataItem } : {}),
+        ...(args.keysItem !== undefined ? { keysItemDir: args.keysItem } : {}),
+      });
+      const m = gate.manifest;
+      console.log(`✓ 升级前备份证据放行（D-BR-08）：backup_id=${m.backup_id}`);
+      console.log(`  schema v${m.db.schema_version}（≤ 当前镜像）；库数 ${m.vault_count}；完成于 ${m.time.completed_at}`);
+      console.log('可继续 §9 升级：更新镜像 → NOTEGIT_MAINTENANCE_ON_START=1 启动 → upgrade post。');
+      return 0;
+    } catch (err) {
+      if (err instanceof UpgradeError) {
+        console.error(`✗ 升级被拒（${err.stage}）：${err.message}`);
+        return 1;
+      }
+      throw err;
+    }
+  }
+
+  // post：新版本启动后的核对面（维护 fail-closed + 迁移形态）
+  const token = args.tokenFile !== undefined ? (await readFile(args.tokenFile, 'utf8')).trim() : args.envToken!;
+  const control = httpMaintenanceControl({ baseUrl: args.url!, token });
+  try {
+    await control.healthCheck();
+    if (!(await control.isEnabled())) {
+      console.error(
+        '✗ 升级后核对被拒（maintenance）：新版本必须仍处维护模式（NOTEGIT_MAINTENANCE_ON_START=1 启动）——§9 顺序为迁移→冒烟→对账→显式退出维护，先退维护即违序',
+      );
+      return 1;
+    }
+    const state = await verifyUpgradeMigration(args.dataDir!);
+    const latest = state.rows[state.rows.length - 1]!;
+    console.log(`✓ 迁移核对通过：schema_version 1..${state.maxApplied} 连续无缺（当前镜像终点 v${state.currentVersion}）`);
+    console.log(`  末版迁移 v${latest.version} applied_at=${latest.applied_at}（${latest.description.slice(0, 60)}）`);
+    console.log('实例仍处维护模式。下一步（§9）：reconcile-cli 对账 → 冒烟 → 显式退出维护（DELETE /api/v1/admin/maintenance）。');
+    return 0;
+  } catch (err) {
+    if (err instanceof UpgradeError) {
+      console.error(`✗ 升级后核对未过（${err.stage}）：${err.message}`);
+      return 1;
+    }
+    throw err;
+  }
+}
+
+/** restore / finalize 执行面（§7 两相位——runbook 见文件头注释） */async function runRestoreSubcommand(args: ParsedArgs): Promise<number> {
   if (args.command === 'restore') {
     const result = await restoreOffline({
       dataItemDir: args.dataItem!,

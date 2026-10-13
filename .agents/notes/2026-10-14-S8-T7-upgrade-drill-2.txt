@@ -1,0 +1,66 @@
+[0.0s] S8-T7 升级迁移与回退演练开始（port 39091，keep=false，no-build=false）
+[0.0s] ✓ 01 前置就绪（Docker server 29.5.2；宿主 v24.21.0）
+[0.1s] ✓ 02 清场完成（src/new/roll 三容器与三卷已移除）
+[0.2s] ✓ 03 镜像构建完成（0s；upgrade 三相位 CLI 随 server/ 树入镜像）
+[6.4s] ✓ 04 种子实例就绪（notegit-s8t7-src；健康检查通过）
+[6.5s] ✓ 05 管理员初始化完成（bootstrap 令牌脱敏 y0caFn…d4）
+[6.6s] ✓ 06 员工就位（alice、bob——经邀请+重置+登录真实链）
+[6.6s] ✓ 07 库就位（team-kb：alice=admin/bob=reader；bob-private：仅 bob——两不同成员集）
+[6.6s] ✓ 08 凭据矩阵就位（alice-RW/bob-RO/bob-RW/管理员/已撤销，脱敏 ngt_0z…Ss 等）
+[7.4s] ✓ 09 Git 播种完成（team-kb 2 commit、bob-private 1 commit；pre 态 HEAD 2de789c75c… / d8e7f489c7…）
+[7.4s] ✓ 10 未发布草稿就位（notes/draft-upgrade-drill.md）
+[7.5s] ✓ 11 pre 态指纹记录（员工 3、库 2、成功发布 2、草稿 1、schema 1..9、检索命中在位）
+[7.5s] ✓ 12 §9 开维护完成（enabled=true；业务写 503 E-MAINT-001；登录读放行）
+[7.6s] ✓ 13 负路径 A：upgrade gate --skip-pre-upgrade-backup → 拒绝（D-BR-08 升级前备份强制——跳过无门）
+[7.7s] ✓ 14 负路径 B：upgrade gate（无 --data-item 证据）→ 拒绝（未完成备份不得升级）
+    │ 升级前备份完成：backup_id=20261013T174007Z（schema v9）
+    │   数据件：/backup/20261013T174007Z-data
+    │   密钥件：/backup/20261013T174007Z-keys（回退唯一依据——分置独立介质保管）
+    │   库数：2；排空：drained（0ms）；fsck：2 库
+    │ 维护模式保持开启（§9 升级全程维护——换镜像/迁移/冒烟/对账仍在维护内）。
+    │ 下一步（backup §9 升级流程）：
+    │   1. node src/backup/cli.ts upgrade gate --data-item /backup/20261013T174007Z-data（D-BR-08 核验放行）
+    │   2. 更新镜像 → 以 NOTEGIT_MAINTENANCE_ON_START=1 启动新版本（自动迁移随启动执行）
+    │   3. node src/backup/cli.ts upgrade post --data-dir /data --url http://127.0.0.1:3000 --token-file <file>
+    │   4. node src/audit/reconcile-cli.ts reconcile --data-dir <dir> --url <url> --token-file <file>（§7 步骤 7 对账）
+    │   5. 冒烟（healthz/关键读面；退出维护后一次 push 与网页提交）→ 全绿后显式退出维护
+[8.0s] ✓ 15 升级前一致备份完成（两件 20261013T174007Z-data + 20261013T174007Z-keys；manifest 双库 HEAD=pre 态；维护保持开启；backup.completed 在案）
+[8.1s] ✓ 16 gate 放行（T4 离线验证复算全绿——升级可继续 §9）
+[18.8s] ✓ 17 旧版库构造完成（schema 9→8 手术：迁移 9 行删除 + search 两表 DROP + 触发器复原；业务数据 {员工 3, 库 2, push 2} 零改动——「旧版本实例」就位）
+    │ ✓ 迁移核对通过：schema_version 1..9 连续无缺（当前镜像终点 v9）
+    │   末版迁移 v9 applied_at=2026-10-13T17:40:18.678Z（S5-T3: search_index + search_index_state — derived metadata ）
+    │ 实例仍处维护模式。下一步（§9）：reconcile-cli 对账 → 冒烟 → 显式退出维护（DELETE /api/v1/admin/maintenance）。
+[25.8s] ✓ 18 新版本启动自动迁移完成（8→9 前向：行 9 applied_at=2026-10-13T17:40:18.678Z；upgrade post 核对通过：1..9 连续无缺）
+[42.9s] ✓ 19 可重入复核（重启后已应用版本跳过：行数与 applied_at 逐字不变；upgrade post 复跑通过）
+[43.0s] ✓ 20 维护内冒烟（healthz；登录/库列表/Alpha 查看/草稿读全绿；写仍 503——冒烟写面待退出维护）
+    │ 汇总：定终态 0（成功 0 / 拒绝 0）、残留 0、成链违例引用 0、孤儿仓库 0、缺失目录 0 → 全部通过
+    │ 维护：起算已断言 true、收尾仍处维护 true——退出维护走维护端点（backup §7 步骤 10），本命令不退。
+[43.5s] ✓ 21 T6 恢复对账通过（维护内执行：定终态 0、残留 0、成链 0 违例、无孤儿——升级未破引用-审计一致）
+[44.1s] ✓ 22 派生索引全量重建完成（升级后检索命中 Alpha；无权库不泄露——迁移新表自空场重建的实证）
+[44.1s] ✓ 23 退出维护完成（显式 DELETE；升级主流程收束）
+[45.2s] ✓ 24 冒烟写面（升级后一次 push FF + 一次网页提交 201；审计行 2→4）——升级演练主链全绿
+    │ ✓ pre-verify — T4 离线验证 10 项全过（恢复侧复用）
+    │ ✓ target-fresh — /data
+    │ ✓ version-compat — schema 9→同版
+    │ ✓ config-restored — §7 步骤 2（K3/K4 属部署层记录，随密钥件同置保管——B6 口径）
+    │ ✓ keys-restored — §7 步骤 3（含迁移期 retired 条目；0600/0700 已强制）
+    │ ✓ db-restored — §7 步骤 4（引擎快照回灌——VACUUM INTO 产物为独立文件，无 WAL 伴生）
+    │ ✓ git-restored — §7 步骤 5（2 库，保留权限与时间戳）
+    │ ✓ post-load-hashes — 两件 58 文件装载复算一致
+    │ ✓ post-load-head-oid — 2 库装载后与 manifest 一致
+    │ ✓ post-load-db-integrity — integrity ok；2 库行互证一致
+    │ 离线装载完成：backup_id=20261013T174007Z（2 库）→ /data
+    │ 下一步（backup §7）：
+    │   1. 以维护态启动实例：NOTEGIT_MAINTENANCE_ON_START=1（数据目录 /data）
+    │   2. node src/backup/cli.ts finalize --data-dir /data --url http://127.0.0.1:3000 --token-file <恢复实例的管理员令牌>
+    │   3. §8 R1–R14 恢复验证清单全绿后，显式退出维护（DELETE /api/v1/admin/maintenance）
+[46.5s] ✓ 25 回退离线装载完成（T5 restore 复用：升级前备份 20261013T174007Z-data → 全新卷 notegit-s8t7-roll-data，十项核对全绿）
+[47.6s] ✓ 26 回退实例维护态启动（管理员令牌可用；enabled=true）
+[48.1s] ✓ 27 回退版本核对（schema 1..9 == manifest v9；无降级路径被触发——回退=恢复，D-BR-05）
+[48.4s] ✓ 28 回退实例 T6 对账通过（引用-审计成链一致——备份点状态自洽）
+[48.8s] ✓ 29 业务数据零损失 @备份点（双库 HEAD/员工/库/审计/草稿/凭据全==pre 态；升级窗口发布随回退退场——回退语义）
+[48.9s] ✓ 30 运维行/会话丢弃口径实证（backup.completed 与窗口会话随回退消失；备份点前的 enable 行保留——§9 属预期而非损失）
+[49.5s] ✓ 31 回退实例索引重建 + 退出维护（检索命中恢复；回退流程收束）
+[50.2s] ✓ 32 回退后可写冒烟（一次网页提交 201 + 一次 push FF）——回退演练全链绿
+[50.5s] ✓ 33 演练全链绿（32 步；§9 升级+回退全链 + D-BR-08 负路径 ×2 + 跨版本 8→9 + 可重入）。容器与卷已清理（--keep 可保留检查）
+[50.5s] S8-T7 升级迁移与回退演练：PASS
