@@ -1,0 +1,110 @@
+[  1.2s] S9-T5 双 Harness 收口演练开始（实例 http://127.0.0.1:58468；数据目录 /var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/ngt-s9t5-ZcuZyz/server-data）
+[  1.3s] │ $ NOTEGIT_TOKEN=ngt_PTlF…4Q notegit login http://127.0.0.1:58468 --username alice
+[  1.3s] │ 已登录 alice@127.0.0.1:58468（凭据 ngt_PT…ts4Q）
+[  1.3s] │ 凭据已保存（权限 0600）：/var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/ngt-s9t5-ZcuZyz/laptop/credentials
+[  1.3s] │ 已注册 Git credential helper：credential.http://127.0.0.1:58468.helper
+[  1.3s] │ 现在可免交互访问：git ls-remote http://127.0.0.1:58468/<vault>.git
+[  1.3s] ✓ L1 login：令牌经环境变量，免交互成功，输出无明文令牌
+[  1.3s] │ $ notegit ls --json
+[  1.3s] │ {
+[  1.3s] │   "server": "http://127.0.0.1:58468",
+[  1.3s] │   "local_root": "/var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/ngt-s9t5-ZcuZyz/laptop/knowbase",
+[  1.3s] │   "vaults": [
+[  1.3s] │     {
+[  1.3s] │       "slug": "v-handbook",
+[  1.3s] │       "name": "员工手册",
+[  1.3s] │       "role": "editor",
+[  1.3s] │       "default_branch": "main",
+[  1.3s] │       "main_admin_only": false,
+[  1.3s] │       "clone_url": "http://127.0.0.1:58468/git/v-handbook.git",
+[  1.3s] │       "local": {
+[  1.3s] │         "path": null,
+[  1.3s] │         "status": "not_cloned",
+[  1.3s] │         "head": null,
+[  1.3s] │         "remote_tip": null,
+[  1.3s] │         "last_sync": null
+[  1.3s] │       }
+[  1.3s] │     }
+[  1.3s] │   ]
+[  1.3s] │ }
+[  1.3s] ✓ L2 ls --json：列出授权库，本地状态 not_cloned（同步前）
+[  1.6s] │ $ notegit sync
+[  1.6s] │ v-handbook：已克隆（HEAD af43da4）→ /var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/ngt-s9t5-ZcuZyz/laptop/knowbase/v-handbook
+[  1.6s] │ 同步完成：共 1 库（成功 1、跳过 0、失败 0）
+[  1.6s] ✓ L3 sync：完整克隆到 <根>/<slug>，HEAD 与服务端种子一致
+[  1.8s] │ $ notegit ls --json   # local.status: not_cloned → cloned
+[  1.8s] │ local.status: not_cloned → cloned
+[  1.8s] ✓ L4 ls --json：同步后状态 cloned（幂等复看）
+[  1.8s] │ 引用：v-handbook / docs/getting-started.md @ af43da4（af43da41e74c6611e1fa700f9956e0d042d4f912）
+[  1.8s] │ $ git show af43da41e74c6611e1fa700f9956e0d042d4f912:docs/getting-started.md → 与种子逐字一致（32 字节）
+[  1.8s] ✓ L5 引用取回：库/路径/commit 三要素解析到种子内容（架构 §7.1）
+[  1.8s] │ $ git add . && git diff --cached --stat
+[  1.8s] │ docs/getting-started.md | 5 +++++
+[  1.8s] │  notes/local-edit.md     | 5 +++++
+[  1.8s] │  2 files changed, 10 insertions(+)
+[  1.9s] │ $ notegit lint --staged   # exit 0
+[  1.9s] │ notegit lint --staged（scope=pre-commit，规则版本 1.0.0-draft.2）
+[  1.9s] │ 
+[  1.9s] │ docs/getting-started.md：通过
+[  1.9s] │   警告 W-FM-101 docs/getting-started.md：可选字段 owner 缺失；不影响提交
+[  1.9s] │   警告 W-FM-101 docs/getting-started.md：可选字段 description 缺失；不影响提交
+[  1.9s] │   警告 W-FM-101 docs/getting-started.md：可选字段 source 缺失；不影响提交
+[  1.9s] │ notes/local-edit.md：通过
+[  1.9s] │   警告 W-FM-101 notes/local-edit.md：可选字段 owner 缺失；不影响提交
+[  1.9s] │   警告 W-FM-101 notes/local-edit.md：可选字段 description 缺失；不影响提交
+[  1.9s] │   警告 W-FM-101 notes/local-edit.md：可选字段 source 缺失；不影响提交
+[  1.9s] │ 
+[  1.9s] │ 小结：2 个文件，0 个未通过，0 个错误，6 个警告
+[  1.9s] ✓ L6 本地修改：改既有文档 + 新增 notes/local-edit.md，lint --staged 通过后提交
+[  2.6s] │ $ git push origin main
+[  2.6s] │ remote: [notegit pre-receive] employee=2 v-handbook：1 个 ref 命令全部通过（rulesVersion=1.0.0-draft.2，files=2）        
+[  2.6s] │ To http://127.0.0.1:58468/git/v-handbook.git
+[  2.6s] │    af43da4..0dcfbfd  main -> main
+[  2.6s] │ 服务端 tip = 本地 HEAD 0dcfbfd（ls-remote 核对一致）
+[  2.6s] ✓ L7 push：git push origin main 经 credential helper 免交互成功，服务端 tip 前进；令牌不进 URL/输出
+[  2.6s] │ $ GET /vaults/v-handbook/browse/notes/（alice 网页会话）→ 200，页面含 local-edit.md
+[  2.6s] ✓ L8 网页通道核对：浏览页可见 Git 通道发布的新文件（Web 看 Git）
+[  2.9s] │ $ POST /api/v1/vaults/v-handbook/submissions {base_commit: 0dcfbfd, changes: [notes/from-web.md]} → 201
+[  2.9s] │ 服务端 tip 0dcfbfd → aebbbfc
+[  2.9s] ✓ L9 网页通道提交：POST submissions（base_commit=当前 tip）发布新文档
+[  3.4s] │ $ notegit sync
+[  3.4s] │ v-handbook：已快进 0dcfbfd → aebbbfc
+[  3.4s] │ 同步完成：共 1 库（成功 1、跳过 0、失败 0）
+[  3.4s] ✓ L10 再 sync：快进到网页提交，本地副本出现网页通道内容（Git 看 Web——双通道闭环）
+[  3.4s] │ 引用：v-handbook / notes/from-web.md @ aebbbfc（aebbbfc81704e580862e51e72c04289afeec40cd）→ git show 解析一致
+[  3.4s] ✓ L11 新引用取回：库/路径/commit 指向网页提交可解析（引用随内容演进不失效）
+[  6.5s] │ 布局（runbook §1）：employees/ 0755；alice/、bob/ 各含 credentials + knowbase/
+[  6.5s] │ 会话环境仅三变量隔离：NOTEGIT_LOCAL_ROOT / NOTEGIT_CREDENTIALS_FILE / NOTEGIT_TOKEN（HOME 与 git 全局配置共享——同一 OS 账号）
+[  6.5s] ✓ H0 世界：两员工三库两成员集（alice 专属 / bob 专属 / 共享 team-docs）就位
+[  6.7s] │ $ notegit login … --username alice → credentials 0600 @ <演练根>/hosted/employees/alice/credentials
+[  6.7s] │ $ notegit login … --username bob   → credentials 0600 @ <演练根>/hosted/employees/bob/credentials
+[  6.7s] ✓ H1 两员工各自 login：凭据落各自私有文件 0600，员工目录收紧 0700
+[  6.8s] │ $ notegit ls（alice 会话）→ alice-notes、team-docs、v-handbook
+[  6.8s] │ $ notegit ls（bob 会话）→ bob-notes、team-docs
+[  6.8s] ✓ H2 可见库各归各：alice 3 库 / bob 2 库，互不见对方专属库（真实 API 授权面）
+[  7.8s] │ $ notegit sync（alice 会话）
+[  7.8s] │ alice-notes：已克隆（HEAD 59b79c6）→ /var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/ngt-s9t5-ZcuZyz/hosted/employees/alice/knowbase/alice-notes
+[  7.8s] │ team-docs：已克隆（HEAD 74f2bc0）→ /var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/ngt-s9t5-ZcuZyz/hosted/employees/alice/knowbase/team-docs
+[  7.8s] │ v-handbook：已克隆（HEAD aebbbfc）→ /var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/ngt-s9t5-ZcuZyz/hosted/employees/alice/knowbase/v-handbook
+[  7.8s] │ 同步完成：共 3 库（成功 3、跳过 0、失败 0）
+[  7.8s] │ $ notegit sync（bob 会话）
+[  7.8s] │ bob-notes：已克隆（HEAD 7453da3）→ /var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/ngt-s9t5-ZcuZyz/hosted/employees/bob/knowbase/bob-notes
+[  7.8s] │ team-docs：已克隆（HEAD 74f2bc0）→ /var/folders/1s/bdlcfsrx5s304d3w201q4djc0000gn/T/ngt-s9t5-ZcuZyz/hosted/employees/bob/knowbase/team-docs
+[  7.8s] │ 同步完成：共 2 库（成功 2、跳过 0、失败 0）
+[  7.8s] ✓ H3 各自 sync：各自根下恰克隆各自可见库（目录互不交叉）
+[  7.8s] │ employees/ 0755；alice{ dir 0700, root 0700, cred 0600 }；bob{ dir 0700, root 0700, cred 0600 }
+[  7.8s] ✓ H4 隔离复查·权限位：员工目录/本地根 0700、凭据文件 0600、共享父目录 0755（runbook §1 逐行）
+[  7.8s] │ alice credentials：仅含 alice 令牌（ngt_PTlF…4Q）
+[  7.8s] │ bob credentials：仅含 bob 令牌（ngt_1Vxb…84）
+[  7.8s] ✓ H5 隔离复查·凭据内容：各文件互只含各自令牌；一方 login 未改写另一方文件
+[  7.9s] │ $ notegit credential get（alice 会话）→ password=ngt_PTlF…4Q
+[  7.9s] │ $ notegit credential get（bob 会话）→ password=ngt_1Vxb…84
+[  7.9s] ✓ H6 隔离复查·helper 串读面：同一 OS 账号下 credential get 按会话环境各取各自令牌
+[  7.9s] │ alice .notegit/sync-state.json：alice-notes、team-docs、v-handbook
+[  7.9s] │ bob   .notegit/sync-state.json：bob-notes、team-docs
+[  7.9s] ✓ H7 隔离复查·状态面：sync-state.json 各随各根，条目恰为各自可见库
+[  9.1s] │ $ git push origin main（alice 会话，team-docs）→    74f2bc0..feb46e7  main -> main
+[  9.1s] │ $ notegit sync（bob 会话）→ team-docs 已快进 feb46e7；bob-notes 不受影响
+[  9.1s] │ bob 根内容：.notegit、bob-notes、team-docs（仍无 alice-notes）
+[  9.1s] ✓ H8 共享库协作：alice 经自己会话 push team-docs，bob sync 快进到同一提交；bob 根仍无 alice 专属库
+[  9.2s] S9-T5 双 Harness 收口演练完成：20 步全绿（L 面 11 步读写闭环 + H 面 9 步隔离复查）

@@ -1,7 +1,7 @@
 {
   "name": "notegit-monorepo",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Notegit monorepo root (server app, shared validation package, CLI); bare name 'notegit' is reserved for the S6 CLI package",
   "workspaces": [
     "server",

@@ -49,8 +49,7 @@ notegit setup
 | `notegit ls` | 列出有权访问的知识库、clone URL 与本地状态 | 已实现（S6-T3 交付；S7-T6 离线明示：HEAD/上次同步/可能过期） |
 | `notegit lint` | 手动校验知识库内容（与服务端同一规则） | 已实现（S6-T4 交付，S6-T7 接线版本探测端点） |
 | `notegit setup` | 在已克隆库中安装/卸载/管理本地校验 hook 与本地根目录 | 已实现（S6-T5/T6 交付） |
-| `notegit sync` | 发现并安全同步知识库到本地（克隆/快进，不覆盖本地改动） | 已实现（S7-T1 六态策略表；S7-T3 逐项结果与 JSON/退出码契约；S7-T5 撤权标记与 `sync clean` 显式清理） |
-| `notegit sync` | 发现并安全同步知识库到本地（克隆/快进，不覆盖本地改动） | 已实现（S7-T1 六态策略表；S7-T3 逐项结果与 JSON/退出码契约；S7-T6 断网三态与离线明示） |
+| `notegit sync` | 发现并安全同步知识库到本地（克隆/快进，不覆盖本地改动） | 已实现（S7-T1 六态策略表 + S7-T3 逐项结果与 JSON/退出码契约 + S7-T5 撤权标记与 `sync clean` 显式清理 + S7-T6 断网三态与离线明示） |
 
 退出码契约（全部命令一致）：`0` 成功；`1` 命令失败（校验错误、查询失败等业务性失败）；`2` 用法错误或运行错误。与校验报告协议语义一致（`docs/contracts/validation.md` §6.1）。
 
@@ -232,7 +231,7 @@ notegit lint --staged            # 退出码 1
 ```
 
 ```text
-notegit lint --staged（scope=pre-commit，规则版本 1.0.0-draft.1）
+notegit lint --staged（scope=pre-commit，规则版本 1.0.0-draft.2）
 
 bad.md：未通过
   错误 E-FM-001 bad.md：知识文档缺少 frontmatter（首行须为 `---`）
@@ -254,7 +253,7 @@ notegit lint --staged            # 退出码 0（可含 W- 前缀警告）
 
 ```json
 {
-  "rulesVersion": "1.0.0-draft.1",
+  "rulesVersion": "1.0.0-draft.2",
   "scope": "pre-commit",
   "result": "fail",
   "exitCode": 1,
@@ -297,7 +296,7 @@ notegit lint --staged            # 退出码 0（可含 W- 前缀警告）
 
 ```json
 {
-  "rulesVersion": "1.0.0-draft.1",
+  "rulesVersion": "1.0.0-draft.2",
   "scope": "pre-commit",
   "result": "error",
   "exitCode": 2,
@@ -321,7 +320,7 @@ notegit lint --staged            # 退出码 0（可含 W- 前缀警告）
 
 ```text
 "notices": [
-  { "code": "N-UPGRADE-001", "message": "客户端校验规则为 1.0.0-draft.1，服务端为 1.1.0；请运行 notegit setup 更新" }
+  { "code": "N-UPGRADE-001", "message": "客户端校验规则为 1.0.0-draft.2，服务端为 1.1.0；请运行 notegit setup 更新" }
 ]
 ```
 
@@ -401,7 +400,7 @@ v-draft：跳过——工作区有未提交修改（含未跟踪文件）；保�
 同步完成：共 3 库（成功 2、跳过 1、失败 0）
 ```
 
-**结构化输出**（`--json`，S7-T3；S7-T5 扩展 revoked）：stdout 仅一份 JSON 文档——`vaults[]` 逐项结果（`status` ∈ success/skipped/failed + `reason_code`（成功=cloned/fast_forwarded/up_to_date；跳过=dirty/ahead/diverged/other_branch/revoked；失败=status_error/clone_failed/head_unreadable/fast_forward_failed/internal/lock_failed）+ 细节字段 `head`/`from`+`to`/`reason`/`message`）+ `summary` 计数（total/success/skipped/failed，与逐项复数一致）+ `generatedAt`（ISO 8601 UTC）。schema 固化于 `cli/test/sync-report.test.ts`；用法/认证等命令级错误不产生 JSON 信封（stderr 文本 + 退出码，同 `ls` 契约）：
+**结构化输出**（`--json`，S7-T3；S7-T5 扩展 revoked、S7-T6 扩失败码域）：stdout 仅一份 JSON 文档——`vaults[]` 逐项结果（`status` ∈ success/skipped/failed + `reason_code`（成功=cloned/fast_forwarded/up_to_date；跳过=dirty/ahead/diverged/other_branch/revoked；失败=status_error/clone_failed/head_unreadable/fast_forward_failed/internal/lock_failed + 断网三态 net_unreachable/timeout/http_error）+ 细节字段 `head`/`from`+`to`/`reason`/`message`——断网类失败的 `message` 携带「离线副本 <commit>（可能过期），上次同步 <时间>」明示）+ `summary` 计数（total/success/skipped/failed，与逐项复数一致）+ `generatedAt`（ISO 8601 UTC）。schema 固化于 `cli/test/sync-report.test.ts`；用法/认证等命令级错误不产生 JSON 信封（stderr 文本 + 退出码，同 `ls` 契约）：
 **断网与离线副本**（S7-T6；架构 §7.1「失败时明确提示离线副本的 commit 和同步时间，不能声称一定使用最新知识」）：网络失败的失败行按三态给可读原因（无法连接 / 超时 / HTTP 错误码），已有副本的失败行明示离线副本 commit 与上次同步时间（「可能过期」）；已成功库保留其结果，断网库的工作副本逐字节不动，克隆失败不残留半成品目录：
 ```text
 v-notes：失败——克隆失败：无法连接服务器（fatal: unable to access 'https://notes.example.com/git/v-notes.git/': Failed to connect …）
@@ -409,7 +408,6 @@ v-handbook：失败——快进失败：服务器 HTTP 错误 500（fatal: … T
 同步完成：共 2 库（成功 0、跳过 0、失败 2）
 ```
 服务器整体不可达（库列表拉取失败）时不产出逐库结果，stderr 给出可理解报错与离线提示：`notegit sync: 无法连接服务器 https://…：fetch failed；本地副本未刷新、可能过期（notegit ls 可查看各库 HEAD 与上次同步时间）`。
-**结构化输出**（`--json`，S7-T3；S7-T6 扩失败码域）：stdout 仅一份 JSON 文档——`vaults[]` 逐项结果（`status` ∈ success/skipped/failed + `reason_code`（成功=cloned/fast_forwarded/up_to_date；跳过=dirty/ahead/diverged/other_branch；失败=status_error/clone_failed/head_unreadable/fast_forward_failed/internal/lock_failed + 断网三态 net_unreachable/timeout/http_error）+ 细节字段 `head`/`from`+`to`/`reason`/`message`——断网类失败的 `message` 携带「离线副本 <commit>（可能过期），上次同步 <时间>」明示）+ `summary` 计数（total/success/skipped/failed，与逐项复数一致）+ `generatedAt`（ISO 8601 UTC）。schema 固化于 `cli/test/sync-report.test.ts`；用法/认证等命令级错误不产生 JSON 信封（stderr 文本 + 退出码，同 `ls` 契约）：
 
 ```json
 {
@@ -461,10 +459,8 @@ v-gone：拒绝清理——检测到未导出的本地数据：工作区有未�
 notegit sync [--depth <深度>] [--json] | notegit sync clean [--force] — 发现并安全同步知识库到本地（克隆/快进，不覆盖本地改动）
 
 说明：
-  发现当前员工可见库（GET /api/v1/vaults，Bearer；同 ls），按架构 §7.3 策略表同步到 <本地根目录>/<slug>：无副本 → 完整克隆；干净且位于默认分支 → fetch 后快进（--ff-only 语义）；有未提交修改、领先远端、分叉或位于其他分支 → 跳过并逐库报告（绝不自动 stash/reset/rebase）；fetch 收 404（撤权）→ 跳过（reason_code=revoked）并在状态文件标记，本地副本保留不自动删除，重新授权后下次 sync 自动恢复。子命令 clean 显式清理已标记撤权库的本地副本：遇未提交修改、未推送提交、暂存栈或不可判定内容时拒绝并给出导出指引（git bundle / 整目录复制）；--force 强制删除并警示丢弃内容。浅克隆仅 --depth 显式选项；slug 改名只提示映射变化，不移动本地目录。逐库报告成功/跳过/失败（status + reason_code + 细节）；退出码非零当且仅当有失败（跳过不判失败；clean 中拒绝/失败计非零）。
-  状态：已实现（S7-T1 六态策略表 + S7-T3 逐项结果/JSON/退出码契约 + S7-T5 撤权标记与显式清理）
-  发现当前员工可见库（GET /api/v1/vaults，Bearer；同 ls），按架构 §7.3 策略表同步到 <本地根目录>/<slug>：无副本 → 完整克隆；干净且位于默认分支 → fetch 后快进（--ff-only 语义）；有未提交修改、领先远端、分叉或位于其他分支 → 跳过并逐库报告（绝不自动 stash/reset/rebase）。浅克隆仅 --depth 显式选项；slug 改名只提示映射变化，不移动本地目录。逐库报告成功/跳过/失败（status + reason_code + 细节）；退出码非零当且仅当有失败（跳过不判失败）。断网时逐库失败原因码区分 net_unreachable/timeout/http_error，失败 message 明示离线副本 commit 与上次同步时间（可能过期——不声称最新）；克隆失败不残留半成品目录。
-  状态：已实现（S7-T1 六态策略表 + S7-T3 逐项结果/JSON/退出码契约 + S7-T6 断网三态与离线明示）
+  发现当前员工可见库（GET /api/v1/vaults，Bearer；同 ls），按架构 §7.3 策略表同步到 <本地根目录>/<slug>：无副本 → 完整克隆；干净且位于默认分支 → fetch 后快进（--ff-only 语义）；有未提交修改、领先远端、分叉或位于其他分支 → 跳过并逐库报告（绝不自动 stash/reset/rebase）；fetch 收 404（撤权）→ 跳过（reason_code=revoked）并在状态文件标记，本地副本保留不自动删除，重新授权后下次 sync 自动恢复。断网时逐库失败原因码区分 net_unreachable/timeout/http_error，失败 message 明示离线副本 commit 与上次同步时间（可能过期——不声称最新）；克隆失败不残留半成品目录。子命令 clean 显式清理已标记撤权库的本地副本：遇未提交修改、未推送提交、暂存栈或不可判定内容时拒绝并给出导出指引（git bundle / 整目录复制）；--force 强制删除并警示丢弃内容。浅克隆仅 --depth 显式选项；slug 改名只提示映射变化，不移动本地目录。逐库报告成功/跳过/失败（status + reason_code + 细节）；退出码非零当且仅当有失败（跳过不判失败；clean 中拒绝/失败计非零）。
+  状态：已实现（S7-T1 六态策略表 + S7-T3 逐项结果/JSON/退出码契约 + S7-T5 撤权标记与显式清理 + S7-T6 断网三态与离线明示）
 
 选项：
   --depth <深度>  新库浅克隆（显式选项；缺省完整克隆，不影响已有副本的快进更新）

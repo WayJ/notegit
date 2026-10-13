@@ -139,7 +139,7 @@ after(async () => {
 test('安装：单 tarball 安装后 notegit 可执行，--version 与 --help 真实可用', async () => {
   const v = await runBin(['--version'])
   assert.equal(v.status, 0)
-  assert.equal(v.stdout.trim(), 'notegit 0.0.0', `--version 应输出版本，实际：${v.stdout}`)
+  assert.equal(v.stdout.trim(), 'notegit 0.1.0', `--version 应输出版本，实际：${v.stdout}`)
   const h = await runBin(['--help'])
   assert.equal(h.status, 0)
   for (const name of ['login', 'ls', 'lint', 'setup', 'sync']) {

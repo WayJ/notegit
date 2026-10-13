@@ -66,7 +66,7 @@ test('依赖接线（D5 + S6-T7 内嵌分发形态）：notegit-validation=构�
   // S6-T7 起 validation 内嵌 CLI dist（master 裁定）：声明移至 devDependencies——
   // 发布产物自包含，npm install 不再从 registry 解析 notegit-validation（未发布，
   // 单 tarball 安装曾 E404）；yaml 由 vendored 副本在运行时消费，经 registry 正常安装。
-  assert.equal((pkg.devDependencies as Record<string, string>)['notegit-validation'], '0.0.0')
+  assert.equal((pkg.devDependencies as Record<string, string>)['notegit-validation'], '0.1.0')
   assert.equal(pkg.dependencies['yaml'], '2.9.1')
   const serverPrivate = ['fastify', '@node-rs/argon2']
   for (const dep of [...Object.keys(pkg.dependencies), ...Object.keys(pkg.devDependencies)]) {
