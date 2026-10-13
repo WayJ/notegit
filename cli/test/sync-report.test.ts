@@ -117,10 +117,11 @@ interface MixedWorld {
 }
 
 /**
- * 混合状态世界（六库）：
+ * 混合状态世界（七库）：
  *   m-new（无副本→克隆）、m-behind（干净落后→快进）、m-tip（干净已最新）、
- *   m-dirty（脏→跳过）、m-ahead（领先→跳过）、m-broken（非 git 目录→失败）。
- * 期望逐项：success×3 + skipped×2 + failed×1。
+ *   m-dirty（脏→跳过）、m-ahead（领先→跳过）、m-revoked（撤权 404→跳过，S7-T5）、
+ *   m-broken（非 git 目录→失败）。
+ * 期望逐项：success×3 + skipped×3 + failed×1。
  */
 async function mixedWorld(): Promise<MixedWorld> {
   const home = await mkdtemp(path.join(tmpdir(), 'ngt-syncrep-home-'))
@@ -160,11 +161,18 @@ async function mixedWorld(): Promise<MixedWorld> {
   await cloneLocal('m-ahead', mAhead.bare)
   shas['m-ahead'] = { c1: mAhead.sha, local: await localCommit(path.join(localRoot, 'm-ahead'), 'local-work') }
 
+  // m-revoked：本地干净已最新，但服务端 bare 已删（git 通道 404；列表仍含该库——
+  // 模拟「列表快照后撤权」竞态窗）→ skipped/revoked（S7-T5：撤权标记入契约域）
+  const mRevoked = await seedVault(projectRoot, worksRoot, 'm-revoked')
+  await cloneLocal('m-revoked', mRevoked.bare)
+  shas['m-revoked'] = { c1: mRevoked.sha }
+  await rm(mRevoked.bare, { recursive: true, force: true })
+
   // m-broken：目录存在但不是 git 仓库 → failed/status_error
   await mkdir(path.join(localRoot, 'm-broken'), { recursive: true })
   await writeFile(path.join(localRoot, 'm-broken', 'stray.txt'), 'not a git repo\n')
 
-  const vaults: MockVault[] = ['m-new', 'm-behind', 'm-tip', 'm-dirty', 'm-ahead', 'm-broken'].map((slug) => ({
+  const vaults: MockVault[] = ['m-new', 'm-behind', 'm-tip', 'm-dirty', 'm-ahead', 'm-revoked', 'm-broken'].map((slug) => ({
     slug,
     name: slug,
     role: 'reader',
@@ -199,7 +207,7 @@ async function mixedWorld(): Promise<MixedWorld> {
 
 // ── 混合场景（验收场景 S3：部分成功 + 部分跳过 + 部分失败） ────────────────────
 
-test('混合场景 --json：逐项 status/reason_code 准确、summary 计数一致（3+2+1）、退出码 1；stdout 纯 JSON', async () => {
+test('混合场景 --json：逐项 status/reason_code 准确、summary 计数一致（3+3+1）、退出码 1；stdout 纯 JSON', async () => {
   const w = await mixedWorld()
   try {
     const r = await run(['sync', '--json'], w.env)
@@ -222,7 +230,7 @@ test('混合场景 --json：逐项 status/reason_code 准确、summary 计数一
     assert.ok(Number.isFinite(Date.parse(doc.generatedAt)))
 
     // 逐项准确（按 slug 定位，不耦合列表顺序）
-    assert.equal(doc.vaults.length, 6, '六库逐项上报')
+    assert.equal(doc.vaults.length, 7, '七库逐项上报')
     const byslug = new Map(doc.vaults.map((v) => [v.slug, v]))
     const vNew = byslug.get('m-new')!
     assert.deepEqual(Object.keys(vNew).sort(), ['head', 'last_sync', 'path', 'reason_code', 'slug', 'status'])
@@ -259,6 +267,14 @@ test('混合场景 --json：逐项 status/reason_code 准确、summary 计数一
     assert.equal(vAhead.reason_code, 'ahead')
     assert.match(String(vAhead['reason']), /领先|未推送/)
 
+    const vRevoked = byslug.get('m-revoked')!
+    assert.deepEqual(Object.keys(vRevoked).sort(), ['head', 'last_sync', 'path', 'reason', 'reason_code', 'slug', 'status'], '撤权与四态跳过共用键集')
+    assert.equal(vRevoked.status, 'skipped')
+    assert.equal(vRevoked.reason_code, 'revoked', 'S7-T5：revoked 入 skipped reason_code 域')
+    assert.match(String(vRevoked['reason']), /404|撤权/)
+    assert.equal(vRevoked['head'], w.shas['m-revoked']!.c1, '离线副本 head 如实上报')
+    assert.equal(vRevoked['last_sync'], null, '直克隆未经 notegit 同步 → last_sync null')
+
     const vBroken = byslug.get('m-broken')!
     assert.deepEqual(Object.keys(vBroken).sort(), ['message', 'path', 'reason_code', 'slug', 'status'])
     assert.equal(vBroken.status, 'failed')
@@ -269,7 +285,7 @@ test('混合场景 --json：逐项 status/reason_code 准确、summary 计数一
     for (const v of doc.vaults) assert.ok(['success', 'skipped', 'failed'].includes(v.status), `未知 status：${v.status}`)
 
     // 汇总计数一致（== 逐项复数，不把跳过算失败、不把部分成功报成全部成功）
-    assert.deepEqual(doc.summary, { total: 6, success: 3, skipped: 2, failed: 1 })
+    assert.deepEqual(doc.summary, { total: 7, success: 3, skipped: 3, failed: 1 })
     assert.equal(doc.summary.total, doc.vaults.length)
     for (const s of ['success', 'skipped', 'failed'] as const) {
       assert.equal(doc.summary[s], doc.vaults.filter((v) => v.status === s).length, `summary.${s} 应与逐项复数一致`)
@@ -285,6 +301,8 @@ test('混合场景 --json：逐项 status/reason_code 准确、summary 计数一
     assert.equal(rev(path.join(w.localRoot, 'm-tip'), 'HEAD'), w.shas['m-tip']!.c1, 'm-tip 应原地不动')
     assert.equal(await readFile(path.join(w.localRoot, 'm-dirty', 'f0.md'), 'utf8'), '# 本地未提交修改（不可被覆盖）\n', 'm-dirty 未提交字节保留')
     assert.equal(rev(path.join(w.localRoot, 'm-ahead'), 'HEAD'), w.shas['m-ahead']!.local, 'm-ahead 领先提交保留')
+    assert.equal(rev(path.join(w.localRoot, 'm-revoked'), 'HEAD'), w.shas['m-revoked']!.c1, 'm-revoked 副本不动（不自动删）')
+    assert.equal(await readFile(path.join(w.localRoot, 'm-revoked', 'f0.md'), 'utf8'), '# m-revoked note\n', 'm-revoked 字节保留')
     assert.equal(isGitDir(path.join(w.localRoot, 'm-broken')), false, 'm-broken 保持非 git 目录')
   } finally {
     await w.dispose()
@@ -299,9 +317,10 @@ test('混合场景 文本输出：逐库行（成功 stdout / 跳过、失败 st
     assert.match(r.stdout, /m-new：已克隆（HEAD [0-9a-f]{7}）→ .*m-new/)
     assert.match(r.stdout, /m-behind：已快进 [0-9a-f]{7} → [0-9a-f]{7}/)
     assert.match(r.stdout, /m-tip：已是最新（[0-9a-f]{7}）/)
-    assert.match(r.stdout, /同步完成：共 6 库（成功 3、跳过 2、失败 1）/, '汇总行计数与逐项一致')
+    assert.match(r.stdout, /同步完成：共 7 库（成功 3、跳过 3、失败 1）/, '汇总行计数与逐项一致')
     assert.match(r.stderr, /m-dirty：跳过——.*未提交修改/)
     assert.match(r.stderr, /m-ahead：跳过——.*(领先|未推送)/)
+    assert.match(r.stderr, /m-revoked：跳过——.*(404|撤权)/)
     assert.match(r.stderr, /m-broken：失败——.*不是 git 仓库/)
     for (const face of [r.stdout, r.stderr]) {
       assert.ok(!face.includes('全部成功') && !face.includes('全部同步成功'), '不得把部分成功报成全部成功（文案断言）')

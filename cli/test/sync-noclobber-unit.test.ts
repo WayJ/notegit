@@ -100,6 +100,31 @@ test('D7 扫描·自证：报告文案中的「stash/reset/rebase」斜杠连写
   assert.deepEqual(scanClobberingGitLiterals(source), [], '文案不得被误报为调用')
 })
 
+test('D7 扫描·自证（S7-T5）：旗标 --force 的非调用形态不误报，调用形态仍被标记', () => {
+  // notegit 自身子命令旗标（sync clean 的强制清理）以常量/比较形态出现——与 'clean'
+  // 状态名同理的词表冲突例外：只有「数组实参位」的独立 '--force' 才是 git 调用面。
+  const benign = [
+    "const FORCE_FLAG = '--force'",
+    "if (argv[i] === FORCE_FLAG) force = true",
+    "return `用法：notegit sync clean ${FORCE_FLAG}`",
+  ].join('\n')
+  assert.deepEqual(scanClobberingGitLiterals(benign), [], 'notegit 自身旗标的比较/常量形态不得误报')
+
+  // argv 数组上下文中的独立 '--force'（git 实参位）仍被标记
+  const argv = "const r = runGit(dir, ['fetch', '--force', url])\n"
+  assert.ok(
+    scanClobberingGitLiterals(argv).some((h) => h.token === '--force'),
+    "argv 位的 '--force' 应被标记（git fetch --force 是 D7 级破坏）",
+  )
+
+  // 拼接命令串中的 ' --force '（空白分隔）保持被标记（shell 形态调用面）
+  const joined = 'const cmd = `git push --force origin main`\n'
+  assert.ok(
+    scanClobberingGitLiterals(joined).some((h) => h.token === '--force'),
+    "'git push --force …' 中的 --force 应被标记",
+  )
+})
+
 test('D7 扫描·自证：允许的只读/快进调用形态不标记', () => {
   const benign = [
     "const a = ['clone', '--quiet', url, dir]",
