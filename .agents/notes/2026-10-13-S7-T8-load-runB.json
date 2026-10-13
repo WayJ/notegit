@@ -1,0 +1,100 @@
+{
+ "world": {
+  "vaults": 4,
+  "files": 204,
+  "content_bytes": 1692220,
+  "employees": 4
+ },
+ "server_totals": {
+  "rss_base_kb": 231024,
+  "rss_final_kb": 249424,
+  "cpu_user_ms": 222,
+  "cpu_system_ms": 135
+ },
+ "sampler": {
+  "interval_ms": 100,
+  "n": 77
+ },
+ "concurrency": [
+  {
+   "concurrency": 1,
+   "wall_ms": 916,
+   "server_cpu_ms": 50,
+   "server_rss_peak_kb": 232000,
+   "git_children_peak": 2,
+   "git_children_rss_peak_kb": 7696,
+   "requests": {
+    "git_n": 16,
+    "git_mean_ms": 16,
+    "git_p95_ms": 27,
+    "git_max_ms": 27,
+    "api_n": 1,
+    "api_mean_ms": 0,
+    "git_by_path": {
+     "info/refs": 8,
+     "upload-pack": 8
+    }
+   }
+  },
+  {
+   "concurrency": 2,
+   "wall_ms": 962,
+   "server_cpu_ms": 83,
+   "server_rss_peak_kb": 236576,
+   "git_children_peak": 4,
+   "git_children_rss_peak_kb": 16832,
+   "requests": {
+    "git_n": 32,
+    "git_mean_ms": 16,
+    "git_p95_ms": 27,
+    "git_max_ms": 27,
+    "api_n": 2,
+    "api_mean_ms": 0,
+    "git_by_path": {
+     "info/refs": 16,
+     "upload-pack": 16
+    }
+   }
+  },
+  {
+   "concurrency": 3,
+   "wall_ms": 984,
+   "server_cpu_ms": 84,
+   "server_rss_peak_kb": 244928,
+   "git_children_peak": 6,
+   "git_children_rss_peak_kb": 24048,
+   "requests": {
+    "git_n": 48,
+    "git_mean_ms": 17,
+    "git_p95_ms": 30,
+    "git_max_ms": 31,
+    "api_n": 3,
+    "api_mean_ms": 0,
+    "git_by_path": {
+     "info/refs": 24,
+     "upload-pack": 24
+    }
+   }
+  },
+  {
+   "concurrency": 4,
+   "wall_ms": 1078,
+   "server_cpu_ms": 136,
+   "server_rss_peak_kb": 249408,
+   "git_children_peak": 8,
+   "git_children_rss_peak_kb": 32032,
+   "requests": {
+    "git_n": 64,
+    "git_mean_ms": 18,
+    "git_p95_ms": 34,
+    "git_max_ms": 38,
+    "api_n": 4,
+    "api_mean_ms": 0,
+    "git_by_path": {
+     "info/refs": 32,
+     "upload-pack": 32
+    }
+   }
+  }
+ ]
+}

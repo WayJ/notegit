@@ -198,7 +198,7 @@ test('--json schema 固化：alice（本地无副本）完整结构 deepEqual �
           default_branch: 'main',
           main_admin_only: false,
           clone_url: `${serverUrl}/git/alpha.git`,
-          local: { path: null, status: 'not_cloned', head: null, remote_tip: null },
+          local: { path: null, status: 'not_cloned', head: null, remote_tip: null, last_sync: null },
         },
       ],
     })
@@ -357,8 +357,8 @@ test('本地状态 e2e：cloned → behind（远端前进）→ unknown（本地
     }
 
     // phase 1：alpha=cloned（head==tip）、beta=not_cloned
-    assert.deepEqual(await vault('bob', 'alpha'), { path: path.join(root, 'alpha'), status: 'cloned', head: c1, remote_tip: c1 })
-    assert.deepEqual(await vault('bob', 'beta'), { path: null, status: 'not_cloned', head: null, remote_tip: null })
+    assert.deepEqual(await vault('bob', 'alpha'), { path: path.join(root, 'alpha'), status: 'cloned', head: c1, remote_tip: c1, last_sync: null })
+    assert.deepEqual(await vault('bob', 'beta'), { path: null, status: 'not_cloned', head: null, remote_tip: null, last_sync: null })
 
     // phase 2：远端前进一步 → behind
     await writeFile(path.join(alphaWork, 'f9.md'), '# advance\n')
@@ -366,7 +366,7 @@ test('本地状态 e2e：cloned → behind（远端前进）→ unknown（本地
     git(alphaWork, 'commit', '-m', 'advance')
     const c2 = rev(alphaWork, 'HEAD')
     git(alphaWork, 'push', path.join(remotes, 'alpha.git'), 'main')
-    assert.deepEqual(await vault('bob', 'alpha'), { path: path.join(root, 'alpha'), status: 'behind', head: c1, remote_tip: c2 })
+    assert.deepEqual(await vault('bob', 'alpha'), { path: path.join(root, 'alpha'), status: 'behind', head: c1, remote_tip: c2, last_sync: null })
 
     // phase 3：本地另起提交（与远端分叉，head != tip 且非其祖先）→ unknown
     const alphaLocal = path.join(root, 'alpha')
@@ -376,11 +376,11 @@ test('本地状态 e2e：cloned → behind（远端前进）→ unknown（本地
     git(alphaLocal, 'add', '.')
     git(alphaLocal, 'commit', '-m', 'local')
     const cLocal = rev(alphaLocal, 'HEAD')
-    assert.deepEqual(await vault('bob', 'alpha'), { path: alphaLocal, status: 'unknown', head: cLocal, remote_tip: c2 })
+    assert.deepEqual(await vault('bob', 'alpha'), { path: alphaLocal, status: 'unknown', head: cLocal, remote_tip: c2, last_sync: null })
 
     // phase 4：远端目录消失（fetch 失败）→ unknown，head 保留、remote_tip null
     await rm(path.join(remotes, 'alpha.git'), { recursive: true, force: true })
-    assert.deepEqual(await vault('bob', 'alpha'), { path: alphaLocal, status: 'unknown', head: cLocal, remote_tip: null })
+    assert.deepEqual(await vault('bob', 'alpha'), { path: alphaLocal, status: 'unknown', head: cLocal, remote_tip: null, last_sync: null })
   } finally {
     await rm(home, { recursive: true, force: true })
     await rm(root, { recursive: true, force: true })
