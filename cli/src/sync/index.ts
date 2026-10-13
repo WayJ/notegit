@@ -10,6 +10,10 @@
  * 退出码：非零当且仅当有失败（跳过不判失败）。
  * S7-T2：成功结局写每库 last-sync 标记（本地形状，T4 状态文件集成点见模块头）；
  * 跳过原因/离线副本 commit/上次同步时间由 engine 的 skipped outcome 携带进报告。
+ * S7-T4：每库 Git 操作加 repo 锁（判定面 fetch + 变更面 clone/ff）、状态写入走
+ * 全局状态锁（lock.ts；锁序固定 repo → state，不得反向）；runSync 单一 syncedAt
+ * 时钟 → 报告 last_sync / 状态条目 / .git 标记三面同源同值；状态仅缓存
+ * （state.ts），丢失由正常 sync 全流程重建。
  */
 import process from 'node:process'
 import path from 'node:path'
@@ -20,7 +24,9 @@ import { computeSyncStatus, localRootOf, realSyncGitOps } from '../ls/local-stat
 import { applySyncStrategy, realSyncOps, type SyncOutcome } from './engine.ts'
 import { buildSyncReport, exitCodeOf, renderReportJson, renderReportText, summarize, vaultResultOf } from './report.ts'
 import { writeLastSync } from './last-sync.ts'
-import { EXIT_ERROR, EXIT_FAIL } from '../exit-codes.ts' 
+import { repoLockPath, withFileLock } from './lock.ts'
+import { stateEntryOfOutcome, writeVaultEntry } from './state.ts'
+import { EXIT_ERROR, EXIT_FAIL } from '../exit-codes.ts'
 
 interface SyncArgs {
   depth?: number
@@ -60,10 +66,26 @@ async function hintOrphanDirs(root: string, visibleSlugs: ReadonlySet<string>, o
   }
   for (const name of entries) {
     if (visibleSlugs.has(name)) continue
+    if (name.startsWith('.')) continue // 工具内部目录（.notegit 状态/锁——S7-T4），非用户副本，不提示
     const dir = path.join(root, name)
     if ((await ops.revParse(dir, 'HEAD')) === undefined) continue // 只提示 git 副本，忽略普通目录
     process.stderr.write(`提示：${dir} 不对应当前任何可见库（slug 可能已改名或权限有变）；notegit 不会移动或删除该目录\n`)
   }
+}
+
+/**
+ * 记录单库同步结局（repo 锁内调用——锁序 repo → state）：
+ *   成功 → .git 标记 + 状态条目（同一 syncedAt「事务」，见 last-sync.ts 头）；
+ *   跳过 → 仅状态条目（head=当前本地，last_sync=上次值，不刷新）；
+ *   失败 → 不写（保留旧缓存事实）。
+ */
+async function recordVaultSync(root: string, outcome: SyncOutcome, syncedAt: Date): Promise<void> {
+  const entry = stateEntryOfOutcome(outcome, syncedAt.toISOString())
+  if (entry === null) return
+  if (outcome.action === 'cloned' || outcome.action === 'fast_forwarded' || outcome.action === 'up_to_date') {
+    await writeLastSync(outcome.path, syncedAt)
+  }
+  await writeVaultEntry(root, outcome.slug, entry)
 }
 
 /** 执行 sync；返回进程退出码。用法错误打 stderr 并返回 2（不抛出）。 */
@@ -87,16 +109,43 @@ export async function runSync(argv: string[], env: NodeJS.ProcessEnv = process.e
   const ops = realSyncGitOps()
   const syncOps = realSyncOps()
   await mkdir(root, { recursive: true })
+  // 单一时钟（S7-T4）：报告 last_sync、状态条目、.git 标记三面取同一时刻（同源同值）
+  const syncedAt = new Date()
   const outcomes: SyncOutcome[] = []
   for (const v of result.vaults) {
     const cloneUrl = cloneUrlOf(cred.server, v.slug)
-    const info = await computeSyncStatus({ root, slug: v.slug, defaultBranch: v.default_branch, cloneUrl, ops })
-    const out = await applySyncStrategy({ root, slug: v.slug, cloneUrl, defaultBranch: v.default_branch, info, depth: parsed.args.depth, ops: syncOps })
-    outcomes.push(out)
-    // 成功结局（克隆/快进/已最新）刷新上次同步时间标记（S7-T2；T4 集成点见 last-sync.ts 头）
-    if (out.action === 'cloned' || out.action === 'fast_forwarded' || out.action === 'up_to_date') {
-      await writeLastSync(out.path)
+    let out: SyncOutcome
+    try {
+      // 每库 Git 操作锁（架构 §7.3「每库 Git 操作……分别加锁」）：判定面（含 fetch）、
+      // 变更面（clone/ff）与本库状态记录都在锁内；recordVaultSync 内取全局状态锁——
+      // 锁序固定 repo → state 单向，任何嵌套不得反向。computeSyncStatus /
+      // applySyncStrategy 自身不抛（失败折叠为 failed outcome），此处 catch 只会
+      // 命中锁获取/状态写的基础设施失败 → 逐库报 lock_failed，不中断其余库。
+      out = await withFileLock(repoLockPath(root, v.slug), async () => {
+        const info = await computeSyncStatus({ root, slug: v.slug, defaultBranch: v.default_branch, cloneUrl, ops })
+        const o = await applySyncStrategy({
+          root,
+          slug: v.slug,
+          cloneUrl,
+          defaultBranch: v.default_branch,
+          info,
+          depth: parsed.args.depth,
+          ops: syncOps,
+          syncedAt: syncedAt.toISOString(),
+        })
+        await recordVaultSync(root, o, syncedAt)
+        return o
+      })
+    } catch (err) {
+      out = {
+        action: 'failed',
+        slug: v.slug,
+        path: path.join(root, v.slug),
+        code: 'lock_failed',
+        message: `并发锁或状态写入失败：${err instanceof Error ? err.message : String(err)}`,
+      }
     }
+    outcomes.push(out)
   }
   await hintOrphanDirs(root, new Set(result.vaults.map((v) => v.slug)), ops)
   if (parsed.args.json) {

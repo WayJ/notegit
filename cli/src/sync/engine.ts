@@ -10,9 +10,9 @@
  * D7 红线：本模块不存在任何 stash/reset/rebase 路径——跳过即完全不动本地副本。
  * 报告契约（JSON/逐项结构/汇总口径）见 report.ts（S7-T3）；本层只产出结构化 outcome
  * （失败带机器原因码 SyncFailureCode，跳过带四态与原因文案）。
- * 报告契约（JSON/逐项结构/汇总口径）属 S7-T3；本层只产出结构化 outcome。
  * S7-T2：skipped outcome 携带离线副本 head 与上次同步时间（last-sync 本地形状，
  * T4 状态文件集成点见该模块头）——供报告层呈现「原因+commit+时间」。
+ * S7-T4：成功 outcome 亦携带 last_sync（syncedAt 注入，与状态文件/报告同源同值）。
  */
 import path from 'node:path'
 import { execFile } from 'node:child_process'
@@ -30,17 +30,9 @@ export interface SyncOps {
 }
 
 export type SyncOutcome =
-  | { readonly action: 'cloned'; readonly slug: string; readonly path: string; readonly head: string }
-  | { readonly action: 'fast_forwarded'; readonly slug: string; readonly path: string; readonly from: string; readonly to: string }
-  | { readonly action: 'up_to_date'; readonly slug: string; readonly path: string; readonly head: string }
-  | { readonly action: 'skipped'; readonly slug: string; readonly path: string | null; readonly state: Exclude<SyncState, 'new' | 'clean'>; readonly reason: string; readonly head: string | null; readonly last_sync: string | null }
-  | { readonly action: 'failed'; readonly slug: string; readonly path: string | null; readonly code: SyncFailureCode; readonly message: string }
-/**
- * 失败原因码（机器可读，S7-T3 报告契约）：status_error=六态判定基础设施失败；
- * clone_failed / fast_forward_failed=对应 git 变更操作失败；head_unreadable=变更
- * 完成后 HEAD 不可核验；internal=判定面数据不完整（不应发生的防御分支）。
- */
-export type SyncFailureCode = 'status_error' | 'clone_failed' | 'head_unreadable' | 'fast_forward_failed' | 'internal'
+  | { readonly action: 'cloned'; readonly slug: string; readonly path: string; readonly head: string; readonly last_sync: string }
+  | { readonly action: 'fast_forwarded'; readonly slug: string; readonly path: string; readonly from: string; readonly to: string; readonly last_sync: string }
+  | { readonly action: 'up_to_date'; readonly slug: string; readonly path: string; readonly head: string; readonly last_sync: string }
   | {
     readonly action: 'skipped'
     readonly slug: string
@@ -49,10 +41,18 @@ export type SyncFailureCode = 'status_error' | 'clone_failed' | 'head_unreadable
     readonly reason: string
     /** 离线副本当前 commit（本地 head；不可读为 null）。 */
     readonly head: string | null
-    /** 上次成功同步时间（ISO；未经 notegit 同步为 null）。T4 集成点见 last-sync.ts。 */
+    /** 上次成功同步时间（ISO；未经 notegit 同步为 null）。读取面见 last-sync.ts（状态文件优先）。 */
     readonly last_sync: string | null
     }
-  | { readonly action: 'failed'; readonly slug: string; readonly path: string | null; readonly message: string }
+  | { readonly action: 'failed'; readonly slug: string; readonly path: string | null; readonly code: SyncFailureCode; readonly message: string }
+
+/**
+ * 失败原因码（机器可读，S7-T3 报告契约）：status_error=六态判定基础设施失败；
+ * clone_failed / fast_forward_failed=对应 git 变更操作失败；head_unreadable=变更
+ * 完成后 HEAD 不可核验；internal=判定面数据不完整（不应发生的防御分支）；
+ * lock_failed=并发锁获取/释放失败（S7-T4：runSync 层产生，引擎自身不加锁）。
+ */
+export type SyncFailureCode = 'status_error' | 'clone_failed' | 'head_unreadable' | 'fast_forward_failed' | 'internal' | 'lock_failed'
 
 /** 四类跳过态的原因文案（§7.3 枚举顺序；T3 收口报告契约时可再精化）。 */
 function skipReason(info: SyncInfo, defaultBranch: string): string {
@@ -76,7 +76,11 @@ function firstLine(message: string): string {
   return message.split('\n')[0] ?? message
 }
 
-/** 按判定结果应用 §7.3 策略表；永不抛出（git 失败折叠为 failed outcome）。 */
+/**
+ * 按判定结果应用 §7.3 策略表；永不抛出（git 失败折叠为 failed outcome）。
+ * syncedAt：本次同步时间（S7-T4；runSync 以单一时钟传入，成功 outcome 的
+ * last_sync 与状态文件/报告同源同值；缺省取当前时刻——直连调用方/测试用）。
+ */
 export async function applySyncStrategy(args: {
   root: string
   slug: string
@@ -85,8 +89,10 @@ export async function applySyncStrategy(args: {
   info: SyncInfo
   depth?: number
   ops: SyncOps
+  syncedAt?: string
 }): Promise<SyncOutcome> {
   const { slug, cloneUrl, defaultBranch, info, ops } = args
+  const syncedAt = args.syncedAt ?? new Date().toISOString()
   const dir = info.path ?? path.join(args.root, slug)
   if (info.state === 'error') return { action: 'failed', slug, path: info.path, code: 'status_error', message: info.message ?? '状态判定失败' }
   if (info.state === 'new') {
@@ -94,7 +100,7 @@ export async function applySyncStrategy(args: {
       await ops.clone(cloneUrl, dir, args.depth)
       const head = await ops.revHead(dir)
       if (head === undefined) return { action: 'failed', slug, path: dir, code: 'head_unreadable', message: `克隆完成但无法读取 HEAD：${dir}` }
-      return { action: 'cloned', slug, path: dir, head }
+      return { action: 'cloned', slug, path: dir, head, last_sync: syncedAt }
     } catch (err) {
       return { action: 'failed', slug, path: dir, code: 'clone_failed', message: `克隆失败：${firstLine(err instanceof Error ? err.message : String(err))}` }
     }
@@ -103,12 +109,12 @@ export async function applySyncStrategy(args: {
     if (info.head === null || info.remote_tip === null) {
       return { action: 'failed', slug, path: dir, code: 'internal', message: 'clean 判定缺少 head/remote_tip（内部错误）' }
     }
-    if (info.head === info.remote_tip) return { action: 'up_to_date', slug, path: dir, head: info.head }
+    if (info.head === info.remote_tip) return { action: 'up_to_date', slug, path: dir, head: info.head, last_sync: syncedAt }
     try {
       await ops.fastForward(dir, cloneUrl, defaultBranch)
       const head = await ops.revHead(dir)
       if (head === undefined) return { action: 'failed', slug, path: dir, code: 'head_unreadable', message: `快进后无法读取 HEAD：${dir}` }
-      return { action: 'fast_forwarded', slug, path: dir, from: info.head, to: head }
+      return { action: 'fast_forwarded', slug, path: dir, from: info.head, to: head, last_sync: syncedAt }
     } catch (err) {
       return { action: 'failed', slug, path: dir, code: 'fast_forward_failed', message: `快进失败：${firstLine(err instanceof Error ? err.message : String(err))}` }
     }
@@ -120,7 +126,7 @@ export async function applySyncStrategy(args: {
     state: info.state,
     reason: skipReason(info, defaultBranch),
     head: info.head,
-    last_sync: info.path === null ? null : readLastSync(info.path),
+    last_sync: readLastSync(args.root, info.path),
   }
 }
 

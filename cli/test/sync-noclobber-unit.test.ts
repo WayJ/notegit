@@ -264,13 +264,13 @@ test('firstFingerprintMismatch：不同指纹返回首差行（带节名，可�
 
 // ── last-sync：上次同步时间标记（T4 状态文件的本地形状） ──────────────────────
 
-test('last-sync·往返：写入后读回同一 ISO 时间串', async () => {
+test('last-sync·往返：写入后（经回退面）读回同一 ISO 时间串', async () => {
   await withRoot(async (root) => {
     const dir = path.join(root, 'alpha')
     await mkdir(path.join(dir, '.git'), { recursive: true })
     const when = new Date('2026-10-13T01:02:03.456Z')
     await writeLastSync(dir, when)
-    assert.equal(readLastSync(dir), '2026-10-13T01:02:03.456Z')
+    assert.equal(readLastSync(root, dir), '2026-10-13T01:02:03.456Z')
   })
 })
 
@@ -278,9 +278,9 @@ test('last-sync·缺省与坏内容：无标记 → null；非 ISO 内容 → nu
   await withRoot(async (root) => {
     const dir = path.join(root, 'alpha')
     await mkdir(path.join(dir, '.git'), { recursive: true })
-    assert.equal(readLastSync(dir), null, '无标记应为 null')
+    assert.equal(readLastSync(root, dir), null, '无标记应为 null')
     await writeFile(path.join(dir, '.git', 'notegit-last-sync'), 'garbage')
-    assert.equal(readLastSync(dir), null, '坏内容应折叠为 null 而非抛出')
+    assert.equal(readLastSync(root, dir), null, '坏内容应折叠为 null 而非抛出')
   })
 })
 
@@ -290,12 +290,12 @@ test('last-sync·覆盖与健壮：后写覆盖先写；非 git 目录写入不�
     await mkdir(path.join(dir, '.git'), { recursive: true })
     await writeLastSync(dir, new Date('2026-10-13T00:00:00Z'))
     await writeLastSync(dir, new Date('2026-10-13T12:00:00Z'))
-    assert.equal(readLastSync(dir), '2026-10-13T12:00:00.000Z', '后写覆盖先写')
+    assert.equal(readLastSync(root, dir), '2026-10-13T12:00:00.000Z', '后写覆盖先写')
 
     const plain = path.join(root, 'plain')
     await mkdir(plain)
     await writeLastSync(plain, new Date('2026-10-13T00:00:00Z')) // 无 .git——不抛
-    assert.equal(readLastSync(plain), null)
+    assert.equal(readLastSync(root, plain), null)
   })
 })
 

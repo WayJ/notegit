@@ -28,10 +28,10 @@ export type VaultReasonCode =
   | 'other_branch'
   | SyncFailureCode
 
-/** 逐库结果对象（vaults[] 元素形态；键集按变体固化）。 */
+/** 逐库结果对象（vaults[] 元素形态；键集按变体固化；last_sync 与状态文件同源同值——S7-T4）。 */
 export type VaultResult =
-  | { readonly slug: string; readonly status: 'success'; readonly reason_code: 'cloned' | 'up_to_date'; readonly path: string; readonly head: string }
-  | { readonly slug: string; readonly status: 'success'; readonly reason_code: 'fast_forwarded'; readonly path: string; readonly from: string; readonly to: string }
+  | { readonly slug: string; readonly status: 'success'; readonly reason_code: 'cloned' | 'up_to_date'; readonly path: string; readonly head: string; readonly last_sync: string }
+  | { readonly slug: string; readonly status: 'success'; readonly reason_code: 'fast_forwarded'; readonly path: string; readonly from: string; readonly to: string; readonly last_sync: string }
   | { readonly slug: string; readonly status: 'skipped'; readonly reason_code: 'dirty' | 'ahead' | 'diverged' | 'other_branch'; readonly path: string | null; readonly reason: string; readonly head: string | null; readonly last_sync: string | null }
   | { readonly slug: string; readonly status: 'failed'; readonly reason_code: SyncFailureCode; readonly path: string | null; readonly message: string }
 
@@ -47,11 +47,11 @@ export interface SyncSummary {
 export function vaultResultOf(outcome: SyncOutcome): VaultResult {
   switch (outcome.action) {
     case 'cloned':
-      return { slug: outcome.slug, status: 'success', reason_code: 'cloned', path: outcome.path, head: outcome.head }
+      return { slug: outcome.slug, status: 'success', reason_code: 'cloned', path: outcome.path, head: outcome.head, last_sync: outcome.last_sync }
     case 'fast_forwarded':
-      return { slug: outcome.slug, status: 'success', reason_code: 'fast_forwarded', path: outcome.path, from: outcome.from, to: outcome.to }
+      return { slug: outcome.slug, status: 'success', reason_code: 'fast_forwarded', path: outcome.path, from: outcome.from, to: outcome.to, last_sync: outcome.last_sync }
     case 'up_to_date':
-      return { slug: outcome.slug, status: 'success', reason_code: 'up_to_date', path: outcome.path, head: outcome.head }
+      return { slug: outcome.slug, status: 'success', reason_code: 'up_to_date', path: outcome.path, head: outcome.head, last_sync: outcome.last_sync }
     case 'skipped':
       return { slug: outcome.slug, status: 'skipped', reason_code: outcome.state, path: outcome.path, reason: outcome.reason, head: outcome.head, last_sync: outcome.last_sync }
     case 'failed':

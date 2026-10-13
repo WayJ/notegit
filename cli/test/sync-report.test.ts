@@ -225,24 +225,27 @@ test('混合场景 --json：逐项 status/reason_code 准确、summary 计数一
     assert.equal(doc.vaults.length, 6, '六库逐项上报')
     const byslug = new Map(doc.vaults.map((v) => [v.slug, v]))
     const vNew = byslug.get('m-new')!
-    assert.deepEqual(Object.keys(vNew).sort(), ['head', 'path', 'reason_code', 'slug', 'status'])
+    assert.deepEqual(Object.keys(vNew).sort(), ['head', 'last_sync', 'path', 'reason_code', 'slug', 'status'])
     assert.equal(vNew.status, 'success')
     assert.equal(vNew.reason_code, 'cloned')
     assert.equal(vNew['head'], w.shas['m-new']!.c1)
     assert.equal(vNew.path, path.join(w.localRoot, 'm-new'))
+    assert.match(String(vNew['last_sync']), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/, '成功项 last_sync 为 ISO（S7-T4，与状态文件同源）')
 
     const vBehind = byslug.get('m-behind')!
-    assert.deepEqual(Object.keys(vBehind).sort(), ['from', 'path', 'reason_code', 'slug', 'status', 'to'])
+    assert.deepEqual(Object.keys(vBehind).sort(), ['from', 'last_sync', 'path', 'reason_code', 'slug', 'status', 'to'])
     assert.equal(vBehind.status, 'success')
     assert.equal(vBehind.reason_code, 'fast_forwarded')
     assert.equal(vBehind['from'], w.shas['m-behind']!.c1)
     assert.equal(vBehind['to'], w.shas['m-behind']!.c2)
+    assert.match(String(vBehind['last_sync']), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
 
     const vTip = byslug.get('m-tip')!
-    assert.deepEqual(Object.keys(vTip).sort(), ['head', 'path', 'reason_code', 'slug', 'status'])
+    assert.deepEqual(Object.keys(vTip).sort(), ['head', 'last_sync', 'path', 'reason_code', 'slug', 'status'])
     assert.equal(vTip.status, 'success')
     assert.equal(vTip.reason_code, 'up_to_date')
     assert.equal(vTip['head'], w.shas['m-tip']!.c1)
+    assert.match(String(vTip['last_sync']), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
 
     const vDirty = byslug.get('m-dirty')!
     assert.deepEqual(Object.keys(vDirty).sort(), ['head', 'last_sync', 'path', 'reason', 'reason_code', 'slug', 'status'])
