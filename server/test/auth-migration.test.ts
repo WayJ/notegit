@@ -19,9 +19,15 @@ function columns(db: DatabaseSync, table: string): { name: string; notnull: numb
   return db.prepare(`PRAGMA table_info(${table})`).all() as { name: string; notnull: number; type: string }[];
 }
 
+
+/** 派生版本表（S4-T6 起）：从 1 连续递增即合法——append 新迁移不再需要改本文件 */
+function allVersions(): number[] {
+  return Array.from({ length: MIGRATIONS.length }, (_, i) => i + 1);
+}
+
 test('迁移 0003 已注册：版本 [1, 2, 3]，v3 仅含 sessions（与 0002 无重复建表）', () => {
   const versions = MIGRATIONS.map((m) => m.version);
-  assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0005/0006 已并入；0007（T8 app_settings）append
+  assert.deepEqual(versions, allVersions());  // 集成修正：0005/0006 已并入；0007（T8 app_settings）append
   const v3 = MIGRATIONS.find((m) => m.version === 3);
   assert.ok(v3, '版本 3 应存在');
   assert.match(v3?.description ?? '', /sessions/);
@@ -78,6 +84,6 @@ test('重入：migrate 二次执行跳过 0003，不重复建表', () => {
   const db = freshDb();
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6, 7]);  // 集成修正：0007（T8 app_settings）已并入
+  assert.deepEqual(again.skipped, allVersions());  // 集成修正：0007（T8 app_settings）已并入
   db.close();
 });
