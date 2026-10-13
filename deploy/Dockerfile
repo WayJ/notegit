@@ -3,7 +3,7 @@
 # CGI 包装，单容器单应用进程（docs/dev/process-model.md §1）。
 #
 # 构建上下文 = 仓库根：
-#   docker build -f deploy/Dockerfile -t notegit:0.0.0 .
+#   docker build -f deploy/Dockerfile -t notegit:0.1.0 .
 # 生产部署建议用 --build-arg NODE_IMAGE=node:<24.x.y>-alpine 钉住补丁版
 # （roadmap 风险表：node:sqlite RC 行为漂移靠锁定 Node 具体版本规避）。
 
