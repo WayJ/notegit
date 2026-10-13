@@ -2,11 +2,10 @@
  * notegit sync 命令实现（S7-T1；架构 §7.3 唯一语义源，架构 §8.1 命令面）。
  *
  * 流程：凭据面（同 ls：环境变量）→ GET /api/v1/vaults → 逐库六态判定
- * （local-status 的 computeSyncStatus）→ §7.3 策略表应用（engine）→ 最小报告。
+ * （local-status 的 computeSyncStatus）→ §7.3 策略表应用（engine）→ 报告
+ * （report.ts，S7-T3：--json 结构化逐项 + 文本人读；退出码非零当且仅当有失败）。
  *
  * D7 红线：全链路不存在 stash/reset/rebase；跳过 = 完全不动本地副本。
- * 报告契约（JSON、逐项结构、汇总口径）属 S7-T3；当前为最小 stdout/stderr 行，
- * 退出码语义先按 T3 验收口径落地：非零当且仅当有失败（跳过不判失败）。
  */
 import process from 'node:process'
 import path from 'node:path'
@@ -15,14 +14,17 @@ import { credentialSourceFromEnv } from '../ls/credential-source.ts'
 import { cloneUrlOf, fetchVaults } from '../ls/api.ts'
 import { computeSyncStatus, localRootOf, realSyncGitOps } from '../ls/local-status.ts'
 import { applySyncStrategy, realSyncOps, type SyncOutcome } from './engine.ts'
-import { EXIT_ERROR, EXIT_FAIL, EXIT_OK } from '../exit-codes.ts'
+import { buildSyncReport, exitCodeOf, renderReportJson, renderReportText, summarize, vaultResultOf } from './report.ts'
+import { EXIT_ERROR, EXIT_FAIL } from '../exit-codes.ts'
 
 interface SyncArgs {
   depth?: number
+  json: boolean
 }
 
 function parseArgs(argv: string[]): { ok: true; args: SyncArgs } | { ok: false; message: string } {
   let depth: number | undefined
+  let json = false
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!
     if (a === '--depth') {
@@ -31,38 +33,15 @@ function parseArgs(argv: string[]): { ok: true; args: SyncArgs } | { ok: false; 
         return { ok: false, message: `--depth 需要正整数参数（浅克隆显式选项；缺省完整克隆）：${a} ${raw ?? ''}`.trim() }
       }
       depth = Number(raw)
+    } else if (a === '--json') {
+      json = true
     } else if (a.startsWith('-')) {
       return { ok: false, message: `未知选项：${a}（notegit sync --help 查看用法）` }
     } else {
-      return { ok: false, message: `不接受位置参数：${a}（notegit sync [--depth <深度>]）` }
+      return { ok: false, message: `不接受位置参数：${a}（notegit sync [--depth <深度>] [--json]）` }
     }
   }
-  return { ok: true, args: { depth } }
-}
-
-function short(sha: string | null | undefined): string {
-  return sha === null || sha === undefined ? '?' : sha.slice(0, 7)
-}
-
-/** 最小报告行（T3 收口结构化契约前的过渡形态；成功走 stdout，跳过/失败走 stderr）。 */
-function reportLine(out: SyncOutcome): void {
-  switch (out.action) {
-    case 'cloned':
-      process.stdout.write(`${out.slug}：已克隆（HEAD ${short(out.head)}）→ ${out.path}\n`)
-      break
-    case 'fast_forwarded':
-      process.stdout.write(`${out.slug}：已快进 ${short(out.from)} → ${short(out.to)}\n`)
-      break
-    case 'up_to_date':
-      process.stdout.write(`${out.slug}：已是最新（${short(out.head)}）\n`)
-      break
-    case 'skipped':
-      process.stderr.write(`${out.slug}：跳过——${out.reason}\n`)
-      break
-    case 'failed':
-      process.stderr.write(`${out.slug}：失败——${out.message}\n`)
-      break
-  }
+  return { ok: true, args: { depth, json } }
 }
 
 /** 本地根目录下不对应当前任何可见库的 git 副本 → 提示映射变化，不擅动目录（架构 §7.2）。 */
@@ -106,14 +85,19 @@ export async function runSync(argv: string[], env: NodeJS.ProcessEnv = process.e
   for (const v of result.vaults) {
     const cloneUrl = cloneUrlOf(cred.server, v.slug)
     const info = await computeSyncStatus({ root, slug: v.slug, defaultBranch: v.default_branch, cloneUrl, ops })
-    const out = await applySyncStrategy({ root, slug: v.slug, cloneUrl, defaultBranch: v.default_branch, info, depth: parsed.args.depth, ops: syncOps })
-    reportLine(out)
-    outcomes.push(out)
+    outcomes.push(await applySyncStrategy({ root, slug: v.slug, cloneUrl, defaultBranch: v.default_branch, info, depth: parsed.args.depth, ops: syncOps }))
   }
   await hintOrphanDirs(root, new Set(result.vaults.map((v) => v.slug)), ops)
-  const ok = outcomes.filter((o) => o.action === 'cloned' || o.action === 'fast_forwarded' || o.action === 'up_to_date').length
-  const skipped = outcomes.filter((o) => o.action === 'skipped').length
-  const failed = outcomes.filter((o) => o.action === 'failed').length
-  process.stdout.write(`同步完成：共 ${outcomes.length} 库（成功 ${ok}、跳过 ${skipped}、失败 ${failed}）\n`)
-  return failed > 0 ? EXIT_FAIL : EXIT_OK
+  if (parsed.args.json) {
+    // 机器模式：stdout 仅一份 JSON 文档（逐项人读行不入 stdout；孤儿目录提示仍走 stderr）
+    const doc = buildSyncReport({ server: cred.server, local_root: root, outcomes })
+    process.stdout.write(renderReportJson(doc))
+    return exitCodeOf(doc.summary)
+  }
+  const results = outcomes.map(vaultResultOf)
+  const summary = summarize(results)
+  const text = renderReportText(results, summary)
+  for (const line of text.out) process.stdout.write(`${line}\n`)
+  for (const line of text.err) process.stderr.write(`${line}\n`)
+  return exitCodeOf(summary)
 }
