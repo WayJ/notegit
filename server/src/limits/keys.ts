@@ -29,22 +29,25 @@ export const LIMIT_KEYS = Object.keys(LIMIT_KEY_FIELDS) as readonly LimitKey[];
 export type LimitValue = number | string[];
 
 /** 配置键 → 环境变量名：NOTEGIT_ + 全大写、点与驼峰边界转下划线
- *  （maxPushBytes → MAX_PUSH_BYTES；部署级静态覆盖通道） */
-export function envNameOf(key: LimitKey): string {
+ *  （maxPushBytes → MAX_PUSH_BYTES；部署级静态覆盖通道）。S8-T8 起兼供
+ *  git 域键派生（git.maxConcurrentChildren → NOTEGIT_GIT_MAX_CONCURRENT_CHILDREN），
+ *  入参放宽为 string——键集校验由各注册表自行负责。 */
+export function envNameOf(key: string): string {
   return `NOTEGIT_${key
     .replaceAll('.', '_')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .toUpperCase()}`;
 }
 
-const LIST_KEYS = new Set<LimitKey>([
+const LIST_KEYS = new Set<string>([
   'validation.limits.attachmentAllowedExtensions',
   'validation.exemptions.additionalNavPatterns',
   'validation.exemptions.specialFilePatterns',
 ]);
 
-/** 解析并校验一个配置值（JSON 字面量 → 类型化值）。非法即抛错并指名配置键。 */
-export function parseLimitValue(key: LimitKey, raw: string): LimitValue {
+/** 解析并校验一个配置值（JSON 字面量 → 类型化值）。非法即抛错并指名配置键。
+ *  S8-T8 起兼供 git 域键（数值语义，见 git-gate.ts）。 */
+export function parseLimitValue(key: string, raw: string): LimitValue {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -54,8 +57,9 @@ export function parseLimitValue(key: LimitKey, raw: string): LimitValue {
   return validateLimitValue(key, parsed);
 }
 
-/** 类型校验（DB 行绕过写入面时加载侧兜底，defense in depth） */
-export function validateLimitValue(key: LimitKey, value: unknown): LimitValue {
+/** 类型校验（DB 行绕过写入面时加载侧兜底，defense in depth；
+ *  键名为 string——git 域键同为数值语义，S8-T8） */
+export function validateLimitValue(key: string, value: unknown): LimitValue {
   if (LIST_KEYS.has(key)) {
     if (!Array.isArray(value) || value.some((x) => typeof x !== 'string')) {
       throw new Error(`配置键 ${key} 期望字符串数组（JSON），实际：${JSON.stringify(value)?.slice(0, 60)}`);

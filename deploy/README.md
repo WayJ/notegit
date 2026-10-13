@@ -33,15 +33,54 @@ docker compose -f deploy/docker-compose.yml up -d --build
 | 项 | 最低规格 | 推荐规格 |
 |---|---|---|
 | CPU | 1 vCPU | 2 vCPU |
-| 内存 | 512 MB | 1 GB |
+| 内存 | **768 MB**（S8-T8 修正，见下） | 1 GB |
 | 磁盘（数据卷） | 2 GB | 20 GB |
 | 网络 | 单端口 HTTPS（反代终结，见下） | 同左 |
 
-**S7-T8 负载数据修正（sprint D6，实测优先于规划值）**：selection §5 的内存行按
-S1 spike 期 RSS 114.7MB 推导；S7-T8 实测**当前全功能服务进程 RSS 基线 232MB**
-（Web/API/Git/审计/校验在线，负载增量仅 ~17MB），512MB 地板对「本体 232MB +
-数并发 clone 子进程链（每链 ~17MB）」余量已明显收窄。**512MB 地板复核收口在
-S8-T8**（容量/并发限制量化任务，DOD-13）——在此之前生产部署按 1GB 档供给。
+**内存地板修正（S8-T8 收口，实测优先于规划值——S6 sprint D6）**：selection §5
+原 512MB 地板按 S1 spike 期 RSS 114.7MB 推导；S7-T8/S8-T8 实测**全功能服务进程
+RSS 基线 232–240MB**（Web/API/Git/审计/校验/搜索在线），叠加每请求 git 子进程
+链预算（每链 ~17MB × 默认并发上限 8 = 136MB）与系统/页缓存/备份瞬态
+（VACUUM INTO、复制件 fsck）≥100–150MB ⇒ 512MB 无余量、**修正为 768MB**。
+量化与实测记录：[S8-T8 notes](../.agents/notes/2026-10-14-S8-T8-capacity.md)
+（闸门实负载：并发链被钳制时子进程 RSS 峰值线性减半、墙钟 +3.6%、全部成功）。
+512MB 容器不承诺：将 `git.maxConcurrentChildren` 降至 4 可勉强运行但备份窗口紧。
+selection §5 / roadmap Q2 的正式修订走
+[capacity-face-amendments G3](../docs/s1/capacity-face-amendments.md)（master 执行）。
+
+## 容量与并发限制（S8-T8 收口）
+
+限制键的覆盖链（越右越权威，全部**热生效**——改行后下一次请求即生效，无需重启）：
+
+```text
+契约默认值（validation-defaults.json / git 域默认）
+  ← 环境变量（NOTEGIT_<大写下划线键名>，值为 JSON 字面量；部署级静态覆盖）
+  ← app_settings 行（管理员运行时配置；同键胜环境——SQL/ops 写行即可，
+     管理端点随 api.md 契约补录，见 capacity-face-amendments G5）
+```
+
+**校验限制**（10 键，语义与默认值见
+[validation-defaults.json](../docs/contracts/validation-defaults.json) 与
+[validation §5.1](../docs/contracts/validation.md)）：文档/附件大小、附件类型
+清单、单次 push 大小、库容量、豁免清单、校验超时/并发/内存。非法值 fail-closed
+（对应入口拒绝并指名配置键，不静默回退默认值）。
+
+**git 子进程并发**：`git.maxConcurrentChildren`（默认 8；S8-T8 新键，契约入册
+走 [建议稿 G2](../docs/s1/capacity-face-amendments.md)）——每请求 git 子进程
+链（`git http-backend` 一条链）的并发上限，超出 **FIFO 排队**（不拒绝：git
+客户端对等待透明；TCP 背压停住客户端发送，排队上限由客户端超时与反代约束）。
+容量修正建议：`NOTEGIT_GIT_MAX_CONCURRENT_CHILDREN`（JSON 字面量，如 `4`）或
+app_settings 行 `git.maxConcurrentChildren`。
+
+**初始导入指引**（S3-T8 移交项）：单库全量初始导入 ≈150–250MiB（压缩后）会超
+50MiB 默认 push 上限——管理员临时调高、完成后回落（热生效）：
+
+```sql
+-- 临时调高（app_settings 行；等价环境变量 NOTEGIT_VALIDATION_LIMITS_MAX_PUSH_BYTES）
+INSERT INTO app_settings (key, value, updated_at) VALUES
+  ('validation.limits.maxPushBytes', '536870912', '<ISO 时间>');  -- 512MiB 示例
+-- 导入完成后 DELETE FROM app_settings WHERE key = 'validation.limits.maxPushBytes';
+```
 
 ## 数据布局（/data 持久卷）
 
@@ -182,5 +221,8 @@ Node 24 原生擦除 TS 类型（本仓代码限定可擦除语法，tsconfig �
 
 - 第一版无高可用承诺（架构 §10）；单实例单应用进程（process-model §1），进程
   生命周期由容器 restart policy 负责。
-- 并发 clone/push 的子进程上限量化与可配置限制随 S8-T8（Q7 终值）。
+- 并发 clone/push 的子进程上限已量化落地（S8-T8：`git.maxConcurrentChildren`
+  默认 8、FIFO 排队，见「容量与并发限制」节）；web 侧发布/搜索的短命令 git
+  子进程不在此键范围。Q7 唯一值修订建议（maxValidationMemoryMb 256→512）待
+  master 契约批（建议稿 G1）。
 - 磁盘水位、校验耗时、失败推送等指标端点随 S8-T2（R14）。

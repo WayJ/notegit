@@ -77,12 +77,13 @@ test('compose：单实例 + 命名持久卷挂 /data + 重启策略 + 端口发�
   assert.ok(!/\$\{.*\}/.test(yml) || true); // 占位：compose 允许变量但最小示例应开箱可用（不强断言）
 });
 
-test('deploy/README：最低规格引用 selection §5 + S7-T8 修正（RSS 232MB），512MB 地板复核标注留给 S8-T8', async () => {
+test('deploy/README：最低规格引用 selection §5 + S8-T8 地板修正（RSS 232–240MB 基线 → 768MB 地板）', async () => {
   const md = await read('README.md');
   assert.match(md, /selection\.md|selection §5|§5/, '应引用 selection §5（最低部署规格来源）');
-  assert.match(md, /232/, '应记载 S7-T8 修正：服务本体 RSS 基线 232MB（旧值 114.7MB 已过时）');
-  assert.match(md, /512/, '应记载 512MB 地板规格');
-  assert.match(md, /S8-T8/, '应标注 512MB 地板复核收口在 S8-T8（sprint D6，不在本任务虚设定值）');
+  assert.match(md, /232/, '应记载 RSS 基线实测（232–240MB，S7-T8/S8-T8——旧值 114.7MB 已过时）');
+  assert.match(md, /768 ?MB/, '最低规格表应为 768MB 地板（S8-T8 修正）');
+  assert.match(md, /512/, '512MB 旧值作为被修正对象记载（含不承诺降级路径说明）');
+  assert.match(md, /maxConcurrentChildren/, '修正依据应含子进程并发上限键（每链 ~17MB × 默认 8）');
 });
 
 test('deploy/README：HTTPS 接入选型记录（反代终结 TLS 或容器内 TLS 二选一并给依据）', async () => {
