@@ -283,7 +283,7 @@ test('last-sync·标记回退：状态无此条目/无状态文件 → 回退 .g
 
 // ── 失败码域：lock_failed 加入 SyncFailureCode（runSync 锁获取失败面；报告 reason_code 透传） ──
 
-test('失败码域：SyncFailureCode = 六值（含本任务新增 lock_failed）；Record 穷尽断言防域漂移', () => {
+test('失败码域：SyncFailureCode = 九值（含 T4 lock_failed + T6 断网三态）；Record 穷尽断言防域漂移', () => {
   const all: Record<SyncFailureCode, true> = {
     status_error: true,
     clone_failed: true,
@@ -291,8 +291,21 @@ test('失败码域：SyncFailureCode = 六值（含本任务新增 lock_failed�
     fast_forward_failed: true,
     internal: true,
     lock_failed: true,
+    net_unreachable: true,
+    timeout: true,
+    http_error: true,
   }
-  assert.deepEqual(Object.keys(all).sort(), ['clone_failed', 'fast_forward_failed', 'head_unreadable', 'internal', 'lock_failed', 'status_error'])
+  assert.deepEqual(Object.keys(all).sort(), [
+    'clone_failed',
+    'fast_forward_failed',
+    'head_unreadable',
+    'http_error',
+    'internal',
+    'lock_failed',
+    'net_unreachable',
+    'status_error',
+    'timeout',
+  ])
 })
 
 // ── 跨进程：两个真实子进程并发写不同 slug，全局状态锁保证不丢更新 ────────────────
