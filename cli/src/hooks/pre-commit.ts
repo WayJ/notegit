@@ -11,7 +11,7 @@
  * 阻断；2=运行错误 → 阻断（fail-closed）。
  */
 import process from 'node:process'
-import { resolve } from 'node:path'
+import { realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import type { Report, Issue } from 'notegit-validation'
 import { lintStaged } from './staged.ts'
@@ -58,7 +58,11 @@ export async function runHook(argv: readonly string[], out: { write(s: string): 
   return 2
 }
 
-// 直接作为进程入口运行时执行（launcher：exec <node 绝对路径> <本文件绝对路径>）
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+// 直接作为进程入口运行时执行（launcher：exec <node 绝对路径> <本文件绝对路径>）。
+// argv[1] 先 realpath 再比较：Node 按真实路径加载入口（import.meta.url 已是 realpath），
+// 而 argv[1] 保留调用方拼写——经符号链接前缀调用（macOS /tmp→/private/tmp、nvm 等
+// 安装前缀常态）时 resolve() 不解引用，两者不等 → hook 静默退出 0（放行提交）——
+// fail-open 缺陷，安装态冒烟（S6-T7）实测复现后修复；realpath 失败（非入口加载）不运行。
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   process.exitCode = await runHook(process.argv.slice(2))
 }

@@ -9,6 +9,7 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
   version: string
   engines: { node: string }
   dependencies: Record<string, string>
+  devDependencies: Record<string, string>
   bin: Record<string, string>
 }
 
@@ -53,11 +54,15 @@ test('pack 清单不含源码 .ts 与 dev 文件（源码经 tsc --noEmit 独立
   }
 })
 
-test('依赖接线（D5）：声明 notegit-validation 工作区依赖，且不携带服务端私有依赖', () => {
-  assert.equal(pkg.dependencies['notegit-validation'], '0.0.0')
+test('依赖接线（D5 + S6-T7 内嵌分发形态）：notegit-validation=构建输入（devDeps，编译内嵌 dist）、yaml=运行时依赖（vendored 副本消费），且不携带服务端私有依赖', () => {
+  // S6-T7 起 validation 内嵌 CLI dist（master 裁定）：声明移至 devDependencies——
+  // 发布产物自包含，npm install 不再从 registry 解析 notegit-validation（未发布，
+  // 单 tarball 安装曾 E404）；yaml 由 vendored 副本在运行时消费，经 registry 正常安装。
+  assert.equal((pkg.devDependencies as Record<string, string>)['notegit-validation'], '0.0.0')
+  assert.equal(pkg.dependencies['yaml'], '2.9.1')
   const serverPrivate = ['fastify', '@node-rs/argon2']
-  for (const dep of Object.keys(pkg.dependencies)) {
-    assert.ok(!serverPrivate.includes(dep), `服务端私有依赖不应出现在 CLI dependencies：${dep}`)
+  for (const dep of [...Object.keys(pkg.dependencies), ...Object.keys(pkg.devDependencies)]) {
+    assert.ok(!serverPrivate.includes(dep), `服务端私有依赖不应出现在 CLI 依赖面：${dep}`)
   }
 })
 
