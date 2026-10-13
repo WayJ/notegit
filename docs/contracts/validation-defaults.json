@@ -59,10 +59,19 @@
       "basis": "架构 §9 并发限制；单实例 4（建议值，待校正）"
     },
     "validation.runtime.maxValidationMemoryMb": {
-      "default": 256,
+      "default": 512,
       "unit": "MiB",
       "kind": "operational",
-      "basis": "架构 §9 内存限制；单次校验 256 MiB（建议值，待校正）"
+      "basis": "架构 §9 内存限制；校验入口按进程整体 RSS 判定，上限 512 MiB——S8-T8 实测校正（app 进程基线 RSS 232–240MB，旧值 256 距基线 <25MB 构成现实误杀风险；512 = 基线 × 2）（2026-10-14 ADR D14；依据 .agents/notes/2026-10-14-S8-T8-capacity.md）"
+    }
+  },
+  "git": {
+    "note": "git 域服务端运维限制键（与 validation.* 键同链不同册：githttp 每请求 http-backend spawn 前 FIFO 排队取槽——排队而非拒绝，git 客户端对等待透明（TCP 背压 + Node requestTimeout 300s 兜底）；版本化随本文件）。",
+    "git.maxConcurrentChildren": {
+      "default": 8,
+      "unit": "count",
+      "kind": "operational",
+      "basis": "每并发 clone 的 git 子进程链 ~17MB（selection §5 保守值）× 8 = 136MB 子进程预算 + 服务进程本体 RSS 基线 232–240MB = 368MB ⊂ 768MB 部署地板；实负载验证：闸门限 2 时 c=4 子进程 RSS 峰值线性钳制（32→16MB）、墙钟 +3.6%、全部成功。边界（如实）：只覆盖 githttp 链，web 侧 runGit 短命令不在此键（2026-10-14 ADR D14；依据 .agents/notes/2026-10-14-S8-T8-capacity.md）"
     }
   }
 }

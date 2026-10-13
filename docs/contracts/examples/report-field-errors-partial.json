@@ -1,6 +1,6 @@
 {
   "$comment": "示例 2/5：本地 pre-commit 校验失败——同一批暂存文件『部分通过、部分失败』。架构 §5.3：title 为空阻断；§5.4：退出非零并给出文件、规则与修正提示。本地校验读取暂存区而非工作目录（§5.4）。",
-  "rulesVersion": "1.0.0-draft.1",
+  "rulesVersion": "1.0.0-draft.2",
   "scope": "pre-commit",
   "result": "fail",
   "exitCode": 1,

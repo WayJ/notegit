@@ -1,6 +1,6 @@
 {
   "$comment": "示例 1/5：本地 pre-commit 通过（含 warning）。架构 §5.3：提示但允许提交——owner/description/source 缺失、库内相对链接目标缺失；退出码 0（§5.4）。",
-  "rulesVersion": "1.0.0-draft.1",
+  "rulesVersion": "1.0.0-draft.2",
   "scope": "pre-commit",
   "result": "pass",
   "exitCode": 0,
