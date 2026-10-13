@@ -130,6 +130,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
           entryPath,
           mode: 'new',
           baseCommit,
+          viewer: { username: vault.who.subject.username, is_instance_admin: vault.who.subject.is_instance_admin },
           prefill:
             draft !== null
               ? parseDocForForm(draft.content)
@@ -155,6 +156,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
           entryPath,
           mode: 'edit',
           baseCommit,
+          viewer: { username: vault.who.subject.username, is_instance_admin: vault.who.subject.is_instance_admin },
           body: draft?.content ?? text,
           ...draftInfoOf(draft, baseCommit),
         }),
@@ -167,6 +169,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
         entryPath,
         mode: 'edit',
         baseCommit,
+        viewer: { username: vault.who.subject.username, is_instance_admin: vault.who.subject.is_instance_admin },
         prefill: draft !== null ? parseDocForForm(draft.content) : parseDocForForm(text),
         ...draftInfoOf(draft, baseCommit),
       }),

@@ -44,36 +44,43 @@ export function registerBrowseRoutes(app: FastifyInstance, opts: BrowseRoutesOpt
     req: FastifyRequest,
     reply: FastifyReply,
     slug: string,
-  ): Promise<{ slug: string; name: string; id: number; defaultBranch: string } | null> {
+  ): Promise<{ who: AuthSuccess; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return null;
     const decision = authorize(membershipSource, who.subject.employee_id, slug, 'read');
     if (!decision.allowed) return sendPageNotFound(reply), null; // 无权=不存在（D-IC-06）
     const row = vaults.getVaultRow(slug);
     if (!row) return sendPageNotFound(reply), null; // fail-closed（authorize 通过即成员在）
-    return { slug: row.slug, name: row.name, id: row.id, defaultBranch: row.default_branch };
+    return { who, vault: { slug: row.slug, name: row.name, id: row.id, defaultBranch: row.default_branch } };
   }
 
   app.get('/vaults', async (req, reply) => {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return reply;
     const list = vaults.listVaults(who.subject.employee_id); // 实时查库（仅本人成员关系的库）
-    return html(reply, vaultListPage({ username: who.subject.username }, list));
+    return html(
+      reply,
+      vaultListPage(
+        { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+        list,
+      ),
+    );
   });
 
   // 库根：成员 → 302 目录浏览（canonical URL 单一）；无权与不存在同 404
   app.get('/vaults/:slug', async (req, reply) => {
     const { slug } = req.params as { slug: string };
-    const vault = await requireVault(req, reply, slug);
-    if (!vault) return reply;
-    return reply.redirect(browseUrl(vault.slug, ''), 302);
+    const guard = await requireVault(req, reply, slug);
+    if (!guard) return reply;
+    return reply.redirect(browseUrl(guard.vault.slug, ''), 302);
   });
 
   // 目录浏览（root 与多级同handler——wildcard 段即树路径；尾斜杠归一）
   const browseHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<FastifyReply> => {
     const { slug } = req.params as { slug: string };
-    const vault = await requireVault(req, reply, slug);
-    if (!vault) return reply;
+    const guard = await requireVault(req, reply, slug);
+    if (!guard) return reply;
+    const { who, vault } = guard;
     if (opts.dataDir === undefined) {
       return html(reply, browseStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
     }
@@ -97,7 +104,16 @@ export function registerBrowseRoutes(app: FastifyInstance, opts: BrowseRoutesOpt
         }
       }
     }
-    return html(reply, browsePage({ vault, dirPath, entries: read.entries, readme }));
+    return html(
+      reply,
+      browsePage({
+        vault,
+        dirPath,
+        entries: read.entries,
+        readme,
+        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+      }),
+    );
   };
   app.get('/vaults/:slug/browse', browseHandler);
   app.get('/vaults/:slug/browse/*', browseHandler);

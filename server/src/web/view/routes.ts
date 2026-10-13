@@ -65,14 +65,14 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
     req: FastifyRequest,
     reply: FastifyReply,
     slug: string,
-  ): Promise<{ slug: string; name: string; id: number; defaultBranch: string } | null> {
+  ): Promise<{ who: AuthSuccess; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return null;
     const decision = authorize(membershipSource, who.subject.employee_id, slug, 'read');
     if (!decision.allowed) return sendPageNotFound(reply), null; // 无权=不存在（D-IC-06）
     const row = vaults.getVaultRow(slug);
     if (!row) return sendPageNotFound(reply), null; // fail-closed
-    return { slug: row.slug, name: row.name, id: row.id, defaultBranch: row.default_branch };
+    return { who, vault: { slug: row.slug, name: row.name, id: row.id, defaultBranch: row.default_branch } };
   }
 
   const attachmentImageUrl = opts.attachmentImageUrl ?? ATTACHMENT_CHANNEL_PENDING;
@@ -119,8 +119,9 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
 
   app.get('/vaults/:slug/view/*', async (req, reply) => {
     const { slug } = req.params as { slug: string };
-    const vault = await requireVault(req, reply, slug);
-    if (!vault) return reply;
+    const guard = await requireVault(req, reply, slug);
+    if (!guard) return reply;
+    const { who, vault } = guard;
     if (opts.dataDir === undefined) {
       return html(reply, browseStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
     }
@@ -132,7 +133,12 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
     if (entry.type === 'commit') return sendPageNotFound(reply); // 子模块不属 v1 页面域
 
     const lower = entry.name.toLowerCase();
-    const shared = { vault, entryPath, sizeBytes: entry.size };
+    const shared = {
+      vault,
+      entryPath,
+      sizeBytes: entry.size,
+      viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+    };
 
     if ((entry.size ?? 0) > PREVIEW_RENDER_MAX_BYTES) {
       return html(reply, tooLargePage({ ...shared, limitBytes: PREVIEW_RENDER_MAX_BYTES }));
@@ -170,6 +176,7 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
         sizeBytes: entry.size,
         bodyHtml: rendered.html,
         strippedHtml: rendered.strippedHtml,
+        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
       }),
     );
   });
