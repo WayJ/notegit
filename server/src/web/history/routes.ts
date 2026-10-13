@@ -17,12 +17,17 @@ import { attachmentUrl, repoPathOfRef, type AttachmentImageUrlResolver } from '.
 import { readCommitLog, readCommitDiff } from './log.ts';
 import { readEntryAtCommit, readBlobBytes, bodyAfterFrontmatter } from './version.ts';
 import { restoreFileAtCommit } from './restore.ts';
+import { parseCitation } from './cite.ts';
 import {
   historyPage,
   historyStatePage,
   diffPage,
   versionPage,
   restorePage,
+  versionUrl,
+  citeEntryPage,
+  citeFormatErrorPage,
+  citeUnresolvablePage,
   type RestoreNotice,
   type VersionBody,
 } from './pages.ts';
@@ -350,5 +355,35 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
       );
     }
     return reply.redirect(viewUrl(vault.slug, treePath), 302);
+  });
+
+  // ── S5-T6 引用解析入口/深链（api.md §13 S5-T6 行）─────────────────────────
+
+  // GET /cite[?c=<库 / 路径 @ commit>]：引用三要素解析到对应历史版本页——
+  // 成功 302 → version 路由（缩写 commit 归一为全 SHA 深链）；空 c=入口表单页。
+  // 失败两类各自可理解且同页：形态不符（只谈格式，不触库）与存在性失败（已过
+  // 权限判定后不区分原因——反存在性）；无权/未知库走 D-IC-06 同页 404。
+  app.get('/cite', async (req, reply) => {
+    const who = await opts.requirePageUser(req, reply);
+    if (!who) return reply;
+    const raw = (req.query as { c?: unknown }).c;
+    const citation = typeof raw === 'string' ? raw.trim() : '';
+    if (citation === '') return html(reply, citeEntryPage()); // 空输入回入口表单（不报错）
+    const parsed = parseCitation(citation);
+    if (parsed === null) {
+      return reply.code(404).type('text/html; charset=utf-8').send(citeFormatErrorPage());
+    }
+    const guard = await requireVault(req, reply, parsed.slug); // 未认证 302/无权=不存在 404 同页
+    if (!guard) return reply;
+    const { vault } = guard;
+    if (opts.dataDir === undefined) {
+      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+    }
+    const read = await readEntryAtCommit(opts.dataDir, vault.id, parsed.commit, parsed.path);
+    if (read.kind === 'unavailable') return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
+    if (read.kind !== 'ok' || read.entry.type !== 'blob') {
+      return reply.code(404).type('text/html; charset=utf-8').send(citeUnresolvablePage());
+    }
+    return reply.redirect(versionUrl(vault.slug, read.commitOid, parsed.path), 302);
   });
 }
