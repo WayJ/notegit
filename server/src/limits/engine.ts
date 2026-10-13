@@ -36,6 +36,7 @@ import {
   type ValidationConfig,
 } from 'notegit-validation';
 import { LIMIT_KEY_FIELDS, LIMIT_KEYS, envNameOf, parseLimitValue, validateLimitValue, type LimitKey, type LimitValue } from './keys.ts';
+import { metricsCollector } from '../metrics/collector.ts';
 
 export { LIMIT_KEY_FIELDS, LIMIT_KEYS, envNameOf, parseLimitValue, validateLimitValue } from './keys.ts';
 export type { LimitKey, LimitValue } from './keys.ts';
@@ -127,8 +128,19 @@ const validatorOf = (overrides: ConfigOverrides): Validator => {
 
 /** 判定点统一入口：实时读取覆盖链（热生效）→ 共享闸门 → 单一来源校验。
  *  pre-receive（每推送一进程，闸门计 1）与发布组件（app 进程内跨请求共享）同源。
- *  input.config 若显式传入则叠加于生效覆盖之上（测试缝，生产路径不传）。 */
+ *  input.config 若显式传入则叠加于生效覆盖之上（测试缝，生产路径不传）。
+ *  S8-T2 起计时入指标采集器（架构 §10「校验耗时」；两 server scope 的唯一
+ *  计时挂接点——web-submit 样本驻留 app 进程；pre-receive 样本随 hook 子进程
+ *  消亡，指标面如实只呈现 web-submit 分布，失败次数类不受影响——走审计面）。 */
 export async function runServerValidation(input: ValidateInput, source: LimitsSource = {}): Promise<Report> {
   const overrides = effectiveOverrides(source);
-  return validatorOf(overrides).validate(input);
+  const validator = validatorOf(overrides);
+  const startedAt = performance.now();
+  try {
+    return await validator.validate(input);
+  } finally {
+    if (input.scope === 'web-submit' || input.scope === 'pre-receive') {
+      metricsCollector.recordValidationRun(input.scope, performance.now() - startedAt);
+    }
+  }
 }

@@ -21,6 +21,8 @@ import { registerMaintenanceRoutes } from './maintenance/routes.ts';
 import { registerRulesVersionRoutes } from './rulesversion/routes.ts';
 import { registerSearchRoutes } from './search/routes.ts';
 import { SearchIndexer } from './search/indexer.ts';
+import { metricsCollector } from './metrics/collector.ts';
+import { registerMetricsRoutes } from './metrics/routes.ts';
 import { registerWebRoutes } from './web/routes.ts';
 
 /** 认证主体（identity §1：认证主体 = 员工账号）。 */
@@ -135,6 +137,16 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     // 挂在初始化闸门之后（api.md §10 组装序：闸门 → CSRF → 认证 → 路由）。
     app.addHook('onRequest', csrfGuard);
 
+    // S8-T2 认证失败计数（identity §8：「不逐条入审计，以失败计数指标呈现」的
+    // 替代呈现挂接点）：应用级 onResponse 钩子按 401 响应归因——凡统一认证缝判
+    // E-AUTH-001..004 的 401 都计入（api/web/git 三入口分桶）；429 限速、403
+    // 授权拒绝等非认证失败不计。进程内运行态计数（metrics/collector.ts）。
+    app.addHook('onResponse', async (req, reply) => {
+      if (reply.statusCode !== 401) return;
+      const p = req.url.split('?')[0]!;
+      metricsCollector.recordAuthFailure(p.startsWith('/git') ? 'git' : p.startsWith('/api') ? 'api' : 'web');
+    });
+
     registerBootstrapRoutes(app, wired);
     registerInviteRoutes(app, wired);
     // S2-T7 维护模式生命周期端点（POST/DELETE /api/v1/admin/maintenance；实例管理员）；
@@ -211,6 +223,15 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     // 值经 notegit-validation 运行时读 rules-version.json（validation §7.3 单一来源，
     // 与 pre-receive 同机制）——CLI version-probe（S6-T4）的激活端点
     registerRulesVersionRoutes(app, { authenticateRequest: wired.authenticateRequest });
+    // S8-T2 运维指标面（实例管理员；架构 §10 最低清单）：GET /api/v1/admin/metrics
+    // ——磁盘水位（/data 四分域）、失败推送/校验失败计数（审计面计数来源）、校验
+    // 耗时分布、认证失败计数、备份完成时间预留。api.md 未入册（D11 模式——建议稿
+    // docs/s1/metrics-face-amendments.md，master 随 D 批落）。只读：无审计行。
+    registerMetricsRoutes(app, {
+      db: wired.db,
+      authenticateRequest: wired.authenticateRequest,
+      ...(deps.dataDir !== undefined ? { dataDir: deps.dataDir } : {}),
+    });
     // S3-T2 Git Smart HTTP 入口（api.md §8.4）：CGI 包装 git http-backend，认证
     // 经 Basic→token（同一凭据域服务）、授权经同一 authorize/membershipSource、
     // 维护模式 write 403——与 Web/API 三入口共用组件；dataDir 注入时注册
