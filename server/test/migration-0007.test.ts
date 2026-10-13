@@ -31,6 +31,12 @@ function migrationV7Lines(): string[] {
   return v7.statements.join('\n').split('\n').map((l) => l.trimEnd()).filter((l) => l.length > 0);
 }
 
+
+/** 派生版本表（S4-T6 起）：从 1 连续递增即合法——append 新迁移不再需要改本文件 */
+function allVersions(): number[] {
+  return Array.from({ length: MIGRATIONS.length }, (_, i) => i + 1);
+}
+
 test('迁移 0007：与契约 @schema 块逐行等价（防漂移，D6）', () => {
   assert.deepEqual(
     migrationV7Lines(),
@@ -42,14 +48,14 @@ test('迁移 0007：与契约 @schema 块逐行等价（防漂移，D6）', () =
 test('迁移 0007：在 0006 之上应用，app_settings 表/列落地，重入跳过', () => {
   const db = memory();
   const first = migrate(db, MIGRATIONS);
-  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(first.applied, allVersions());
 
   const cols = (db.prepare('PRAGMA table_info(app_settings)').all() as { name: string }[]).map((c) => c.name);
   assert.deepEqual(cols.sort(), ['key', 'updated_at', 'updated_by', 'value']);
 
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(again.skipped, allVersions());
   db.close();
 });
 

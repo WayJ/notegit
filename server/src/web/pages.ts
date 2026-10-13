@@ -17,7 +17,7 @@ export function escapeHtml(s: string): string {
     .replaceAll("'", '&#39;');
 }
 
-function layout(title: string, body: string, script = ''): string {
+export function layout(title: string, body: string, script = ''): string {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -85,6 +85,7 @@ export function indexPage(user: { username: string; display_name: string; is_ins
   return layout('首页', `
 <h1>Notegit</h1>
 <p>当前登录：<strong>${escapeHtml(user.display_name)}</strong>（${escapeHtml(user.username)}）</p>
+<p><a href="/vaults">知识库</a>（有权库列表与目录浏览）</p>
 <p><a href="/credentials">我的访问凭据</a>（创建 / 撤销 / 查看，脱敏显示）</p>${adminEntry}
 <p><button id="logout">退出登录</button></p>
 <p id="logout-msg"></p>
@@ -429,4 +430,21 @@ document.getElementById('cred-form').addEventListener('submit', async (ev) => {
   }
 });
 `);
+}
+
+/** S4-T1 起：页面 404（无权库与不存在同页同码，D-IC-06 页面形态） */
+export function notFoundPage(): string {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>404 — Notegit</title>
+</head>
+<body>
+<h1>404</h1>
+<p>页面不存在或无权访问。</p>
+<p><a href="/">返回首页</a></p>
+</body>
+</html>`;
 }
