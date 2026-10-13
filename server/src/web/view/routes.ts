@@ -44,6 +44,10 @@ const PREVIEW_RENDER_MAX_BYTES = README_RENDER_MAX_BYTES;
 /** 常见图片附件扩展名（展示层分类仅影响标注文案；读取/清单规则在 validation §5） */
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico']);
 
+/** 附件通道以 image/* 服务的扩展名（直开页 <img> 内嵌集合——与 upload/routes.ts
+ *  ATTACH_CONTENT_TYPES 的 image 升格集一致；svg 刻意不入：一律 octet-stream 纵深防御） */
+const INLINE_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+
 /** frontmatter 剥离：闭合块之后为正文；未闭合按 lenient 跳过首行（预览不校验） */
 function bodyAfterFrontmatter(text: string): string {
   const fm = extractFrontmatter(text);
@@ -134,10 +138,20 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
       return html(reply, tooLargePage({ ...shared, limitBytes: PREVIEW_RENDER_MAX_BYTES }));
     }
     if (!lower.endsWith('.md')) {
-      const page = IMAGE_EXTENSIONS.has(lower.slice(lower.lastIndexOf('.')))
-        ? attachmentImagePage(shared)
-        : noPreviewPage(shared);
-      return html(reply, page);
+      const ext = lower.slice(lower.lastIndexOf('.'));
+      if (IMAGE_EXTENSIONS.has(ext)) {
+        // S4-T8 T4 遗留收口：直开页嵌鉴权附件通道 URL（blob 寻址）；仅对通道以
+        // image/* 服务的类型内嵌（svg 等 octet-stream 纵深防御——标注不内嵌）
+        const inlineable = INLINE_IMAGE_EXTENSIONS.has(ext);
+        return html(
+          reply,
+          attachmentImagePage({
+            ...shared,
+            imageUrl: inlineable ? attachmentUrl(vault.slug, entry.oid, entry.name) : null,
+          }),
+        );
+      }
+      return html(reply, noPreviewPage(shared));
     }
 
     let text: string;

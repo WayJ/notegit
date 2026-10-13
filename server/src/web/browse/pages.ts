@@ -104,10 +104,12 @@ export function browsePage(input: BrowsePageInput): string {
       : readme === null
         ? ''
         : `<h2>README.md <small>（导航文档 · 豁免 frontmatter）</small></h2>\n<pre>${escapeHtml(readme)}</pre>`;
+  // S4-T8（T4 遗留收口）：目录级上传入口（GET 页面无写操作；写权限在 POST 判定）
+  const uploadEntry = ` <span class="entry-ops">(<a href="/vaults/${encodeURIComponent(vault.slug)}/upload${dirPath === '' ? '' : '/' + dirPath.split('/').map(encodeURIComponent).join('/')}">上传</a>)</span>`;
   return layout(
     `${vault.name} 目录`,
     `<h1>${escapeHtml(vault.name)}</h1>
-<nav aria-label="面包屑">${breadcrumb(vault, dirPath)}</nav>
+<nav aria-label="面包屑">${breadcrumb(vault, dirPath)}</nav>${uploadEntry}
 <ul class="entries">
 ${list}
 </ul>

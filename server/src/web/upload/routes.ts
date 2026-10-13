@@ -11,7 +11,9 @@ import { effectiveConfig } from '../../limits/engine.ts';
 import { publishWebSubmit, type PublishResult, type RejectedResult } from '../../publish/index.ts';
 import { execGit } from '../../publish/git-exec.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
-import { sendPageNotFound } from '../page-kit.ts';
+import { sendPageNotFound, html } from '../page-kit.ts';
+import { hintFor } from '../hints.ts';
+import { uploadPage, uploadStatePage } from './pages.ts';
 import { ATTACHMENT_OID_PATTERN, attachmentUrl } from '../view/attachments.ts';
 import { readEntryAt, treePathOk } from '../browse/tree.ts';
 
@@ -65,12 +67,24 @@ function statusOfStage(stage: RejectedResult['stage']): number {
   return 500; // candidate/audit/update-ref/settle：组件内部失败（fail-closed，不发布）
 }
 
-/** 报告内全部 error 级 issue（单文件上传——映射自组件报告，不另设判定） */
+/** 报告内全部 error 级 issue（单文件上传——映射自组件报告，不另设判定；
+ *  含顶层运行级 issues（result=error 时 E-RUN 码在顶层不在 files） */
 function errorIssuesOf(report: Report | undefined): Issue[] {
   if (report === undefined) return [];
   const out: Issue[] = [];
   for (const file of report.files) out.push(...file.issues.filter((x) => x.severity === 'error'));
+  if (report.issues !== undefined) out.push(...report.issues.filter((x) => x.severity === 'error'));
   return out;
+}
+
+/** 拒绝阶段 → 错误码（S4-T8 统一提示：api.md §1 注册码；validation 取报告 issue 码） */
+function codeOfStage(stage: RejectedResult['stage'], reason: string, firstIssue: Issue | undefined): string | undefined {
+  if (stage === 'validation') return firstIssue?.code;
+  if (stage === 'authorization') return 'E-RES-001';
+  if (stage === 'branch-rules') return 'E-AUTHZ-001';
+  if (stage === 'base-commit') return 'E-RES-003';
+  if (stage === 'execution-point') return reason.includes('维护') ? 'E-MAINT-001' : 'E-AUTHZ-001';
+  return undefined; // candidate/audit/update-ref/settle：无注册码（T7 注记——不杜撰）
 }
 
 /** issue 定位字段透传（契约 §6.2：limit/limitKey/actual/expected/line/field） */
@@ -172,15 +186,34 @@ export function registerUploadRoutes(app: FastifyInstance, opts: UploadRoutesOpt
     req: FastifyRequest,
     reply: FastifyReply,
     slug: string,
-  ): Promise<{ who: AuthSuccess; vault: { slug: string; id: number; defaultBranch: string } } | null> {
+  ): Promise<{ who: AuthSuccess; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return null;
     const decision = authorize(membershipSource, who.subject.employee_id, slug, 'read');
     if (!decision.allowed) return sendPageNotFound(reply), null; // 无权=不存在（D-IC-06）
     const row = vaults.getVaultRow(slug);
     if (!row) return sendPageNotFound(reply), null; // fail-closed
-    return { who, vault: { slug: row.slug, id: row.id, defaultBranch: row.default_branch } };
+    // name 自 S4-T8 上传 UI 页起需要（页面模板呈现；POST JSON 路径不消费）
+    return { who, vault: { slug: row.slug, name: row.name, id: row.id, defaultBranch: row.default_branch } };
   }
+
+  // GET /vaults/{slug}/upload[/{dir}]：上传 UI 页（S4-T8 T4 遗留收口）。页面 =
+  // GET 无写操作（门槛 read 成员——与 rename/edit 同判；写权限在 POST 提交时
+  // 判定）；目标目录可为不存在路径（新目录经 POST 走组件路径判定——页面零校验）。
+  const uploadPageHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<FastifyReply> => {
+    const { slug } = req.params as { slug: string };
+    const guard = await requireVault(req, reply, slug);
+    if (!guard) return reply;
+    const { vault } = guard;
+    if (opts.dataDir === undefined) {
+      return html(reply, uploadStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+    }
+    const dirPath = (((req.params as Record<string, string>)['*'] ?? '')).replace(/\/+$/, '');
+    if (dirPath !== '' && !treePathOk(dirPath)) return sendPageNotFound(reply); // 畸形=不存在（与 POST 同判）
+    return html(reply, uploadPage({ vault, dirPath }));
+  };
+  app.get('/vaults/:slug/upload', uploadPageHandler);
+  app.get('/vaults/:slug/upload/*', uploadPageHandler);
 
   app.post('/vaults/:slug/upload/*', async (req, reply) => {
     const { slug } = req.params as { slug: string };
@@ -217,11 +250,24 @@ export function registerUploadRoutes(app: FastifyInstance, opts: UploadRoutesOpt
     if (publish.kind === 'rejected') {
       const issues = errorIssuesOf(publish.report);
       const first = issues[0];
+      // S4-T8 统一提示：拒绝信封恒携带 error.code + 修正建议 hint（validation 取
+      // 报告 issue 码与定位字段；其余阶段映射 api.md §1 注册码——hint 见 web/hints.ts）
+      const code = codeOfStage(publish.stage, publish.reason, first);
+      const hint = code !== undefined ? hintFor(code) : undefined;
       return reply.code(statusOfStage(publish.stage)).send({
         ok: false,
         stage: publish.stage,
         reason: publish.reason,
-        ...(first === undefined ? {} : { error: { code: first.code, message: first.message, ...locatorOf(first) } }),
+        ...(code === undefined
+          ? {}
+          : {
+              error: {
+                code,
+                message: first !== undefined ? first.message : publish.reason,
+                ...(hint !== undefined ? { hint } : {}),
+                ...(first === undefined ? {} : locatorOf(first)),
+              },
+            }),
         ...(publish.report === undefined ? {} : { issues }),
       });
     }

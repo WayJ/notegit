@@ -58,20 +58,29 @@ ${bodyHtml}
   );
 }
 
-/** 图片附件预览占位（鉴权附件通道 S4-T4 接入——接口见 view/attachments.ts） */
+/** 图片附件直开页（S4-T8 T4 遗留收口：经鉴权附件通道 URL 嵌 <img>——blob 寻址、
+ *  逐请求 authorize、nosniff+private；imageUrl=null=不以 image/* 服务的类型
+ *  （svg 纵深防御等）——如实标注不内嵌） */
 export function attachmentImagePage(input: {
   vault: { slug: string; name: string };
   entryPath: string;
   sizeBytes: number | undefined;
+  /** 鉴权附件通道 URL（attachmentUrl）；null=该类型不经 image/* 服务（不内嵌） */
+  imageUrl: string | null;
 }): string {
-  const { vault, entryPath, sizeBytes } = input;
+  const { vault, entryPath, sizeBytes, imageUrl } = input;
   const name = entryPath.includes('/') ? entryPath.slice(entryPath.lastIndexOf('/') + 1) : entryPath;
+  const media =
+    imageUrl !== null
+      ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}" loading="lazy">`
+      : '<p>该类型不以图片方式在线展示（svg 等一律 octet-stream 服务——纵深防御；可经附件地址下载后查看）。</p>';
   return layout(
     `${name} — ${vault.name}`,
     `<h1>${escapeHtml(name)}</h1>
 <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
 ${metaLine(sizeBytes)}
-<p>图片附件的展示与加载一律经鉴权附件通道（S4-T4 接入，接口已定：见预览页相对图片占位同款）。</p>
+<p>展示与加载一律经鉴权附件通道（blob 寻址、URL 不可枚举；撤权下一请求即 404）。</p>
+${media}
 `,
   );
 }
