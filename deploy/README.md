@@ -8,10 +8,10 @@ CGI 包装；架构 §10）。本目录交付镜像定义、最小编排示例�
 
 ```bash
 # 构建（上下文 = 仓库根；构建期断言：git-http-backend 存在性 + 生产形态自检）
-docker build -f deploy/Dockerfile -t notegit:0.0.0 .
+docker build -f deploy/Dockerfile -t notegit:0.1.0 .
 
 # 运行（单实例 + 命名持久卷；对外建议保持回环 + 反向代理，见「HTTPS 接入」）
-docker run -d --name notegit -p 127.0.0.1:3000:3000 -v notegit-data:/data notegit:0.0.0
+docker run -d --name notegit -p 127.0.0.1:3000:3000 -v notegit-data:/data notegit:0.1.0
 
 # 或使用最小编排示例
 docker compose -f deploy/docker-compose.yml up -d --build
@@ -45,8 +45,8 @@ RSS 基线 232–240MB**（Web/API/Git/审计/校验/搜索在线），叠加每
 量化与实测记录：[S8-T8 notes](../.agents/notes/2026-10-14-S8-T8-capacity.md)
 （闸门实负载：并发链被钳制时子进程 RSS 峰值线性减半、墙钟 +3.6%、全部成功）。
 512MB 容器不承诺：将 `git.maxConcurrentChildren` 降至 4 可勉强运行但备份窗口紧。
-selection §5 / roadmap Q2 的正式修订走
-[capacity-face-amendments G3](../docs/s1/capacity-face-amendments.md)（master 执行）。
+selection §5 / roadmap Q2 的正式修订已由
+[ADR D14](../docs/superpowers/roadmaps/2026-10-12-notegit-v01.md) 执行（2026-10-14：两处均已按 768MB 修正）。
 
 ## 容量与并发限制（S8-T8 收口）
 

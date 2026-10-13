@@ -322,7 +322,7 @@ try {
     const manifestRaw = (await execIn('cat', `/backup/${dataItem}/manifest.json`)).trim();
     const manifest = JSON.parse(manifestRaw);
     assert.equal(manifest.vault_count, 2);
-    assert.equal(manifest.app_version, '0.0.0');
+    assert.equal(manifest.app_version, '0.1.0');
     assert.equal(manifest.db.engine, 'sqlite');
     assert.ok(manifest.time.completed_at >= manifest.time.maintenance_enabled_at, 't0 ≤ 完成时间');
     const seeded = manifest.vaults.find((v) => v.slug === 'team-kb');
