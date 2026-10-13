@@ -3,6 +3,7 @@ import process from 'node:process'
 import { COMMANDS, COMMAND_ORDER, type CommandSpec } from './commands.ts'
 import { VERSION } from './version.ts'
 import { EXIT_ERROR, EXIT_OK } from './exit-codes.ts'
+import { runLs } from './ls/index.ts'
 
 function topHelp(): string {
   const lines = [
@@ -34,18 +35,18 @@ function commandHelp(cmd: CommandSpec): string {
     '',
     '说明：',
     `  ${cmd.detail}`,
-    `  状态：尚未实现（${cmd.status}）。`,
+    `  状态：${cmd.implemented === true ? '已实现' : '尚未实现'}（${cmd.status}）。`,
     '',
     '选项：',
     ...cmd.options.map((o) => `  ${o}`),
     '',
-    '退出码：0 成功；1 命令失败；2 用法/运行错误（占位命令一律退出码 2）',
+    `退出码：0 成功；1 命令失败；2 用法/运行错误${cmd.implemented === true ? '' : '（占位命令一律退出码 2）'}`,
   ]
   return `${lines.join('\n')}\n`
 }
 
-/** 解析 argv 并执行；返回进程退出码（0/1/2，见 exit-codes.ts）。 */
-export function run(argv: string[]): number {
+/** 解析 argv 并执行；返回进程退出码（0/1/2，见 exit-codes.ts）。异步命令（ls）经 await。 */
+export async function run(argv: string[]): Promise<number> {
   const [first, ...rest] = argv
   if (first === undefined) {
     process.stderr.write('notegit: 未提供命令。运行 notegit --help 查看用法。\n')
@@ -72,6 +73,7 @@ export function run(argv: string[]): number {
     process.stdout.write(commandHelp(cmd))
     return EXIT_OK
   }
+  if (cmd.name === 'ls') return runLs(rest) // S6-T3 已实现（其余命令仍占位）
   process.stderr.write(`notegit ${cmd.name}: 尚未实现（${cmd.status}）\n`)
   return EXIT_ERROR
 }
