@@ -47,10 +47,17 @@ export const COMMANDS: Record<string, CommandSpec> = {
   lint: {
     name: 'lint',
     summary: '手动校验知识库内容（与服务端同一规则）',
-    status: 'S6-T4 交付',
+    status: 'S6-T4 已实现（--json 报告协议固化于 cli/test/lint.test.ts）',
+    implemented: true,
     usage: 'notegit lint [--staged | --all] [--json]',
-    detail: '消费 packages/validation 同一实现（D5 工作区依赖）。--staged 只读暂存区（不读工作目录）；报告过 validation-report 协议；规则版本旧于服务端时提示 N-UPGRADE-001。',
-    options: ['--staged  只校验暂存区内容', '--all     校验全部已跟踪文档', '--json    输出 validation-report JSON', '-h, --help  输出本帮助'],
+    detail: '消费 packages/validation 同一实现（D5 工作区依赖）。--staged 只读 git index（不读工作目录——部分暂存只校验暂存内容）；--all 校验 index 全部已跟踪条目（将提交的完整树，内容同样取 index）。报告过 validation-report 协议（schemas/validation-report.schema.json）；本地规则旧于服务端时报告附 N-UPGRADE-001 提示（未配置凭据时静默跳过，探测失败时 stderr 一行说明；提示不改变退出码）。',
+    options: [
+      '--staged  只校验暂存区内容（相对 HEAD 的新增/修改；删除不校验）',
+      '--all     校验 index 全部已跟踪条目',
+      '--json    输出 validation-report JSON（退出码 0/1/2 同报告 exitCode）',
+      '凭据面（仅版本提示用，可选）：环境变量 NOTEGIT_SERVER 与 NOTEGIT_TOKEN',
+      '-h, --help  输出本帮助',
+    ],
   },
   sync: {
     name: 'sync',

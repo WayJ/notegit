@@ -2,14 +2,17 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 // 测试目标 = 分发产物（dist），不是源码 .ts：干净环境 npm install -g 后运行的就是它
 // （Node 对 node_modules 下的 .ts 不做类型剥离——ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING）
 const BIN = new URL('../dist/bin/notegit.js', import.meta.url).pathname
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
 
-function runCli(args: string[]): { status: number | null; stdout: string; stderr: string } {
-  const r = spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8' })
+function runCli(args: string[], opts: { cwd?: string } = {}): { status: number | null; stdout: string; stderr: string } {
+  const r = spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', cwd: opts.cwd })
   return { status: r.status, stdout: r.stdout, stderr: r.stderr }
 }
 
@@ -118,11 +121,20 @@ test('setup（占位执行）：退出码 2，stderr 标注尚未实现', () => 
   assert.match(r.stderr, /尚未实现/)
 })
 
-test('lint --staged --json（占位执行带旗标）：退出码 2，stderr 标注尚未实现', () => {
-  const r = runCli(['lint', '--staged', '--json'])
-  assert.equal(r.status, 2)
-  assert.match(r.stderr, /尚未实现/)
-  assert.match(r.stderr, /lint/)
+test('lint --staged --json（S6-T4 已实现）：非 git 仓库 → 退出码 2 + E-RUN-002 运行错误报告', () => {
+  // T1 占位断言随 T4 实现作废——改为运行错误契约（校验细节见 lint.test.ts）
+  const notARepo = mkdtempSync(path.join(tmpdir(), 'notegit-cli-notrepo-'))
+  try {
+    const r = runCli(['lint', '--staged', '--json'], { cwd: notARepo })
+    assert.equal(r.status, 2)
+    const doc = JSON.parse(r.stdout) as { result: string; exitCode: number; issues: Array<{ code: string; message: string }> }
+    assert.equal(doc.result, 'error')
+    assert.equal(doc.exitCode, 2)
+    assert.ok(doc.issues.some((i) => i.code === 'E-RUN-002'))
+    assert.match(doc.issues.find((i) => i.code === 'E-RUN-002')!.message, /不在 git 仓库/)
+  } finally {
+    rmSync(notARepo, { recursive: true, force: true })
+  }
 })
 
 test('sync（占位执行）：退出码 2，stderr 标注 S7', () => {
