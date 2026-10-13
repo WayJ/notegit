@@ -26,7 +26,7 @@
 | 类型检查 | `tsc --noEmit` 串在 server `npm test` 前（`tsc --noEmit && node --test`），根 `npm test`（= `npm test --workspaces --if-present`）一条命令全绿 = 类型 + 测试双过。 |
 | 依赖锁定 | 全部 `--save-exact` 精确版本 + 根 package-lock.json 提交：fastify 5.12.5、@node-rs/argon2 2.2.2、typescript 7.0.2、@types/node 24.19.2（对齐 Node 24 运行时面，不用 26.x 前瞻类型）。运行时依赖仅 fastify 与 @node-rs/argon2；`node:sqlite` 为 Node 内置。typescript 取 7.0.2（当前最新稳定版；计划行写的 5.x 早于 registry 查证，`tsc --noEmit` 在本仓配置下全绿；如 T2+ 遇 TS7 配置漂移，降 5.9.x 为一行改动）。 |
 | 口令哈希绑定 | **@node-rs/argon2 2.2.2**（S2-T2 经协调人 2026-10-12 批复先行落地，S2-T3 复用该模块并做验证性评审，不再另选库）：Argon2id m=19456 KiB/t=2/p=1（identity §2/D-IC-02），实现 `server/src/auth/password.ts`。选型理由：napi-rs 预编译二进制含 linux-musl（node:24-alpine 部署关键、免 node-gyp）；PHC modular 格式与实现解耦，换库不影响已存哈希。坑：其 `Algorithm` 为 ambient const enum，与 verbatimModuleSyntax 不兼容——类型导入 + 字面量 `2 as Algorithm` 钉住；verify 对畸形串抛 InvalidArg，包装为 fail-closed 返回 false。被拒备选：hash-wasm（纯 WASM 免原生二进制，但无预编译性能优势）；argon2（node-gyp 原生编译，alpine 需构建链）。 |
-| TS 生产执行策略 | **留给 S8 打包定稿**（镜像内编译 vs 运行时 stripping 均可行，机制不受影响）；本任务不引入构建步骤。 |
+| TS 生产执行策略 | **已定稿（S8-T1，2026-10-13）**：运行时 type-stripping——`node src/main.ts` 直跑（镜像 CMD），无构建步骤、无 tsx；依据与被否决备选见 [§10](#10-s8-t1-决策记录容器发行包--ts-生产执行策略定稿)与 [deploy/README.md](../../deploy/README.md)。 |
 | engines | server: `>=24 <25`（D10 锁 Node 24；node:sqlite RC 状态靠锁版本锁定行为）。 |
 
 ## 3. 数据层决策（server/src/db/）
@@ -200,7 +200,7 @@ storage-model §5 event_kind 注册表是事件清单唯一源（D6 只读），
 
 | 决策 | 内容与理由 |
 |---|---|
-| rulesVersion 来源 | **运行时读取** docs/contracts/rules-version.json（任务二选一：运行时读取 vs 构建期内联+断言）。理由：本仓无构建步骤（tsc --noEmit + Node 24 type stripping 直跑 .ts），「构建期」不存在；运行时读文件保持 manifest 为唯一机器来源，一致性由测试对同一文件运行时比对保证（D6：无硬编码版本号）。部署期打包（S8）需将 contracts 目录随包分发或改内联，留 S8 定稿。 |
+| rulesVersion 来源 | **运行时读取** docs/contracts/rules-version.json（任务二选一：运行时读取 vs 构建期内联+断言）。理由：本仓无构建步骤（tsc --noEmit + Node 24 type stripping 直跑 .ts），「构建期」不存在；运行时读文件保持 manifest 为唯一机器来源，一致性由测试对同一文件运行时比对保证（D6：无硬编码版本号）。~~部署期打包（S8）需将 contracts 目录随包分发或改内联，留 S8 定稿~~（S8-T1 定稿：随镜像分发只读副本，见 [§10.2](#102-契约文件随镜像分发91-rulesversion-行销账)）。 |
 | YAML 解析 | **`yaml` 2.9.1（唯一新增运行时依赖，--save-exact）**。安全子集以 AST 层实现：`parseDocument` + 自走查（uniqueKeys:false）检测重复键/锚点/别名/合并键/自定义 tag（core tag 白名单外 URI 与 `!short` 形态均拒）；不用 uniqueKeys:true 是因为需要重复键的字段名与行号（库报错不含）。资源常量在走查中同程计量：块 ≤64KiB、节点 ≤1000（pair/键/值/集合每节点计数）、深度 ≤8（集合层数，根=1）。 |
 | 测试零依赖 | 沿用 S2-T1「零测试依赖」：**不引 ajv**，测试内嵌 JSON Schema 子集校验器（test/helpers/schema-check.ts，覆盖本 schema 用到的 type/required/properties/enum/const/pattern/minLength/minimum/items/allOf/if-then/$ref）；先对 6 份契约示例自证再校验实现产出。 |
 | glob | 自实现最小匹配器（`*` 单段、`?` 单字符、`**` 跨段）。无 `/` 的模式按**文件名**匹配任意目录（.gitignore 式——`docs/.gitattributes` 需命中默认清单）；模式匹配大小写**敏感**（契约仅规定 README 与扩展名匹配不敏感）。 |
@@ -226,3 +226,33 @@ storage-model §5 event_kind 注册表是事件清单唯一源（D6 只读），
 2. T7（发布组件）：web-submit scope 已可用（候选提交条目 + commit/vaultId 透传）；「保留草稿」是调用方（Web 层）消费 fail 报告的行为。
 3. T8（容量）：validation-defaults 全键已可经 config 覆盖（withOverrides，E-LIMIT 测试含收紧/放宽用例）；Q7 建议值校正后走契约 changelog（B1/B2）。
 4. CLI stdin 挂起（无管道输入时不退出）留 S6 hook 集成时定稿（hook 恒管道输入）。
+
+## 10. S8-T1 决策记录（容器发行包 + TS 生产执行策略定稿）
+
+日期：2026-10-13（S8-T1，Orca dispatch `ctx_0603dfb14291`）。销账两笔：§2 工具链表「TS 生产执行策略」行（S2-T1 挂账「留给 S8 打包定稿」）与 §9.1 rulesVersion 行「部署期打包」空位。交付物：`deploy/`（Dockerfile、docker-compose.yml、README.md、scripts/init-drill.mjs）+ 静态契约测试 `server/test/deploy-image-static.test.ts`。任务定义：[implementation-breakdown §2.7 S8-T1](../s1/implementation-breakdown.md)；依据 D10、[selection §5](../s1/selection.md)、[backup §2](../contracts/backup-recovery.md)。
+
+### 10.1 TS 生产执行策略：运行时 type-stripping（`node src/main.ts`）
+
+| 备选 | 裁决与依据 |
+|---|---|
+| **运行时 type-stripping（采纳）** | 镜像 CMD `["node", "src/main.ts"]`（WORKDIR /app/server）。零构建步骤、零新增依赖；运行与测试同一代码路径（`node --test` 发现并直跑 .ts 即此形态）；类型安全由 `tsc --noEmit`（gates product）承担。前提已由本仓钉死：仅可擦除语法 + `.ts` 扩展名相对导入（§2「TS 语法边界」行）。 |
+| 镜像内 `tsc` build → `node dist` | 否决：引入构建步骤与 emit 配置漂移面（`allowImportingTsExtensions` 需配套 `rewriteRelativeImportExtensions` 改写产物导入）；源/产物双形态加大升级回退（S8-T7）与 githttp hook shim 绝对路径（hooks.ts 指向 `src/*.ts`）的核对面；类型检查收益与既有 `tsc --noEmit` 重复。 |
+| tsx 运行时 | 否决：新增运行时依赖，违反 --save-exact 最小依赖纪律（运行时依赖仅 fastify/@node-rs/argon2/notegit-validation），供给面扩大，收益仅省启动期类型擦除（无感）。 |
+
+镜像佐证：`npm ci --omit=dev`（typescript 不进镜像）+ Dockerfile 构建期自检——以生产依赖树真实 `import` validation 包并读取两份运行时契约文件，缺件即构建失败。
+
+### 10.2 契约文件随镜像分发（§9.1 rulesVersion 行销账）
+
+validation 包运行时读取 `docs/contracts/rules-version.json` 与 `docs/contracts/validation-defaults.json`（`contract.ts` 相对 `import.meta.url` 定位）。定稿：**随镜像分发只读副本**——Dockerfile `COPY` 两份 JSON 至 `/app/docs/contracts/`（路径布局与仓库一致，包内相对定位不变），不改内联：manifest 单一机器来源纪律（D6）不动。镜像内副本与仓库同源由构建期自检（`rulesVersion()` + `defaultConfig()` 真实加载）兜底；`.dockerignore` 以 `dir/*` + `!` 例外链只放行这两份文件进构建上下文。
+
+### 10.3 发行包其余定稿（操作面详见 [deploy/README.md](../../deploy/README.md)）
+
+- 基础镜像 `node:24-alpine`（`ARG NODE_IMAGE` 供生产 pin 补丁版——node:sqlite RC 行为漂移靠锁版本规避）；`apk add git git-daemon`——**git-http-backend 归属 git-daemon 包而非 git 包**（N3：注释防回归 + 构建期 `test -x` 断言 + 运行态演练复检，三层）。
+- 非 root 运行（notegit uid/gid 10001）；`/data` 四分域镜像内预建并归属运行用户（backup §2）；`HEALTHCHECK` 探测 `/healthz`。
+- HTTPS 接入选型：**反向代理终结 TLS，容器保持 HTTP**（identity §6.1 K3——证书部署方管控、实例外流程；容器内 TLS 否决：证书生命周期不进容器面）。此为 selection §5 网络行「反代或容器内 TLS，S2 决定」空位的落定；架构 §10「HTTPS 接入」表述不变，如 master 认定需升 ADR/architecture.md 同步，随评审归档。
+- 首次初始化演练：`deploy/scripts/init-drill.mjs`（D5 演练即测试：全新容器→健康→bootstrap 管理员（含 token 用后即删断言）→邀请员工→建库→Git/网页双通道冒烟→重启→账号/权限/历史/知识四项仍在 + bootstrap 永久 410；断言化可复跑，输出留档即 DOD-01 场景前置证据形态）。
+
+### 10.4 移交
+
+1. T2（指标/R14）、T4/T5（备份/恢复工具与演练）、T7（升级回退演练）、T8（容量收口——**512MB 地板按 S7-T8 RSS 232MB 基线复核**，sprint D6）按波次接手；deploy/README「已知边界」已列。
+2. `notegit admin recover`（identity §7.2，§6.3 已定名）命令本体仍未实现——运维锁死恢复当前无主机侧兜底，属运维工具化欠账（credentials-ops §5.3 同域），随 T2/运维任务排期。

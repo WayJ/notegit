@@ -1,0 +1,45 @@
+# 2026-10-13 S8-T1 首次初始化演练留档（D5 演练即测试）
+
+环境：macOS（Apple M4）+ colima Docker（server 29.5.2，Ubuntu 24.04.4 VM）；
+宿主 git 2.50.1，镜像内 node v24.21.0 / git 2.54.0（alpine）。
+命令（仓库根，可复跑）：`node deploy/scripts/init-drill.mjs 2>&1 | tee <file>`
+本轮为第 3 次连续运行（第 2 次运行留下失败容器/卷，脚本清场步骤自动接管——
+可复跑性即证）。产物：镜像 notegit:s8t1-drill（构建期断言两层：git-http-backend
+存在性 + 生产形态自检 selfcheck rules-version 1.0.0-draft.1）。
+
+```
+[0.0s] S8-T1 首次初始化演练开始（port 39087，keep=false，no-build=false）
+[0.0s] ✓ 01 Docker 可用（server 29.5.2）
+[0.1s] ✓ 02 清场完成（上一轮容器/卷已移除）
+[0.3s] ✓ 03 镜像构建完成（0s；构建期断言已在镜像内执行）
+[0.4s] ✓ 04 容器已启动（notegit-s8t1-drill，卷 notegit-s8t1-drill-data）
+[6.5s] ✓ 05 健康检查通过（HEALTHCHECK=healthy + /healthz 200 {"status":"ok"}）
+[6.6s] ✓ 06 运行态抽检：非 root（uid=10001）、git-http-backend 在位、v24.21.0 / git version 2.54.0
+[6.7s] ✓ 07 管理员初始化完成（employee_id=1；token 文件已删，打印脱敏 OrEAF4…8E）
+[6.7s] ✓ 08 管理员登录成功（ngt_sid 会话建立）
+[6.7s] ✓ 09 员工 alice 已邀请（重置令牌脱敏 AQkLB5…ok）
+[6.7s] ✓ 10 员工 alice 口令已设并登录（首页无管理入口）
+[6.7s] ✓ 11 库 team-kb 已创建（alice = 库管理员，默认分支 main）
+[6.7s] ✓ 12 Git 凭据已创建（明文仅一次，脱敏 ngt_Ei…AU）
+[7.3s] ✓ 13 Git 通道冒烟通过（push main → 65d3a3ac4d…，pre-receive 校验链全过）
+[7.3s] ✓ 14 网页通道冒烟通过（列表可见、笔记可读、未认证被拒）
+[23.7s] ✓ 15 重启后数据仍在（账号/权限/历史/知识四项 + bootstrap 已永久关闭）
+[23.8s] ✓ 16 演练全链绿（15 步）。容器与卷已清理（--keep 可保留实例检查）
+[23.8s] S8-T1 首次初始化演练：PASS
+```
+
+覆盖映射（breakdown §2.7 S8-T1 完成标准）：
+
+| 完成标准 | 对应步骤 |
+|---|---|
+| 全新环境按文档 docker run | 02–04（清场→构建→run，命名持久卷） |
+| 健康检查通过 | 05（HEALTHCHECK healthy + /healthz 200） |
+| 管理员初始化成功（DOD-01 场景） | 06–08（含 token 用后即删断言，identity §7.1） |
+| 邀请员工→建库→双通道冒烟 | 09–14（push 经 pre-receive 校验链；网页渲染推送正文；未认证拒读） |
+| 重启后账号/权限/知识/历史仍在 | 15（四项逐一断言 + bootstrap 端点永久 410） |
+| 镜像内 git-http-backend 存在性构建期断言 | 构建期（Dockerfile RUN test -x）+ 运行态复检（06） |
+
+不宣称：本留档是 DOD-01 的**前置证据形态**（sprint S1 场景「容器可启动」的演练
+材料）；DOD-01 的正式验收在 sprint 验收时由 master 裁决。开发期两次失败留痕：
+run1 镜像构建自检失败（Dockerfile 缺 WORKDIR /app——演练即测试捕获真实缺陷）；
+run2 网页断言期望错误（视图页以文件名为题，非 frontmatter title——断言修正）。
