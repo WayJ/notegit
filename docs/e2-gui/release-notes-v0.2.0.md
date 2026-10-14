@@ -3,7 +3,7 @@
 | 项 | 值 |
 |---|---|
 | 日期 | 2026-10-14 |
-| tag | `v0.2.0`（tag-release.mjs --apply 打注解 tag 并推送） |
+| tag | `v0.2.0`（tag-release.mjs --apply 打注解 tag 并推送；**2026-10-14 同日重定位至热修提交**——原 tag 漏升跨包依赖声明（server dep/cli devDep notegit-validation 仍 0.1.0）致全新安装 404，修复后删旧tag重打，tag 当日无消费者） |
 | 版本清单 | 四包 0.2.0（server / cli / packages/validation / monorepo 根）；CLI `VERSION` 常量随行；rulesVersion 1.0.0-draft.2（未变）；schema 迁移 10 条（顶版 0010——search_index.body 列） |
 | 基线 | main @ 发布提交（E2 关闭态：DOD-E2 10/10） |
 | 前版 | v0.1.0（E1 发布；docs/s9/release-notes-v0.1.md） |
