@@ -2,6 +2,7 @@
 
 - **状态**：S11 各任务起草（2026-10-14），待 master 评审；评审通过后由 master 落 docs/contracts/storage-model.md 原文并在 epic 的 Decisions (ADR) 记录——按仓库约束，本文件不改契约正文。先例：docs/s1/search-index-amendments.md（S5-T3，C1 建议 storage-model 增设「派生数据表」一节——本文件 S1 是该建议块的列级增量）。
 - **条目归属**：本文件为 S11 共用建议稿——S1 = S11-T1（search_index body 列）；后续任务以新条目（S2 起）追加，不改他人条目。
+- **2026-10-14 master 裁决落契**：S1 采纳——storage-model.md §3.11 叙述更新（权威 DDL=0009+0010、body 列语义注记；契约侧仍不复制 DDL 防双源漂移）；contracts gate 82/82 复验。
 - **实现状态（S1）**：已实现并测试（迁移 0010 `ALTER TABLE search_index ADD COLUMN body TEXT NOT NULL DEFAULT ''`；派生面 `server/src/search/derive.ts`；重入/重建一致性测试随 S11-T1 落）。
 
 ## S1 storage-model §2（派生数据表节）search_index 注记 body 列（S11-T1，D20）
