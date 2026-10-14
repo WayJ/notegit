@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notegit 容器部署（S8-T1 发行包） · Notegit 文档</title>
+<link rel="stylesheet" href="../../docs.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="../../index.html">Notegit</a>
+    <a class="back-home" href="../../index.html">返回首页</a>
+  </div>
+</header>
+<div class="docs-layout">
+  <details class="docs-nav" open>
+    <summary class="docs-nav-toggle">文档导航</summary>
+      <nav class="docs-nav-tree" aria-label="文档导航">
+      <section class="nav-group">
+        <h2>用户文档</h2>
+        <ul>
+        <li><a href="../user/README.html">Notegit 用户文档（员工视角）</a></li>
+        <li><a href="../user/quickstart.html">安装与快速上手（员工视角）</a></li>
+        <li><a href="../user/contributing.html">贡献流程：网页与 Git 双通道</a></li>
+        <li><a href="../user/permissions.html">权限与撤权边界</a></li>
+        <li><a href="../user/history-boundary.html">历史边界：重命名与跨库移动</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>管理员</h2>
+        <ul>
+        <li><a href="../admin/README.html">Notegit 管理员手册</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>部署</h2>
+        <ul>
+        <li><a aria-current="page" class="current" href="README.html">Notegit 容器部署（S8-T1 发行包）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>已知限制</h2>
+        <ul>
+        <li><a href="../known-limitations.html">已知限制（v0.1 · 2026-10-14）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>发布说明</h2>
+        <ul>
+        <li><a href="../release-notes-v0.2.0.html">Notegit v0.2.0 发布说明</a></li>
+        </ul>
+      </section>
+      </nav>
+  </details>
+  <main class="docs-main">
+    <article class="doc-article">
+<h1>Notegit 容器部署（S8-T1 发行包）</h1>
+<p>单容器部署（D10：Node 24 + TypeScript + Fastify v5 + node:sqlite + git http-backend
+CGI 包装；架构 §10）。本目录交付镜像定义、最小编排示例、首次初始化演练脚本与本
+部署文档；备份/恢复工具随 S8-T4/T5 落地，指标扩展随 S8-T2。</p>
+<h2>快速开始</h2>
+<pre><code class="language-bash"># 构建（上下文 = 仓库根；构建期断言：git-http-backend 存在性 + 生产形态自检）
+docker build -f deploy/Dockerfile -t notegit:0.1.0 .
+
+# 运行（单实例 + 命名持久卷；对外建议保持回环 + 反向代理，见「HTTPS 接入」）
+docker run -d --name notegit -p 127.0.0.1:3000:3000 -v notegit-data:/data notegit:0.1.0
+
+# 或使用最小编排示例
+docker compose -f deploy/docker-compose.yml up -d --build</code></pre>
+<ul>
+  <li>环境变量：<code>PORT</code>（默认 3000）、<code>HOST</code>（默认 0.0.0.0）；数据目录固定 <code>/data</code> （<code>NOTEGIT_DATA_DIR</code> 仅为测试覆盖保留）。</li>
+  <li>镜像内以非 root 用户（<code>notegit</code>，uid/gid 10001）运行；<code>HEALTHCHECK</code> 探测 <code>/healthz</code>（liveness；磁盘水位指标随 S8-T2）。</li>
+  <li><strong>Node 版本 pin</strong>：默认 <code>node:24-alpine</code>（D10 基线）；生产部署建议 <code>--build-arg NODE_IMAGE=node:&lt;24.x.y&gt;-alpine</code> 钉住补丁版——node:sqlite 处于 RC，行为漂移靠锁定具体 Node 版本规避（roadmap 风险表）。</li>
+</ul>
+<h2>最低规格</h2>
+<p>依据 <a href="https://github.com/WayJ/notegit/blob/main/docs/s1/selection.md">selection §5</a>（Linux + Docker 单容器；假设 ≤100
+员工、≤200 库、日推送 ≤10⁴，待容量验证复核）：</p>
+<table>
+  <thead>
+    <tr><th>项</th><th>最低规格</th><th>推荐规格</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>CPU</td><td>1 vCPU</td><td>2 vCPU</td></tr>
+    <tr><td>内存</td><td><strong>768 MB</strong>（S8-T8 修正，见下）</td><td>1 GB</td></tr>
+    <tr><td>磁盘（数据卷）</td><td>2 GB</td><td>20 GB</td></tr>
+    <tr><td>网络</td><td>单端口 HTTPS（反代终结，见下）</td><td>同左</td></tr>
+  </tbody>
+</table>
+<p><strong>内存地板修正（S8-T8 收口，实测优先于规划值——S6 sprint D6）</strong>：selection §5
+原 512MB 地板按 S1 spike 期 RSS 114.7MB 推导；S7-T8/S8-T8 实测**全功能服务进程
+RSS 基线 232–240MB**（Web/API/Git/审计/校验/搜索在线），叠加每请求 git 子进程
+链预算（每链 ~17MB × 默认并发上限 8 = 136MB）与系统/页缓存/备份瞬态
+（VACUUM INTO、复制件 fsck）≥100–150MB ⇒ 512MB 无余量、<strong>修正为 768MB</strong>。
+量化与实测记录：<a href="https://github.com/WayJ/notegit/blob/main/.agents/notes/2026-10-14-S8-T8-capacity.md">S8-T8 notes</a>
+（闸门实负载：并发链被钳制时子进程 RSS 峰值线性减半、墙钟 +3.6%、全部成功）。
+512MB 容器不承诺：将 <code>git.maxConcurrentChildren</code> 降至 4 可勉强运行但备份窗口紧。
+selection §5 / roadmap Q2 的正式修订已由
+<a href="https://github.com/WayJ/notegit/blob/main/docs/superpowers/roadmaps/2026-10-12-notegit-v01.md">ADR D14</a> 执行（2026-10-14：两处均已按 768MB 修正）。</p>
+<h2>容量与并发限制（S8-T8 收口）</h2>
+<p>限制键的覆盖链（越右越权威，全部<strong>热生效</strong>——改行后下一次请求即生效，无需重启）：</p>
+<pre><code class="language-text">契约默认值（validation-defaults.json / git 域默认）
+  ← 环境变量（NOTEGIT_&lt;大写下划线键名&gt;，值为 JSON 字面量；部署级静态覆盖）
+  ← app_settings 行（管理员运行时配置；同键胜环境——SQL/ops 写行即可，
+     管理端点随 api.md 契约补录，见 capacity-face-amendments G5）</code></pre>
+<p><strong>校验限制</strong>（10 键，语义与默认值见
+<a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/validation-defaults.json">validation-defaults.json</a> 与
+<a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/validation.md">validation §5.1</a>）：文档/附件大小、附件类型
+清单、单次 push 大小、库容量、豁免清单、校验超时/并发/内存。非法值 fail-closed
+（对应入口拒绝并指名配置键，不静默回退默认值）。</p>
+<p><strong>git 子进程并发</strong>：<code>git.maxConcurrentChildren</code>（默认 8；S8-T8 新键，契约入册
+走 <a href="https://github.com/WayJ/notegit/blob/main/docs/s1/capacity-face-amendments.md">建议稿 G2</a>）——每请求 git 子进程
+链（<code>git http-backend</code> 一条链）的并发上限，超出 <strong>FIFO 排队</strong>（不拒绝：git
+客户端对等待透明；TCP 背压停住客户端发送，排队上限由客户端超时与反代约束）。
+容量修正建议：<code>NOTEGIT_GIT_MAX_CONCURRENT_CHILDREN</code>（JSON 字面量，如 <code>4</code>）或
+app_settings 行 <code>git.maxConcurrentChildren</code>。</p>
+<p><strong>初始导入指引</strong>（S3-T8 移交项）：单库全量初始导入 ≈150–250MiB（压缩后）会超
+50MiB 默认 push 上限——管理员临时调高、完成后回落（热生效）：</p>
+<pre><code class="language-sql">-- 临时调高（app_settings 行；等价环境变量 NOTEGIT_VALIDATION_LIMITS_MAX_PUSH_BYTES）
+INSERT INTO app_settings (key, value, updated_at) VALUES
+  (&#39;validation.limits.maxPushBytes&#39;, &#39;536870912&#39;, &#39;&lt;ISO 时间&gt;&#39;);  -- 512MiB 示例
+-- 导入完成后 DELETE FROM app_settings WHERE key = &#39;validation.limits.maxPushBytes&#39;;</code></pre>
+<h2>数据布局（/data 持久卷）</h2>
+<p>唯一持久数据目录（<a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/backup-recovery.md">backup §2</a> 四分域）：</p>
+<pre><code class="language-text">/data
+├── git/&lt;vault-id&gt;.git   # 每库独立 bare 仓库（路径经数据库稳定 ID 映射）
+├── db/                  # node:sqlite 数据库（WAL）
+├── config/              # 应用配置；初始化期含一次性 admin-bootstrap.token（用后即删）
+└── keys/                # token-pepper.key 等（0600；目录 0700；与数据备份分置）</code></pre>
+<p>两侧（Git 与 db）缺一即失能；备份/恢复流程与一致性要求见 backup-recovery 契约
+（恢复工具随 S8-T5 交付）。备份执行者的主机侧访问路径：命名卷经
+<code>docker volume inspect notegit-data</code> 定位挂载点，或改用 bind mount 直达目录。</p>
+<h3>一致备份（S8-T4 工具随镜像分发）</h3>
+<p>备份触发 = 脚本模式（选型与被否备选见
+<a href="https://github.com/WayJ/notegit/blob/main/docs/s1/backup-face-amendments.md">docs/s1/backup-face-amendments.md</a> B1）：
+CLI 随镜像分发，在容器内执行（<code>/data</code> 直达；产物建议落<strong>独立卷/介质</strong>）。</p>
+<pre><code class="language-sh"># 产物目录须对容器用户（notegit）可写——命名卷初建属 root，首次挂载后交付：
+#   docker exec -u root notegit chown notegit:notegit /backup
+# 管理令牌：--token-file 或 NOTEGIT_ADMIN_TOKEN 环境变量（不进 argv/日志）
+docker exec notegit node src/backup/cli.ts backup \
+  --data-dir /data --out /backup \
+  --url http://127.0.0.1:3000 \
+  --token-file /run/secrets/backup-admin.token \
+  --keys-out /backup-keys        # 可选：密钥件直写另一介质根（backup §6 分置）</code></pre>
+<p>产物为<strong>分置两件</strong>：<code>&lt;时间戳&gt;-data/</code>（manifest.json + db 快照 + git 复制 + config）
+与 <code>&lt;时间戳&gt;-keys/</code>（pepper 全文件含 retired 条目；文件 0600、目录 0700）。
+流程自动覆盖 backup-recovery §4 步骤 1–7：维护端点开/关闸（闸门属应用进程——
+脚本不自设闸门）、排空（默认 300s 有界超时，超时中止并保持维护模式）、
+<code>VACUUM INTO</code>、git 复制 + 抽样 fsck（失败中止）、manifest 全字段、
+backup.completed 审计行（完成后 <code>GET /api/v1/admin/metrics</code> 的
+<code>backup.last_completed_at</code> 更新）。</p>
+<p><strong>离线验证</strong>（§4 步骤 8；不起服务，可在宿主对拷出的产物执行）：</p>
+<pre><code class="language-sh">docker cp notegit:/backup ./backup-set
+node server/src/backup/cli.ts verify --data-item ./backup-set/&lt;时间戳&gt;-data [--fsck]</code></pre>
+<p>运维义务（backup §6）：<strong>K3 TLS 私钥位置、K4 DB 口令保管处</strong>的记录须与密钥件
+同置保存（工具不代管部署层机密）；密钥件建议移至独立介质/访问控制域静态加密
+存放。演练证据（真实容器 16 步全绿）：
+<a href="https://github.com/WayJ/notegit/blob/main/.agents/notes/2026-10-13-S8-T4-backup-drill.txt">.agents/notes/2026-10-13-S8-T4-backup-drill.txt</a>。</p>
+<h2>HTTPS 接入（选型记录）</h2>
+<p><strong>定稿：反向代理终结 TLS，容器保持 HTTP。</strong>（K3 交付形态——identity §6.1 K3：
+TLS 证书/私钥由部署方提供与管控，属实例外流程；selection §5 网络行「反代终结或
+容器内 TLS，S2 决定」的空位在此落定。）</p>
+<ul>
+  <li>依据：企业侧通常已有 PKI/ACME 与证书轮换流程，反代终结让证书生命周期留在 运维边界内（K3「常规证书运维，实例外流程」）；应用不持有私钥，镜像与容器 面不引入证书装载/轮换逻辑；单端口 HTTPS 目标由反代对外呈现，满足架构 §10。</li>
+  <li>被否决备选：<strong>容器内 TLS</strong>（Fastify @fastify/https）——证书与私钥须进容器 （volume 挂载 + 属主/权限面扩大），轮换需重启或热加载逻辑，收益仅省一跳 反代；如未来单机直连场景确需，再按 backup §3 模型评审补记。</li>
+  <li>部署形态：容器端口只发布到宿主回环（compose 示例即如此），反代与 Notegit 同机时上游用 <code>127.0.0.1:3000</code>；跨机时将发布地址改为内网接口并保证链路可信。</li>
+  <li>最小反代示例（nginx，TLS 证书由部署方提供）：</li>
+</ul>
+<pre><code class="language-nginx">server {
+  listen 443 ssl;
+  server_name notegit.example.internal;
+  ssl_certificate     /etc/nginx/tls/fullchain.pem;   # 部署方提供（K3）
+  ssl_certificate_key /etc/nginx/tls/privkey.pem;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    # Git Smart HTTP 大包双向流式：关闭请求体缓冲、放宽超时
+    client_max_body_size 0;
+    proxy_request_buffering off;
+    proxy_read_timeout 300s;
+  }
+}</code></pre>
+<h2>首次初始化</h2>
+<ol>
+  <li>起容器后等健康检查通过（<code>docker inspect --format &#39;{{.State.Health.Status}}&#39; notegit</code> = <code>healthy</code>）。</li>
+  <li>读取一次性管理员初始化令牌（identity §7.1；初始化期落盘于 <code>/data/config/admin-bootstrap.token</code>，<strong>单次有效、用后即删</strong>）：</li>
+</ol>
+<pre><code class="language-bash">   docker exec notegit cat /data/config/admin-bootstrap.token</code></pre>
+<ol>
+  <li>初始化管理员（api.md §3；<code>bootstrap</code> 端点一次性，之后永久 410）：</li>
+</ol>
+<pre><code class="language-bash">   curl -fsS -X POST http://127.0.0.1:3000/api/v1/auth/bootstrap \
+     -H &#39;content-type: application/json&#39; \
+     -d &#39;{&quot;bootstrap_token&quot;:&quot;&lt;上一步令牌&gt;&quot;,&quot;username&quot;:&quot;root&quot;,&quot;display_name&quot;:&quot;Root Admin&quot;,&quot;password&quot;:&quot;&lt;强口令&gt;&quot;}&#39;</code></pre>
+<ol>
+  <li>之后走管理页（<code>/admin</code>）或 API：邀请员工 → 员工设口令登录 → 建库 → 创建 Git 凭据（<code>ngt_</code> token，Git HTTP Basic 口令侧）。</li>
+</ol>
+<p>以上全链的自动化验证：<strong>首次初始化演练脚本</strong>（断言化、可复跑）：</p>
+<pre><code class="language-bash">node deploy/scripts/init-drill.mjs            # 全新容器→健康→bootstrap→邀请→
+                                              # 建库→push/网页双通道→重启→数据仍在
+node deploy/scripts/init-drill.mjs --keep     # 保留容器与卷供检查</code></pre>
+<p>退出码 0 = 全链绿；输出即留档材料（DOD-01 场景的演练证据形态）。</p>
+<h2>生产运行形态（TS 执行策略，S2-T1 挂账销账）</h2>
+<p><strong>定稿：运行时 type-stripping——<code>node src/main.ts</code> 直跑</strong>（镜像 CMD 即此）。
+Node 24 原生擦除 TS 类型（本仓代码限定可擦除语法，tsconfig 钉住），镜像内
+<code>npm ci --omit=dev</code>：不装 typescript、无 tsc 构建步骤、无 tsx 运行时依赖；类型
+检查由 <code>tsc --noEmit</code> 串在 <code>npm test</code>（gates product）承担，运行形态与测试形态
+同一代码路径。被否决备选与依据见
+<a href="https://github.com/WayJ/notegit/blob/main/docs/dev/architecture-notes.md">architecture-notes §10</a>；镜像内另有构建期
+自检（以生产依赖树真实加载校验器与契约文件，见 Dockerfile）。</p>
+<h2>升级与回退</h2>
+<p>换镜像 tag → 重新 <code>docker run</code>/<code>up -d</code>：应用启动时自动执行 schema 前向迁移
+（每迁移单事务、幂等可重入）。升级前强制备份与回退演练的完整流程随 S8-T7 交付；
+在此之前升级操作参考 <a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/backup-recovery.md">backup §9</a> 框架。</p>
+<h2>已知边界</h2>
+<ul>
+  <li>第一版无高可用承诺（架构 §10）；单实例单应用进程（process-model §1），进程 生命周期由容器 restart policy 负责。</li>
+  <li>并发 clone/push 的子进程上限已量化落地（S8-T8：<code>git.maxConcurrentChildren</code> 默认 8、FIFO 排队，见「容量与并发限制」节）；web 侧发布/搜索的短命令 git 子进程不在此键范围。Q7 唯一值修订建议（maxValidationMemoryMb 256→512）待 master 契约批（建议稿 G1）。</li>
+  <li>磁盘水位、校验耗时、失败推送等指标端点随 S8-T2（R14）。</li>
+</ul>
+    </article>
+  </main>
+</div>
+</body>
+</html>
