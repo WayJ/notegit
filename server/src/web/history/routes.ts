@@ -113,6 +113,12 @@ function firstErrorNotice(report: Report | undefined): RestoreNotice | undefined
   return undefined;
 }
 
+/** S12-T2 顶栏账户位 viewer（呈现层——coordinator 批准扩展：cite 族/状态页/
+ *  diff/历史版本页模板可选参数；判定不变，仅登录态落位）。 */
+function pageViewer(who: AuthSuccess): { username: string; is_instance_admin: boolean } {
+  return { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin };
+}
+
 export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesOptions): void {
   // 表单 POST 唯一内容类型（还原按钮=原生表单，无 JS、无新依赖；rename 族已
   // 注册则不重复——Fastify 同型重复注册抛错）
@@ -149,13 +155,13 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
     if (!guard) return reply;
     const { who, vault } = guard;
     if (opts.dataDir === undefined) {
-      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。', pageViewer(who)));
     }
     const treePath = (((req.params as Record<string, string>)['*'] ?? '')).replace(/\/+$/, '');
     const page = parsePage(req.query);
     const read = await readCommitLog(opts.dataDir, vault.id, vault.defaultBranch, treePath, page);
-    if (read.kind === 'no-commits') return html(reply, historyStatePage(vault, '尚无提交内容（新库空初始化）。'));
-    if (read.kind === 'unavailable') return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
+    if (read.kind === 'no-commits') return html(reply, historyStatePage(vault, '尚无提交内容（新库空初始化）。', pageViewer(who)));
+    if (read.kind === 'unavailable') return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。', pageViewer(who)));
     if (read.kind === 'not-found') return sendPageNotFound(reply); // 畸形路径形态（反存在性）
     // S10-T1 D3：库级查询逐提交补读「涉及文件」——行内逐文件 diff 入口（与
     // readCommitDiff 同一基线语义，链接必可达）；读取失败整体空态（不渲染半页死链）
@@ -165,7 +171,7 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
       for (const c of read.commits) {
         const files = await readCommitFiles(opts.dataDir, vault.id, c.oid);
         if (files.kind === 'unavailable') {
-          return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
+          return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。', pageViewer(who)));
         }
         enriched.push(files.kind === 'ok' ? { ...c, files: files.files } : { ...c, files: [] });
       }
@@ -197,16 +203,16 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
     const { slug } = req.params as { slug: string };
     const guard = await requireVault(req, reply, slug);
     if (!guard) return reply;
-    const { vault } = guard;
+    const { who, vault } = guard;
     if (opts.dataDir === undefined) {
-      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。', pageViewer(who)));
     }
     const { oid } = req.params as { oid: string };
     const treePath = (((req.params as Record<string, string>)['*'] ?? '')).replace(/\/+$/, '');
     const read = await readCommitDiff(opts.dataDir, vault.id, oid, treePath);
     if (read.kind === 'not-found') return sendPageNotFound(reply); // 未知/非提交 OID、畸形路径（反存在性）
-    if (read.kind === 'unavailable') return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
-    return html(reply, diffPage({ vault, commitOid: read.commitOid, treePath, diff: read.diff }));
+    if (read.kind === 'unavailable') return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。', pageViewer(who)));
+    return html(reply, diffPage({ vault, commitOid: read.commitOid, treePath, diff: read.diff, viewer: pageViewer(who) }));
   });
 
   // ── S5-T2 历史版本预览与还原 ──────────────────────────────────────────────
@@ -219,16 +225,18 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
   const INLINE_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 
   /** 目标条目定位（版本预览/还原共用）：blob 放行；tree/commit 与「该版本处
-   *  无此路径」一律 404（不虚构内容）；读取失败空态页。 */
+   *  无此路径」一律 404（不虚构内容）；读取失败空态页。viewer=S12-T2 状态页
+   *  账户位（呈现层可选参数）。 */
   async function requireEntryAt(
     reply: FastifyReply,
     vault: { slug: string; name: string; id: number; defaultBranch: string },
     oid: string,
     treePath: string,
+    viewer?: { username: string; is_instance_admin?: boolean },
   ): Promise<{ commitOid: string; oid: string; size: number | undefined; mode: string } | null> {
     const read = await readEntryAtCommit(opts.dataDir!, vault.id, oid, treePath);
     if (read.kind === 'unavailable') {
-      return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。')), null;
+      return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。', viewer)), null;
     }
     if (read.kind !== 'ok' || read.entry.type !== 'blob') return sendPageNotFound(reply), null; // 未知 OID/该版本缺失/树路径（反存在性）
     return { commitOid: read.commitOid, oid: read.entry.oid, size: read.entry.size, mode: read.mode };
@@ -239,17 +247,17 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
     const { slug } = req.params as { slug: string };
     const guard = await requireVault(req, reply, slug);
     if (!guard) return reply;
-    const { vault } = guard;
+    const { who, vault } = guard;
     if (opts.dataDir === undefined) {
-      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。', pageViewer(who)));
     }
     const { oid } = req.params as { oid: string };
     const treePath = (((req.params as Record<string, string>)['*'] ?? '')).replace(/\/+$/, '');
     const read = await readEntryAtCommit(opts.dataDir, vault.id, oid, treePath);
-    if (read.kind === 'unavailable') return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
+    if (read.kind === 'unavailable') return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。', pageViewer(who)));
     if (read.kind !== 'ok' || read.entry.type !== 'blob') return sendPageNotFound(reply); // 未知 OID/该版本缺失/树路径（反存在性）
     const { commitOid, entry } = read;
-    const shared = { vault, commitOid, treePath, sizeBytes: entry.size };
+    const shared = { vault, commitOid, treePath, sizeBytes: entry.size, viewer: pageViewer(who) };
 
     if ((entry.size ?? 0) > PREVIEW_RENDER_MAX_BYTES) {
       return html(reply, versionPage({ ...shared, body: { kind: 'too-large', limitBytes: PREVIEW_RENDER_MAX_BYTES } }));
@@ -276,7 +284,7 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
     try {
       text = await readBlobText(opts.dataDir, vault.id, entry.oid);
     } catch {
-      return html(reply, historyStatePage(vault, '内容暂不可用（正文读取失败）。'));
+      return html(reply, historyStatePage(vault, '内容暂不可用（正文读取失败）。', pageViewer(who)));
     }
     // S10-T1 编辑入口（呈现层 canWriteVault——D17；仅 .md 渲染形态，模板门控）
     const canWrite = canWriteVault(membershipSource, guard.who.subject.employee_id, slug);
@@ -321,13 +329,13 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
     const { slug } = req.params as { slug: string };
     const guard = await requireVault(req, reply, slug);
     if (!guard) return reply;
-    const { vault } = guard;
+    const { who, vault } = guard;
     if (opts.dataDir === undefined) {
-      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。', pageViewer(who)));
     }
     const { oid } = req.params as { oid: string };
     const treePath = (((req.params as Record<string, string>)['*'] ?? '')).replace(/\/+$/, '');
-    const entry = await requireEntryAt(reply, vault, oid, treePath);
+    const entry = await requireEntryAt(reply, vault, oid, treePath, pageViewer(who));
     if (!entry) return reply;
     return html(reply, restorePage({ vault, commitOid: entry.commitOid, treePath, sizeBytes: entry.size }));
   });
@@ -343,7 +351,7 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
     }
     const { oid } = req.params as { oid: string };
     const treePath = (((req.params as Record<string, string>)['*'] ?? '')).replace(/\/+$/, '');
-    const entry = await requireEntryAt(reply, vault, oid, treePath);
+    const entry = await requireEntryAt(reply, vault, oid, treePath, pageViewer(who));
     if (!entry) return reply;
 
     // 内容逐字节读取（二进制安全——附件同样可还原）
@@ -353,7 +361,7 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
       if (read === null) throw new Error('blob 不在库内');
       bytes = read;
     } catch {
-      return html(reply, historyStatePage(vault, '内容暂不可用（原文件读取失败）。'));
+      return html(reply, historyStatePage(vault, '内容暂不可用（原文件读取失败）。', pageViewer(who)));
     }
 
     const publish = await restoreFileAtCommit({
@@ -397,21 +405,21 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
     if (!who) return reply;
     const raw = (req.query as { c?: unknown }).c;
     const citation = typeof raw === 'string' ? raw.trim() : '';
-    if (citation === '') return html(reply, citeEntryPage()); // 空输入回入口表单（不报错）
+    if (citation === '') return html(reply, citeEntryPage(pageViewer(who))); // 空输入回入口表单（不报错）
     const parsed = parseCitation(citation);
     if (parsed === null) {
-      return reply.code(404).type('text/html; charset=utf-8').send(citeFormatErrorPage());
+      return reply.code(404).type('text/html; charset=utf-8').send(citeFormatErrorPage(pageViewer(who)));
     }
     const guard = await requireVault(req, reply, parsed.slug); // 未认证 302/无权=不存在 404 同页
     if (!guard) return reply;
     const { vault } = guard;
     if (opts.dataDir === undefined) {
-      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+      return html(reply, historyStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。', pageViewer(guard.who)));
     }
     const read = await readEntryAtCommit(opts.dataDir, vault.id, parsed.commit, parsed.path);
-    if (read.kind === 'unavailable') return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
+    if (read.kind === 'unavailable') return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。', pageViewer(guard.who)));
     if (read.kind !== 'ok' || read.entry.type !== 'blob') {
-      return reply.code(404).type('text/html; charset=utf-8').send(citeUnresolvablePage());
+      return reply.code(404).type('text/html; charset=utf-8').send(citeUnresolvablePage(pageViewer(who)));
     }
     return reply.redirect(versionUrl(vault.slug, read.commitOid, parsed.path), 302);
   });

@@ -13,6 +13,7 @@ import { readEntryAt, readBlobText, README_RENDER_MAX_BYTES, treePathOk } from '
 import { parseDocForForm, titleFromFilename } from './form.ts';
 import { editPage, readmeEditPage, editStatePage, newNotePage, newNoteExistsPage } from './pages.ts';
 import { DraftsService, type DraftContent } from '../../drafts/service.ts';
+import { editPreviewPlugin } from './preview.ts';
 
 /**
  * S4-T3 编辑族路由（元数据表单 + 正文编辑）：
@@ -41,6 +42,10 @@ import { DraftsService, type DraftContent } from '../../drafts/service.ts';
  *   「分支已前进」提示核对（直接提交将 409——刷新本页即取最新基线重提）。
  *
  * D5 模块自声明：不改 web/routes.ts 既有行（组装点 append 一行注册本模块）。
+ *
+ * S12-T3（T2 建议稿 A3-1 收口）：状态页 editStatePage 补传 viewer（呈现层可选
+ * 参数，与 T2 已做的 upload/rename/history 状态页同形）——路由判定/门槛/重定向
+ * 零变化；写者编辑页内联 api() 已迁共享脚本 /assets/app.js（见 edit/pages.ts）。
  */
 
 export interface EditRoutesOptions {
@@ -56,6 +61,14 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
   const vaults = new VaultService({ db: opts.db }); // 只读消费（getVaultRow）
   const membershipSource = createDbMembershipSource(opts.db); // 三入口同源成员判定
   const drafts = new DraftsService({ db: opts.db }); // 只读消费（get——回填预取）
+
+  // S12-T1 编辑预览片段端点（sprint D2——POST /edit-preview/{slug}/{path}；
+  // 插件作用域自带 JSON 传输护栏；维护放行先例与路径裁决见 preview.ts 头注）
+  app.register(editPreviewPlugin, {
+    db: opts.db,
+    ...(opts.dataDir !== undefined ? { dataDir: opts.dataDir } : {}),
+    requirePageUser: opts.requirePageUser,
+  });
 
   async function requireVault(
     req: FastifyRequest,
@@ -76,6 +89,12 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
     return draft === null
       ? {}
       : { draft: { baseCommit: draft.base_commit, updatedAt: draft.updated_at, stale: draft.base_commit !== currentBase } };
+  }
+
+  /** S12-T3 状态页 viewer（呈现层可选参数——与 T2 已做的 upload/rename/history
+   *  状态页同形；判定/门槛/重定向零变化） */
+  function stateViewer(who: AuthSuccess): { username: string; is_instance_admin: boolean } {
+    return { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin };
   }
 
   /** 默认分支 HEAD（base commit）；空库/解析失败 = null（分支创建语义） */
@@ -103,7 +122,8 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
     const vault = await requireVault(req, reply, slug);
     if (!vault) return reply;
     if (opts.dataDir === undefined) {
-      return html(reply, editStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+      // S12-T3（T2 建议稿 A3-1 收口）：状态页补传 viewer——顶栏账户位（呈现层，判定零变化）
+      return html(reply, editStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。', stateViewer(vault.who)));
     }
     const query = req.query as Record<string, unknown>;
     const dir = String(query.dir ?? '').replace(/^\/+/, '').replace(/\/+$/, '');
@@ -121,7 +141,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
       }
       const read = await readEntryAt(opts.dataDir, vault.id, vault.defaultBranch, candRaw);
       if (read.kind === 'unavailable') {
-        return html(reply, editStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
+        return html(reply, editStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。', stateViewer(vault.who)));
       }
       if (read.kind === 'ok') {
         // 已存在（blob/tree 皆为存在）：提示态——创建表单不得呈现（防误覆盖）
@@ -162,7 +182,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
     const vault = await requireVault(req, reply, slug);
     if (!vault) return reply;
     if (opts.dataDir === undefined) {
-      return html(reply, editStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+      return html(reply, editStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。', stateViewer(vault.who)));
     }
     const entryPath = (((req.params as Record<string, string>)['*'] ?? '')).replace(/\/+$/, '');
     if (entryPath === '') return sendPageNotFound(reply); // 编辑需要明确文件路径
@@ -171,7 +191,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
     const isReadme = name.toLowerCase() === 'readme.md'; // 架构 §5.2 豁免（大小写不敏感）
     const read = await readEntryAt(opts.dataDir, vault.id, vault.defaultBranch, entryPath);
     if (read.kind === 'unavailable') {
-      return html(reply, editStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
+      return html(reply, editStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。', stateViewer(vault.who)));
     }
 
     // 既有条目：目录 302（先于扩展名判定——目录路径不以 .md 结尾也转发 browse）
@@ -184,7 +204,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
     if (read.kind === 'ok') {
       if (read.entry.type === 'commit') return sendPageNotFound(reply);
       if ((read.entry.size ?? 0) > EDIT_LOAD_MAX_BYTES) {
-        return html(reply, editStatePage(vault, `文件过大（超过编辑加载上限 ${EDIT_LOAD_MAX_BYTES} 字节），未装入表单。`));
+        return html(reply, editStatePage(vault, `文件过大（超过编辑加载上限 ${EDIT_LOAD_MAX_BYTES} 字节），未装入表单。`, stateViewer(vault.who)));
       }
     }
 
@@ -220,7 +240,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
     try {
       text = await readBlobText(opts.dataDir, vault.id, read.entry.oid);
     } catch {
-      return html(reply, editStatePage(vault, '内容暂不可用（正文读取失败）。'));
+      return html(reply, editStatePage(vault, '内容暂不可用（正文读取失败）。', stateViewer(vault.who)));
     }
 
     if (isReadme) {

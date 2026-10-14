@@ -135,8 +135,13 @@ export function historyPage(input: {
   );
 }
 
-/** 空库/存储不可用态（成员已确认——非 404；如实区分「无内容」与「无权」） */
-export function historyStatePage(vault: { slug: string; name: string }, message: string): string {
+/** 空库/存储不可用态（成员已确认——非 404；如实区分「无内容」与「无权」）。
+ *  S12-T2（coordinator 批准扩展）：可选 viewer → 顶栏账户位（缺省兼容旧调用形态）。 */
+export function historyStatePage(
+  vault: { slug: string; name: string },
+  message: string,
+  viewer?: { username: string; is_instance_admin?: boolean },
+): string {
   return layout(
     `${vault.name} 提交历史`,
     `<div class="page">
@@ -145,6 +150,10 @@ export function historyStatePage(vault: { slug: string; name: string }, message:
   <p class="state-note">${escapeHtml(message)}</p>
 </div>
 `,
+    '',
+    viewer !== undefined
+      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      : undefined,
   );
 }
 
@@ -172,8 +181,10 @@ export function diffPage(input: {
   commitOid: string;
   treePath: string;
   diff: string;
+  /** S12-T2（coordinator 批准扩展）：可选 viewer → 顶栏账户位 */
+  viewer?: { username: string; is_instance_admin?: boolean };
 }): string {
-  const { vault, commitOid, treePath, diff } = input;
+  const { vault, commitOid, treePath, diff, viewer } = input;
   const body =
     diff === ''
       ? '<p class="state-note">该提交未修改此文件（diff 为空）。</p>'
@@ -194,6 +205,10 @@ export function diffPage(input: {
   ${body}
 </div>
 `,
+    '',
+    viewer !== undefined
+      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      : undefined,
   );
 }
 
@@ -224,8 +239,10 @@ export function versionPage(input: {
    *  徽章；缺省不判定（测试直调形态））。仅 rendered 形态提供：edit 表单仅
    *  知识 Markdown——其余形态不生成（edit GET 对非 .md 一律 404）。 */
   canWrite?: boolean;
+  /** S12-T2（coordinator 批准扩展）：可选 viewer → 顶栏账户位 */
+  viewer?: { username: string; is_instance_admin?: boolean };
 }): string {
-  const { vault, commitOid, treePath, sizeBytes, body, canWrite } = input;
+  const { vault, commitOid, treePath, sizeBytes, body, canWrite, viewer } = input;
   const name = treePath.includes('/') ? treePath.slice(treePath.lastIndexOf('/') + 1) : treePath;
   // 编辑入口如实标注：edit 路由编辑的始终是该文件当前分支内容（HEAD）——非此历史快照
   const editEntry =
@@ -259,6 +276,10 @@ export function versionPage(input: {
   ${article}
 </div>
 `,
+    '',
+    viewer !== undefined
+      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      : undefined,
   );
 }
 
@@ -311,7 +332,7 @@ export function restorePage(input: {
 const CITE_FORMAT_HINT = '库 / 路径 @ commit（例：v-handbook / docs/getting-started.md @ 4c55b7a0d1e2f3a4）';
 
 /** 引用解析入口页（GET /cite 空输入：粘贴表单 + 格式说明——GET 表单、无 JS） */
-export function citeEntryPage(): string {
+export function citeEntryPage(viewer?: { username: string; is_instance_admin?: boolean }): string {
   return layout(
     '引用解析',
     `<div class="page page-narrow">
@@ -330,12 +351,14 @@ export function citeEntryPage(): string {
 </div>
 `,
     '',
-    { active: 'cite' },
+    viewer !== undefined
+      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
+      : { active: 'cite' },
   );
 }
 
 /** 引用格式失败页（404）：非三要素形态的可理解错误（静态同页——只谈格式，不触库判定） */
-export function citeFormatErrorPage(): string {
+export function citeFormatErrorPage(viewer?: { username: string; is_instance_admin?: boolean }): string {
   return layout(
     '引用格式无法解析',
     `<div class="page page-narrow">
@@ -346,14 +369,16 @@ export function citeFormatErrorPage(): string {
 </div>
 `,
     '',
-    { active: 'cite' },
+    viewer !== undefined
+      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
+      : { active: 'cite' },
   );
 }
 
 /** 引用存在性失败页（404 反存在性）：已过权限判定的引用未能对应任何历史版本。
  *  静态同页不区分原因（提交未知/非提交对象/该路径在该提交处不存在——不泄露
  *  库内容）；无权/未知库不在此页（D-IC-06 与页面族同页同码 404）。 */
-export function citeUnresolvablePage(): string {
+export function citeUnresolvablePage(viewer?: { username: string; is_instance_admin?: boolean }): string {
   return layout(
     '引用无法解析',
     `<div class="page page-narrow">
@@ -363,6 +388,8 @@ export function citeUnresolvablePage(): string {
 </div>
 `,
     '',
-    { active: 'cite' },
+    viewer !== undefined
+      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
+      : { active: 'cite' },
   );
 }

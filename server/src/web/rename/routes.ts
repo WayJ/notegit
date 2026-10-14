@@ -157,15 +157,17 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     return { who, vault: { slug: row.slug, name: row.name, id: row.id, defaultBranch: row.default_branch } };
   }
 
-  /** 源条目形态守卫：blob 放行；目录 302 browse（edit 族同判）；其余 404/状态页 */
+  /** 源条目形态守卫：blob 放行；目录 302 browse（edit 族同判）；其余 404/状态页。
+   *  viewer=S12-T2 状态页账户位（呈现层可选参数——coordinator 批准扩展）。 */
   async function requireSourceEntry(
     reply: FastifyReply,
     vault: { slug: string; name: string; id: number; defaultBranch: string },
     entryPath: string,
+    viewer?: { username: string; is_instance_admin?: boolean },
   ): Promise<{ oid: string; size: number | undefined } | null> {
     const read = await readEntryAt(opts.dataDir!, vault.id, vault.defaultBranch, entryPath);
     if (read.kind === 'unavailable') {
-      return html(reply, opStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。')), null;
+      return html(reply, opStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。', viewer)), null;
     }
     if (read.kind === 'ok') {
       if (read.entry.type === 'tree') {
@@ -213,11 +215,18 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     if (!guard) return reply;
     const { who, vault } = guard;
     if (opts.dataDir === undefined) {
-      return html(reply, opStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+      return html(
+        reply,
+        opStatePage(
+          vault,
+          '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。',
+          { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin }, // S12-T2 账户位（批准扩展）
+        ),
+      );
     }
     const entryPath = ((req.params as Record<string, string>)['*'] ?? '').replace(/\/+$/, '');
     if (entryPath === '' || !treePathOk(entryPath)) return sendPageNotFound(reply);
-    const entry = await requireSourceEntry(reply, vault, entryPath);
+    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin });
     if (!entry) return reply;
     return html(
       reply,
@@ -253,13 +262,13 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     }
     if (to === entryPath) return fail(400, { message: '路径未变化：新路径与原路径相同' });
 
-    const entry = await requireSourceEntry(reply, vault, entryPath);
+    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin });
     if (!entry) return reply;
 
     // 目标已存在：拒绝不覆盖（重命名不是覆盖写入；删除须走显式删除流程）
     const target = await readEntryAt(opts.dataDir, vault.id, vault.defaultBranch, to);
     if (target.kind === 'unavailable') {
-      return html(reply, opStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
+      return html(reply, opStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。', viewer));
     }
     if (target.kind === 'ok') return fail(409, { message: `目标路径已存在：${to}（不覆盖既有文件）` });
 
@@ -269,7 +278,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
       if (read === null) throw new Error('blob 不在库内');
       bytes = read;
     } catch {
-      return html(reply, opStatePage(vault, '内容暂不可用（原文件读取失败）。'));
+      return html(reply, opStatePage(vault, '内容暂不可用（原文件读取失败）。', viewer));
     }
 
     const repoPath = vaultRepoPath(opts.dataDir, vault.id);
@@ -305,11 +314,18 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     if (!guard) return reply;
     const { who, vault } = guard;
     if (opts.dataDir === undefined) {
-      return html(reply, opStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+      return html(
+        reply,
+        opStatePage(
+          vault,
+          '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。',
+          { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin }, // S12-T2 账户位（批准扩展）
+        ),
+      );
     }
     const entryPath = ((req.params as Record<string, string>)['*'] ?? '').replace(/\/+$/, '');
     if (entryPath === '' || !treePathOk(entryPath)) return sendPageNotFound(reply);
-    const entry = await requireSourceEntry(reply, vault, entryPath);
+    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin });
     if (!entry) return reply;
     return html(
       reply,
@@ -334,7 +350,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     const entryPath = ((req.params as Record<string, string>)['*'] ?? '').replace(/\/+$/, '');
     if (entryPath === '' || !treePathOk(entryPath)) return sendPageNotFound(reply);
 
-    const entry = await requireSourceEntry(reply, vault, entryPath);
+    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin });
     if (!entry) return reply;
 
     const repoPath = vaultRepoPath(opts.dataDir, vault.id);

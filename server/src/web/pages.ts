@@ -9,11 +9,24 @@
  * UI-RESTYLE：layout() 升级为 DESIGN.md 视觉契约壳（top-nav 64px 米色栏 +
  * spike-mark 字标 + 深色页脚；样式唯一来源 /assets/styles.css——见 web/assets.ts
  * 与 assets/styles.css 头注）。插值通道不变：文本仅 escapeHtml；结构与类名由
- * 本模板生成。每页恰好一个 <script> 块（既有测试断言）。
+ * 本模板生成。每页恰好一个内联 <script> 块（既有测试断言）；S12-T3 起改造页
+ * 在内联块前另含恰一个共享脚本 <script src="/assets/app.js"> 引用（见下）。
  *
  * S11-T2：indexPage 追加「最近变更」区块（服务端渲染、无新增脚本——区块纯
  * 呈现）；条目行渲染 activityEntryRow 为首页与库内 activity 页共用（同形态），
  * 数据面在 web/activity/query.ts（审计成功发布行——sprint S11 D3）。
+ *
+ * S12-T2：topNav 升级账户菜单（G09；research F-9/P1-7——登出不再只在首页）：
+ * 右上 details 零 JS 下拉（display_name 徽章=DESIGN.md badge-pill 既有 token +
+ * 用户名；我的凭据/管理（仅实例管理员）/退出登录——id="logout" 由顶栏承担，
+ * 首页原独立退出按钮移除）；顶栏新增「我的草稿」入口（认证全员）；登出脚本
+ * ACCOUNT_SCRIPT 并入页面唯一 <script> 块（渐进增强——菜单开合零 JS 可用）。
+ *
+ * S12-T3（D19-A 第一步）：原内联 FETCH_HELPER（api/show）全文迁入共享脚本
+ * /assets/app.js（web/assets/assets.ts 注册；全局命名空间 window.ngt——语义
+ * 与原内联逐字一致，行为零变化）。用共享脚本的页面（login/admin/credentials）
+ * 调 layout(..., sharedScript=true)：内联块前置 <script src> 引用，页面内联块
+ * 顶部一行别名取用（SHARED_ALIAS——页面特有逻辑的调用面零改写）。
  */
 
 import { ACTIVITY_LIMIT, type ActivityEntry } from './activity/query.ts';
@@ -31,13 +44,15 @@ export function escapeHtml(s: string): string {
 
 /**
  * 顶部导航上下文（DESIGN.md top-nav 组件的登录态/主菜单落位）：
- * - user 存在 → 右侧呈现用户名；isAdmin 才出现「管理」菜单项
+ * - user 存在 → 右侧呈现账户菜单（S12-T2：details 零 JS 下拉——display_name
+ *   徽章 + 用户名 + 凭据/管理/退出登录）；isAdmin 才出现「管理」链接
  *   （S2-T8 验收断言「普通成员页面任何位置不得出现 /admin」——本字段唯一来源）。
+ *   displayName 缺省时徽章如实回落用户名（渐进接线：各页面模块 viewer 逐步补传）。
  * - active → 当前区段落位（aria-current 高亮）。
  */
 export interface PageNav {
-  readonly user?: { readonly username: string; readonly isAdmin: boolean };
-  readonly active?: 'home' | 'vaults' | 'search' | 'cite' | 'credentials' | 'admin';
+  readonly user?: { readonly username: string; readonly isAdmin: boolean; readonly displayName?: string };
+  readonly active?: 'home' | 'vaults' | 'drafts' | 'search' | 'cite' | 'credentials' | 'admin';
 }
 
 /** 品牌标记：4-spoke 径向星芒（DESIGN.md「spike-mark 风格标记」；inline SVG，随色继承） */
@@ -47,11 +62,24 @@ const SPIKE_MARK =
 const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string; readonly key: NonNullable<PageNav['active']> }> = [
   { href: '/search', label: '查找', key: 'search' },
   { href: '/cite', label: '引用解析', key: 'cite' },
+  { href: '/drafts', label: '我的草稿', key: 'drafts' }, // 认证全员可见（topNav 渲染过滤——匿名壳不呈现）
   { href: '/credentials', label: '我的凭据', key: 'credentials' },
 ];
 
+/** S12-T2 顶栏账户菜单登出脚本（layout 并入页面唯一 script 块；菜单开合零 JS） */
+const ACCOUNT_SCRIPT = `
+(function () {
+  var btn = document.getElementById('logout');
+  if (btn === null) return; // 无账户位页面（匿名壳）零行为
+  btn.addEventListener('click', async function () {
+    try { await fetch('/api/v1/auth/logout', { method: 'POST' }); } catch (err) { /* 尽力送达（端点幂等）*/ }
+    location.href = '/login';
+  });
+})();
+`;
+
 function topNav(nav?: PageNav): string {
-  const items = NAV_ITEMS.map(
+  const items = NAV_ITEMS.filter((it) => it.key !== 'drafts' || nav?.user !== undefined).map(
     (it) =>
       `<li><a href="${it.href}"${nav?.active === it.key ? ' aria-current="page"' : ''}>${it.label}</a></li>`,
   );
@@ -59,7 +87,22 @@ function topNav(nav?: PageNav): string {
     nav?.user?.isAdmin === true
       ? `\n      <li><a href="/admin"${nav.active === 'admin' ? ' aria-current="page"' : ''}>管理</a></li>`
       : '';
-  const user = nav?.user !== undefined ? `\n      <span class="nav-user" title="${escapeHtml(nav.user.username)}">${escapeHtml(nav.user.username)}</span>` : '';
+  // 账户菜单（S12-T2）：details 零 JS 下拉——徽章（displayName 缺省回落用户名）+ 用户名；
+  // 下拉=凭据/管理（仅实例管理员）/退出登录（id="logout"——顶栏全域承担，脚本见 ACCOUNT_SCRIPT）
+  const account =
+    nav?.user !== undefined
+      ? `\n      <details class="nav-account">
+        <summary title="${escapeHtml(nav.user.username)}"><span class="badge">${escapeHtml(nav.user.displayName ?? nav.user.username)}</span> <span class="nav-user">${escapeHtml(nav.user.username)}</span></summary>
+        <div class="account-menu">
+          <a href="/credentials"${nav.active === 'credentials' ? ' aria-current="page"' : ''}>我的凭据</a>${
+            nav.user.isAdmin
+              ? `\n          <a href="/admin"${nav.active === 'admin' ? ' aria-current="page"' : ''}>管理</a>`
+              : ''
+          }
+          <button type="button" id="logout">退出登录</button>
+        </div>
+      </details>`
+      : '';
   // 主 CTA：知识库（产品主入口；登录页由登录按钮承担 CTA，不重复呈现）
   const cta = nav?.active === 'home' ? '' : '\n      <a class="btn btn-primary" href="/vaults">知识库</a>';
   return `<header class="top-nav">
@@ -68,7 +111,7 @@ function topNav(nav?: PageNav): string {
     <ul class="nav-menu">
       ${items.join('\n      ')}${adminItem}
     </ul>
-    <div class="nav-side">${user}${cta}
+    <div class="nav-side">${account}${cta}
     </div>
   </div>
 </header>`;
@@ -86,7 +129,12 @@ const SITE_FOOTER = `<footer class="site-footer">
   </div>
 </footer>`;
 
-export function layout(title: string, body: string, script = '', nav?: PageNav): string {
+export function layout(title: string, body: string, script = '', nav?: PageNav, sharedScript = false): string {
+  // S12-T2：登录态页面把账户菜单脚本并入页面唯一 script 块（每页仍恰好一个 <script>）
+  const inline = (nav?.user !== undefined ? [ACCOUNT_SCRIPT, script] : [script]).filter((s) => s !== '').join('\n');
+  // S12-T3：共享脚本页（sharedScript=true）在内联块前置 <script src> 引用——
+  // 经典 script 按文档序执行，保证内联块的 ngt 别名取用时 window.ngt 已就位
+  const sharedRef = sharedScript ? '<script src="/assets/app.js"></script>\n' : '';
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -101,31 +149,19 @@ ${topNav(nav)}
 ${body}
 </main>
 ${SITE_FOOTER}
-<script>
-${script}
+${sharedRef}<script>
+${inline}
 </script>
 </body>
 </html>`;
 }
 
-/** 同源 fetch JSON 封装：非 2xx 时抛出含错误码的可读信息（页面统一呈现） */
-const FETCH_HELPER = `
-async function api(method, url, body) {
-  const res = await fetch(url, {
-    method,
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (res.status === 204) return null;
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = data.error || {};
-    throw new Error((err.code || res.status) + ': ' + (err.message || JSON.stringify(data)));
-  }
-  return data;
-}
-function show(el, text) { el.textContent = text; }
-`;
+/**
+ * S12-T3 共享脚本页内联块顶部别名行（原 FETCH_HELPER 迁入 /assets/app.js 后的
+ * 机械替换——页面特有逻辑的 api()/show() 调用面零改写；apiEnvelope=「code:
+ * message」错误信封族，语义与原内联逐字一致，web-assets.test.ts 形态锁定）。
+ */
+const SHARED_ALIAS = `const api = ngt.apiEnvelope, show = ngt.show;`;
 
 export function loginPage(): string {
   return layout(
@@ -143,7 +179,7 @@ export function loginPage(): string {
   </div>
 </div>
 `,
-    `${FETCH_HELPER}
+    `${SHARED_ALIAS}
 document.getElementById('login-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const f = ev.target;
@@ -158,6 +194,8 @@ document.getElementById('login-form').addEventListener('submit', async (ev) => {
   }
 });
 `,
+    undefined,
+    true, // S12-T3：引用共享脚本 /assets/app.js（FETCH_HELPER 迁出——行为零变化）
   );
 }
 
@@ -208,6 +246,8 @@ export function activityEntryRow(e: ActivityEntry): string {
  * UI-RESTYLE：入口清单落位 feature-card 网格（DESIGN.md 卡片族；整卡可点）。
  * S11-T2：追加「最近变更」区块（recent=跨库最近发布，按当前员工成员关系过滤
  * ——数据面 web/activity/query.ts 实时 JOIN；区块纯服务端渲染，无新增脚本）。
+ * S12-T2：原独立退出按钮移除（登出随顶栏账户菜单全域可用——id="logout" 由
+ * topNav 承担；页面自有脚本退役，唯一 script=外壳账户脚本）。
  */
 export function indexPage(
   user: { username: string; display_name: string; is_instance_admin: boolean },
@@ -238,21 +278,13 @@ export function indexPage(
   ${activityBody}
   <p class="page-meta">按你的成员关系呈现各库最近发布（成功发布事件，最近 ${ACTIVITY_LIMIT} 条；主体=服务端审计记录的认证员工）。</p>
   </section>
-  <p><button id="logout" type="button">退出登录</button></p>
-  <p id="logout-msg"></p>
 </div>
 `,
-    `${FETCH_HELPER}
-document.getElementById('logout').addEventListener('click', async () => {
-  try {
-    await api('POST', '/api/v1/auth/logout');
-    location.href = '/login';
-  } catch (err) {
-    show(document.getElementById('logout-msg'), '退出失败：' + err.message);
-  }
-});
-`,
-    { user: { username: user.username, isAdmin: user.is_instance_admin }, active: 'home' },
+    '',
+    {
+      user: { username: user.username, isAdmin: user.is_instance_admin, displayName: user.display_name },
+      active: 'home',
+    },
   );
 }
 
@@ -333,7 +365,7 @@ export function adminPage(viewer?: { username: string; is_instance_admin: boolea
   </section>
 </div>
 `,
-    `${FETCH_HELPER}
+    `${SHARED_ALIAS}
 
 // —— 员工管理：列表（分页 limit=50 + cursor「加载更多」）+ 停用/启用 + 实例管理员开关 + 重置口令 ——
 
@@ -528,6 +560,7 @@ document.getElementById('maint-off').addEventListener('click', async () => {
 });
 `,
     viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'admin' } : undefined,
+    true, // S12-T3：引用共享脚本 /assets/app.js（FETCH_HELPER 迁出——行为零变化）
   );
 }
 
@@ -569,7 +602,7 @@ export function credentialsPage(viewer?: { username: string; is_instance_admin: 
   </section>
 </div>
 `,
-    `${FETCH_HELPER}
+    `${SHARED_ALIAS}
 
 async function loadCredentials() {
   const tbody = document.querySelector('#cred-table tbody');
@@ -630,6 +663,7 @@ document.getElementById('cred-form').addEventListener('submit', async (ev) => {
 });
 `,
     viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'credentials' } : undefined,
+    true, // S12-T3：引用共享脚本 /assets/app.js（FETCH_HELPER 迁出——行为零变化）
   );
 }
 
