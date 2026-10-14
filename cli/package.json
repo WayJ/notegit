@@ -1,6 +1,6 @@
 {
   "name": "notegit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Notegit employee CLI (D10: npm distribution, macOS/Linux, Node >=22.13; login/ls/setup/lint land in S6, sync skeleton until S7)",
   "type": "module",
   "engines": {
