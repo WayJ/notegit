@@ -135,28 +135,28 @@ test('链接改写：映射内 md 互链改写为站内相对 html（跨目录�
   assert.ok(admin.includes('href="../deploy/README.html"'));
 });
 
-test('链接改写：映射外仓库路径与外链如实保留原文', async () => {
+test('链接改写：映射外仓库路径改写为 GitHub blob（站内零死链），外链保留', async () => {
+  // 2026-10-14 master 修正：未映射仓库路径原样保留在静态站上是死链——改写 blob URL
   const known = await readFile(join(repoRoot, 'site/docs/known-limitations.html'), 'utf8');
-  // 未入映射表的仓库内文档链接不改写（站内无此页——不虚构目标）
-  assert.ok(known.includes('href="s1/selection.md"'));
-  assert.ok(known.includes('href="superpowers/roadmaps/2026-10-12-notegit-v01.md"'));
+  assert.ok(known.includes('href="https://github.com/WayJ/notegit/blob/main/docs/s1/selection.md"'));
+  assert.ok(known.includes('href="https://github.com/WayJ/notegit/blob/main/docs/superpowers/roadmaps/2026-10-12-notegit-v01.md"'));
   const quickstart = await readFile(join(repoRoot, 'site/docs/user/quickstart.html'), 'utf8');
-  assert.ok(quickstart.includes('href="../../cli/README.md"'));
-  assert.ok(quickstart.includes('href="../harness/agent-guide.md"'));
+  assert.ok(quickstart.includes('href="https://github.com/WayJ/notegit/blob/main/cli/README.md"'));
+  assert.ok(quickstart.includes('href="https://github.com/WayJ/notegit/blob/main/docs/harness/agent-guide.md"'));
   const admin = await readFile(join(repoRoot, 'site/docs/admin/README.html'), 'utf8');
-  assert.ok(admin.includes('href="../credentials-ops.md"'));
+  assert.ok(admin.includes('href="https://github.com/WayJ/notegit/blob/main/docs/credentials-ops.md"'));
 });
 
-test('链接改写单元：rewriteHref 外链/锚点/未映射不动，映射内换算相对路径', () => {
+test('链接改写单元：rewriteHref 外链/锚点不动、未映射→GitHub blob、映射内换算相对路径', () => {
   const F = (href, srcDir, outDir) => rewriteHref(href, srcDir, outDir);
   // 外链（含以 .md 结尾的外链）与纯锚点：不改
   assert.equal(F('https://example.com/x.md', 'docs/user', 'site/docs/user'), null);
   assert.equal(F('http://a.b/c', 'docs/user', 'site/docs/user'), null);
   assert.equal(F('mailto:a@b.c', 'docs/user', 'site/docs/user'), null);
   assert.equal(F('#anchor', 'docs/user', 'site/docs/user'), null);
-  // 未入映射表的仓库路径：不改
-  assert.equal(F('contracts/api.md', 'docs', 'site/docs'), null);
-  assert.equal(F('../../cli/README.md', 'docs/admin', 'site/docs/admin'), null);
+  // 未入映射表的仓库路径：改写为 GitHub blob 绝对 URL（站内零死链——2026-10-14 master 修正原「不动」策略）
+  assert.equal(F('contracts/api.md', 'docs', 'site/docs'), 'https://github.com/WayJ/notegit/blob/main/docs/contracts/api.md');
+  assert.equal(F('../../cli/README.md', 'docs/admin', 'site/docs/admin'), 'https://github.com/WayJ/notegit/blob/main/cli/README.md');
   // 非 md 资产：不改
   assert.equal(F('img/a.png', 'docs/user', 'site/docs/user'), null);
   // 映射内：同目录、跨目录、锚点保留

@@ -58,7 +58,7 @@
 <h1>Notegit 管理员手册</h1>
 <p>面向实例管理员与运维：账号、凭据、库授权、维护模式、备份/恢复/升级与指标。部署本身（镜像构建、运行、HTTPS、首次初始化演练）见 <a href="../deploy/README.html">deploy/README.md</a>；本文从「实例已跑起来、管理员已 bootstrap」讲起。</p>
 <blockquote>
-<p>依据：<a href="../contracts/api.md">api.md</a>（端点契约）、<a href="../contracts/identity-credentials.md">identity-credentials.md</a>（凭据语义）、<a href="../contracts/backup-recovery.md">backup-recovery.md</a>（备份/恢复/升级手册）。文档只描述已实现行为，一致性由 <code>cli/test/delivery-docs-consistency.test.ts</code> 抽检。</p>
+<p>依据：<a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/api.md">api.md</a>（端点契约）、<a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/identity-credentials.md">identity-credentials.md</a>（凭据语义）、<a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/backup-recovery.md">backup-recovery.md</a>（备份/恢复/升级手册）。文档只描述已实现行为，一致性由 <code>cli/test/delivery-docs-consistency.test.ts</code> 抽检。</p>
 </blockquote>
 <h2>1. 两种管理员</h2>
 <ul>
@@ -103,7 +103,7 @@ curl -fsS https://&lt;服务器地址&gt;/api/v1/admin/employees/{username}/cred
 curl -fsS -X DELETE https://&lt;服务器地址&gt;/api/v1/admin/employees/{username}/credentials/{id} -b cookies.txt</code></pre>
 <ul>
   <li>员工离职/设备失窃的处置顺序：停用账号（一下全断）＞撤销具体凭据＞移除库成员。边界语义见<a href="../user/permissions.html">权限与撤权边界</a>。</li>
-  <li>pepper（令牌摘要密钥）位置、轮换与密钥件备份：见 <a href="../credentials-ops.md">credentials-ops.md</a>。</li>
+  <li>pepper（令牌摘要密钥）位置、轮换与密钥件备份：见 <a href="https://github.com/WayJ/notegit/blob/main/docs/credentials-ops.md">credentials-ops.md</a>。</li>
 </ul>
 <h2>4. 建库与授权</h2>
 <pre><code class="language-sh"># 建库（创建者即库管理员；默认分支 main，同时初始化 bare 仓库）
@@ -131,7 +131,7 @@ curl -fsS https://&lt;服务器地址&gt;/api/v1/admin/maintenance -b cookies.tx
 curl -fsS -X DELETE https://&lt;服务器地址&gt;/api/v1/admin/maintenance -b cookies.txt</code></pre>
 <p>恢复/升级场景以 <code>NOTEGIT_MAINTENANCE_ON_START=1</code> 启动实例——进程起来即处维护态，由你在收尾时显式关闭。</p>
 <h2>6. 备份、恢复与升级手册</h2>
-<p>完整流程规范（一致性模型、十步恢复、R1–R14 验证清单、升级 §9）见 <a href="../contracts/backup-recovery.md">backup-recovery 契约</a>；本节是<strong>命令面板</strong>。工具随镜像分发，容器内执行；管理令牌只走 <code>--token-file</code> 或 <code>NOTEGIT_ADMIN_TOKEN</code> 环境变量（不进 argv/日志）。</p>
+<p>完整流程规范（一致性模型、十步恢复、R1–R14 验证清单、升级 §9）见 <a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/backup-recovery.md">backup-recovery 契约</a>；本节是<strong>命令面板</strong>。工具随镜像分发，容器内执行；管理令牌只走 <code>--token-file</code> 或 <code>NOTEGIT_ADMIN_TOKEN</code> 环境变量（不进 argv/日志）。</p>
 <h3>6.1 日常备份</h3>
 <pre><code class="language-sh"># 一致备份：开维护→排空→VACUUM INTO→git 复制+抽样 fsck→关维护；产物分置两件
 docker exec notegit node src/backup/cli.ts backup \
@@ -200,11 +200,11 @@ docker exec notegit node src/audit/reconcile-cli.ts reconcile \
   </thead>
   <tbody>
     <tr><td>部署/升级镜像/HTTPS/初始化演练</td><td><a href="../deploy/README.html">deploy/README.md</a></td></tr>
-    <tr><td>凭据体系与 pepper 轮换</td><td><a href="../credentials-ops.md">credentials-ops.md</a></td></tr>
+    <tr><td>凭据体系与 pepper 轮换</td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/credentials-ops.md">credentials-ops.md</a></td></tr>
     <tr><td>员工视角使用</td><td><a href="../user/README.html">docs/user/</a></td></tr>
-    <tr><td>Agent/Harness 接入</td><td><a href="../harness/README.md">docs/harness/</a></td></tr>
+    <tr><td>Agent/Harness 接入</td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/harness/README.md">docs/harness/</a></td></tr>
     <tr><td>边界与已知限制</td><td><a href="../known-limitations.html">known-limitations.md</a></td></tr>
-    <tr><td>端点/错误码全集</td><td><a href="../contracts/api.md">api.md</a></td></tr>
+    <tr><td>端点/错误码全集</td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/api.md">api.md</a></td></tr>
   </tbody>
 </table>
     </article>
