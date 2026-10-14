@@ -50,7 +50,7 @@ E2 关闭须逐条附证据链接；部分满足不勾整条。**全部新改页
 |---|---|---|
 | S10 | merged | 可达性与权限（G01–G04）；2026-10-14 验收 pass（六场景全绿）并合并 main @ 87ac712——DOD-E2-01~04+10 达标（acceptances/2026-10-14-S10-acceptance.md） | [2026-10-14-S10-plan.md](../sprints/2026-10-14-S10-plan.md)；原始启动裁决：research §5 Sprint A 派生、Orca worker ≤3 superpowers+TDD |
 | S11 | merged | 检索与动态（G05–G07）；2026-10-14 验收 pass（六场景全绿）合并 main @ 2c7c67e——DOD-E2-05/06/07/10 达标（acceptances/2026-10-14-S11-acceptance.md）；契约 D 批两笔（检索五面命中/activity 行/storage body 列）；升级注记：存量库需一次索引重建回填 body（acceptance Obstacles） |
-| S12 | planned | 编辑体验与框架落地（G08–G10）；依赖 S11；Q-E2-1 已裁决 A（D19）——S12 含共享组件抽取第一步 |
+| S12 | started | 编辑体验与框架落地（G08–G10）；2026-10-14 go：S11 merged @ 2c7c67e、D19 已定（A 路线）、四要素明确（同 S10/S11 形态）；2026-10-14 started：[2026-10-14-S12-plan.md](../sprints/2026-10-14-S12-plan.md) |
 
 ```mermaid
 flowchart LR
