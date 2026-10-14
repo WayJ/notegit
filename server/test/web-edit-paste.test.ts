@@ -43,6 +43,7 @@ test('粘贴/拖拽 JS 形态：正文 textarea 绑 paste/drop/dragover；octet-
     assert.ok(res.body.includes('const UPLOAD_BASE ='), '上传基址常量（文档所在目录拼目标路径）');
     assert.ok(res.body.includes('"/vaults/alpha/upload"'), '端点=既有 POST /vaults/{slug}/upload');
     assert.ok(res.body.includes("'content-type': 'application/octet-stream'"), 'octet-stream 传输契约');
+    assert.ok(res.body.includes("redirect: 'error'"), 'fetch 不跟随重定向（会话失效 302 /login → 如实报错，不误报 HTTP 200 失败）');
     // 回插：image/* → ![](url)；其余 → [name](url)（呈现形态选择——非类型白名单）
     assert.ok(res.body.includes("startsWith('image/')"), 'image/* 判定（仅回插形态）');
     assert.ok(res.body.includes("'![]('"), '图片回插 ![](url)');

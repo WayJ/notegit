@@ -109,6 +109,34 @@ test('预览与 view 同渲染（同内容逐字一致）：普通文档 + 含�
   }
 });
 
+test('预览与 view 同渲染（边界内容类）：未闭合 frontmatter 与 BOM 前缀两分支逐字一致', async () => {
+  const { h, alice, vaultId } = await setup();
+  const { pushToVault } = await import('./web-browse-fixtures.ts');
+  const viewFirst = () =>
+    get(h, `/vaults/alpha/view/${encodeURIComponent('docs')}/${encodeURIComponent('first.md')}`, alice);
+  try {
+    // 未闭合 frontmatter：view/preview 同走 lenient 跳过首行分支（模块内复制品漂移即红）
+    const unterminated = '---\ntitle: 未闭合\n# 正文仍在\n';
+    await pushToVault(h, vaultId, { 'docs/first.md': unterminated });
+    const viewB = await viewFirst();
+    assert.equal(viewB.statusCode, 200, viewB.body);
+    const fragB = await postPreview(h, 'alpha/docs/first.md', unterminated, alice);
+    assert.equal(fragB.statusCode, 200, fragB.body);
+    assert.equal(fragB.body.trim(), articleInner(viewB.body).trim(), '未闭合 frontmatter：预览与 view 逐字一致');
+
+    // BOM 前缀：剥离后同渲染（两分支同锁）
+    const bom = '﻿' + unterminated;
+    await pushToVault(h, vaultId, { 'docs/first.md': bom });
+    const viewC = await viewFirst();
+    assert.equal(viewC.statusCode, 200, viewC.body);
+    const fragC = await postPreview(h, 'alpha/docs/first.md', bom, alice);
+    assert.equal(fragC.statusCode, 200, fragC.body);
+    assert.equal(fragC.body.trim(), articleInner(viewC.body).trim(), 'BOM 前缀：预览与 view 逐字一致');
+  } finally {
+    await h.close();
+  }
+});
+
 test('门槛与同判：read 成员（reader）200；非成员与不存在库 404 同体；未认证 302 /login', async () => {
   const { h, alice, bob } = await setup();
   try {
@@ -201,6 +229,7 @@ test('编辑页预览接线（JS 形态 + 双栏布局）：PREVIEW_URL fetch �
     assert.ok(res.body.includes('const PREVIEW_DEBOUNCE_MS ='), '防抖常量（页顶可调）');
     assert.ok(res.body.includes("addEventListener('input'"), '正文输入驱动预览刷新');
     assert.ok(res.body.includes("getElementById('preview-pane')"), '预览栏元素交换');
+    assert.ok(res.body.includes("redirect: 'error'"), 'fetch 不跟随重定向（会话失效 302 /login → 如实报错，不把登录页误渲染进预览栏）');
     // 双栏布局与窄屏折叠（页作用域样式引用 DESIGN.md token——assets/ 属 T3 不动）
     assert.ok(res.body.includes('id="preview-pane"'), '预览栏容器');
     assert.ok(res.body.includes('edit-dual'), '双栏布局类');

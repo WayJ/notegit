@@ -281,6 +281,7 @@ async function uploadAndInsert(file) {
       method: 'POST',
       headers: { 'content-type': 'application/octet-stream' },
       body: file,
+      redirect: 'error', // 会话失效 302 /login 不跟随——如实报错（否则误报「HTTP 200 失败」）
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
@@ -321,6 +322,7 @@ async function refreshPreview() {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ content: composeDoc() }),
+      redirect: 'error', // 会话失效 302 /login 不跟随——如实报错（否则登录页被误渲染进预览栏）
     });
     const text = await res.text();
     if (seq !== previewSeq) return; // 过期响应：更新的输入已在途——不回写旧片段
