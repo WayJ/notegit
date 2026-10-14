@@ -207,6 +207,23 @@ function renderReport(report) {
 }
 `;
 
+/** 编辑预览双栏页作用域样式（S12-T1 D2：textarea 左/预览右，窄屏折叠为切换；
+ * 引用 DESIGN.md token——共享样式文件属 T3 抽取面，此处先页内落位、T3 归并） */
+const EDIT_DUAL_STYLE = `<style>
+.edit-dual { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-lg); align-items: start; margin-bottom: var(--sp-md); }
+.edit-dual-edit { display: block; }
+.edit-dual-view { border: 1px solid var(--hairline); border-radius: var(--r-lg); padding: var(--sp-md); background: var(--canvas); max-height: 640px; overflow-y: auto; }
+.edit-dual-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-sm); font-size: var(--caption); color: var(--muted); margin: 0 0 var(--sp-sm); }
+#preview-toggle { display: none; }
+@media (max-width: 860px) {
+  .edit-dual { grid-template-columns: minmax(0, 1fr); }
+  .edit-dual-view { display: none; }
+  .edit-dual.show-preview .edit-dual-view { display: block; }
+  .edit-dual.show-preview .edit-dual-edit { display: none; }
+  #preview-toggle { display: inline-block; }
+}
+</style>`;
+
 export function editPage(input: EditPageInput): string {
   const { vault, entryPath, mode, baseCommit, prefill, draft, viewer } = input;
   const name = nameOf(entryPath);
@@ -235,6 +252,7 @@ const BASE = ${baseCommit === null ? "null" : js(baseCommit)};
 const VIEW_URL = ${JSON.stringify(`/vaults/${encodeURIComponent(vault.slug)}/view/${entryPath.split('/').map(encodeURIComponent).join('/')}`)};
 const DRAFT_URL = ${JSON.stringify(draftPutUrl(vault.slug, entryPath))};
 const SUBMIT_URL = ${JSON.stringify(`${apiBase}/submissions`)};
+const PREVIEW_URL = ${JSON.stringify(`/edit-preview/${encodeURIComponent(vault.slug)}/${entryPath.split('/').map(encodeURIComponent).join('/')}`)};
 ${COMPOSE_DOC_JS}${API_FN_JS}${RENDER_REPORT_JS}${autosaveJs('edit-form')}
 // 自动保存页适配（D3）：内容=组装全文（frontmatter+正文，与手动保存同一形状）
 function autosaveContent() { return composeDoc(); }
@@ -288,6 +306,39 @@ bodyTA.addEventListener('drop', (ev) => {
   for (const file of files) uploadAndInsert(file);
 });
 bodyTA.addEventListener('dragover', (ev) => ev.preventDefault());
+
+// ── 编辑预览（S12-T1 D2）：正文变化防抖调片段端点交换预览栏——片段经服务端
+// 与发布后 view 同一清理通道渲染（render.ts 唯一通道），innerHTML 交换与 view
+// 页正文同一信任面；序列号防过期响应回写（慢响应不覆盖更新的输入）。
+const PREVIEW_DEBOUNCE_MS = 400;
+let previewTimer = null;
+let previewSeq = 0;
+async function refreshPreview() {
+  const pane = document.getElementById('preview-pane');
+  const seq = ++previewSeq;
+  try {
+    const res = await fetch(PREVIEW_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: composeDoc() }),
+    });
+    const text = await res.text();
+    if (seq !== previewSeq) return; // 过期响应：更新的输入已在途——不回写旧片段
+    if (res.ok) pane.innerHTML = text;
+    else pane.textContent = '预览暂不可用：' + (text || ('HTTP ' + res.status));
+  } catch (err) {
+    if (seq === previewSeq) pane.textContent = '预览暂不可用：' + err.message;
+  }
+}
+function schedulePreview() {
+  if (previewTimer !== null) clearTimeout(previewTimer);
+  previewTimer = setTimeout(refreshPreview, PREVIEW_DEBOUNCE_MS);
+}
+bodyTA.addEventListener('input', schedulePreview); // 正文输入（含粘贴回插的 input 广播）→ 防抖刷新
+document.getElementById('preview-toggle').addEventListener('click', () => {
+  document.querySelector('.edit-dual').classList.toggle('show-preview');
+});
+refreshPreview(); // 打开即预览当前内容
 document.getElementById('save-draft').addEventListener('click', async () => {
   const msg = document.getElementById('form-msg');
   try {
@@ -330,8 +381,8 @@ autosaveSaved = autosaveContent(); // 基线=装入内容（此后仅变化触�
 
   return layout(
     `${isNew ? '新建' : '编辑'}：${name} — ${vault.name}`,
-    `<div class="page page-narrow">
-  <div class="page-head">
+    `<div class="page${ro ? ' page-narrow' : ''}">
+${ro ? '' : EDIT_DUAL_STYLE}  <div class="page-head">
   <h1>${isNew ? '新建' : '编辑'}：${escapeHtml(name)}</h1>
   <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
   <p class="page-meta">类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath, !ro)}${isNew ? (draft ? ' · <strong>新建</strong>' : ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）') : ''}</p>
@@ -345,7 +396,15 @@ ${fieldRow('标签（可选，逗号分隔）', `<input name="tags"${dis} value=
 ${fieldRow('状态（可选，下拉封闭集）', `<select name="status"${dis}>${statusOptions.join('')}</select>`, 'status')}
 ${fieldRow('来源（可选，原始资料或依据）', `<input name="source"${dis} maxlength="500" value="${attr(prefill.fields.source)}">`, 'source')}
 ${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</code>；允许标量/列表/映射）', `<textarea name="extra"${dis} rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
-  <label>正文（Markdown，多行纯文本）<br><textarea name="body"${dis} rows="18">${attr(prefill.body)}</textarea></label>
+${ro
+  ? `  <label>正文（Markdown，多行纯文本）<br><textarea name="body"${dis} rows="18">${attr(prefill.body)}</textarea></label>`
+  : `  <div class="edit-dual">
+  <label class="edit-dual-edit">正文（Markdown，多行纯文本）<br><textarea name="body" rows="18">${attr(prefill.body)}</textarea></label>
+  <div class="edit-dual-view">
+    <p class="edit-dual-head"><span>预览（与发布后渲染一致）</span><button type="button" id="preview-toggle">切换预览</button></p>
+    <article id="preview-pane" class="readme-body" aria-live="polite"><p>正文输入后此处呈现预览。</p></article>
+  </div>
+</div>`}
   <label>提交说明（可选）<br><input name="message"${dis} placeholder="缺省：Web 编辑：${attr(entryPath)}"></label>
   <p id="form-warn" class="form-warn"></p>
   <p id="form-msg" role="alert"></p>
