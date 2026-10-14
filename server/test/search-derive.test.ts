@@ -7,7 +7,8 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { initBareVaultRepo } from '../src/gitrepo/lifecycle.ts';
 import { vaultRepoPath } from '../src/vaults/repo-path.ts';
-import { deriveVaultIndex } from '../src/search/derive.ts';
+import { deriveVaultIndex, parseDerivedDoc, BODY_MAX_BYTES } from '../src/search/derive.ts';
+import { defaultConfig } from 'notegit-validation';
 
 // S5-T3 派生面单元：deriveVaultIndex 从已发布默认分支派生 title/tags/摘要
 // （implementation-breakdown §2.4 S5-T3 行：frontmatter title/tags + 正文首段摘要；
@@ -132,4 +133,42 @@ test('派生：分支不存在（尚无提交的空库）→ headCommit NULL、d
   const idx = await deriveVaultIndex(empty, 'main');
   assert.equal(idx.headCommit, null);
   assert.deepEqual(idx.docs, []);
+});
+
+// ── S11-T1 全文检索 v1：body 派生（D20；frontmatter 剥离后的 .md 正文入库） ──
+
+test('派生 body：frontmatter 剥离（不含 title:/tags: 行）、README 全文入库（豁免无 frontmatter）', async () => {
+  const idx = await deriveVaultIndex(repo, 'main');
+  const byPath = new Map(idx.docs.map((d) => [d.path, d]));
+
+  // frontmatter 文档：body = 闭合 --- 之后的正文（两段都在，frontmatter 键值不在）
+  const block = byPath.get('finance/expense.md')!;
+  assert.ok(!block.body.includes('title:'), 'frontmatter 键不进 body');
+  assert.ok(!block.body.includes('tags:'), 'frontmatter 标签行不进 body');
+  assert.ok(!block.body.includes('owner:'), 'frontmatter 其他键不进 body');
+  assert.ok(!block.body.trimStart().startsWith('---'), '定界符不进 body');
+  assert.ok(block.body.includes('第一段摘要行一。'), '首段在 body（summary 只是首段截断）');
+  assert.ok(block.body.includes('第二段正文，不进摘要。'), '次段在 body（全文检索的命中面）');
+
+  // README（frontmatter 豁免）：无块可剥——全文入库（标题行也是正文）
+  const readme = byPath.get('README.md')!;
+  assert.equal(readme.body, README_BODY, 'README 正文全量入库（与文件内容逐字一致）');
+
+  const plain = byPath.get('plain.md')!;
+  // 注：plain.md 已被前序「分支前进」用例改写为「新首段。」——body 取改写后正文
+  assert.equal(plain.body, '\n新首段。\n', '无 tags 文档 body = frontmatter 之后正文');
+});
+
+test('派生 body 截断上界 = maxDocumentBytes 同源（不引入第二套常量）；多字节字符不残缺', () => {
+  const config = defaultConfig();
+  assert.equal(BODY_MAX_BYTES, config.maxDocumentBytes, '上界与 validation.limits.maxDocumentBytes 同源（1MiB）');
+  // 超长中文正文（每字 3 字节）：截断后 ≤ 上界字节、无 U+FFFD（不切断多字节序列）
+  const huge = parseDerivedDoc(`---\ntitle: 超长\n---\n\n${'汉'.repeat(Math.ceil(config.maxDocumentBytes / 3) + 100)}\n`);
+  assert.ok(Buffer.byteLength(huge.body, 'utf8') <= config.maxDocumentBytes, 'body 字节数不超上界');
+  assert.ok(huge.body.length > 0);
+  assert.ok(!huge.body.includes('�'), '截断落在完整字符边界（不产生替换符）');
+  assert.ok(huge.body.startsWith('\n') && huge.body.endsWith('汉'), '截断保留完整首尾字符（frontmatter 后换行 + 整个汉字）');
+  // 上界内原文不截断（逐字保留）
+  const small = parseDerivedDoc('---\ntitle: 小\n---\n\n短正文。\n');
+  assert.equal(small.body, '\n短正文。\n');
 });

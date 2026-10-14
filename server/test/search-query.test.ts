@@ -15,16 +15,16 @@ function setup(): { db: DatabaseSync; emp: number } {
   return { db, emp };
 }
 
-/** 直插索引行（查询面测试不依赖索引器——表形态即契约输入） */
+/** 直插索引行（查询面测试不依赖索引器——表形态即契约输入；body 缺省空串=迁移前行形态） */
 function seedIndex(
   db: DatabaseSync,
   vaultId: number,
   path: string,
-  fields: { title?: string | null; tags?: string[]; summary?: string; commitOid?: string },
+  fields: { title?: string | null; tags?: string[]; summary?: string; body?: string; commitOid?: string },
 ): void {
   db.prepare(
-    `INSERT INTO search_index (vault_id, path, commit_oid, title, tags, summary, indexed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO search_index (vault_id, path, commit_oid, title, tags, summary, body, indexed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     vaultId,
     path,
@@ -32,6 +32,7 @@ function seedIndex(
     fields.title ?? null,
     JSON.stringify(fields.tags ?? []),
     fields.summary ?? '',
+    fields.body ?? '',
     new Date().toISOString(),
   );
 }
@@ -56,7 +57,8 @@ test('标题命中：结果含 库/路径/commit/摘要 片段与命中字段', 
   assert.equal(hit.title, '季度 KPI 复盘');
   assert.deepEqual(hit.tags, ['metrics']);
   assert.equal(hit.summary, '本季度指标首段。');
-  assert.deepEqual(hit.matched, ['title']);
+  // S11-T1：路径含 kpi（ASCII 折叠）——matched 扩 ['title','path']
+  assert.deepEqual(hit.matched, ['title', 'path']);
   assert.equal(r.truncated, false);
 });
 
@@ -178,4 +180,77 @@ test('确定性排序（vault slug → path）与上限（100 行 + truncated �
 test('关键词长度上界常量（路由层校验消费）：200 字符', () => {
   assert.equal(SEARCH_MAX_Q_CHARS, 200);
   assert.equal(SEARCH_RESULT_LIMIT, 100);
+});
+
+// ── S11-T1 全文检索 v1：path/body 命中与 matched 标注扩展（D20；F-3 对照） ──
+
+test('文件名命中：q=roadmap 命中 docs/roadmap.md（matched=[path]）；ASCII 大小写不敏感同语义', () => {
+  const { db, emp } = setup();
+  const vid = addVault(db, 'docs', emp);
+  addMember(db, vid, emp, 'reader', emp);
+  // roadmap 一词只在路径——title/tags/summary/body 均不含（F-3 现状该行 0 命中）
+  seedIndex(db, vid, 'docs/roadmap.md', { title: '路线图', tags: ['规划'], summary: '路线说明首段。', body: '\n路线说明首段。\n' });
+  seedIndex(db, vid, 'README.md', { title: null, tags: [], summary: '# 导航', body: '# 导航\n' });
+  const r = searchKeyword(db, emp, 'roadmap');
+  assert.deepEqual(r.hits.map((h) => h.path), ['docs/roadmap.md']);
+  assert.deepEqual(r.hits[0]!.matched, ['path']);
+  assert.equal(searchKeyword(db, emp, 'ROADMAP').hits.length, 1, 'path 命中同样 ASCII 大小写不敏感');
+});
+
+test('正文命中：q=差旅 命中 body 次段（matched=[body]——summary 只是首段不含次段词）', () => {
+  const { db, emp } = setup();
+  const vid = addVault(db, 'docs', emp);
+  addMember(db, vid, emp, 'reader', emp);
+  seedIndex(db, vid, 'policy.md', {
+    title: '制度汇编',
+    tags: ['行政'],
+    summary: '制度总览首段。',
+    body: '\n制度总览首段。\n\n差旅政策：报销按季度结算。\n',
+  });
+  const r = searchKeyword(db, emp, '差旅');
+  assert.deepEqual(r.hits.map((h) => h.path), ['policy.md']);
+  assert.deepEqual(r.hits[0]!.matched, ['body']);
+  // body=''（迁移前行形态/非 .md 语义）：不参与正文命中
+  seedIndex(db, vid, 'legacy.md', { title: null, tags: [], summary: '', body: '' });
+  assert.equal(searchKeyword(db, emp, '制度总览').hits.length, 1, '空 body 行不因空串误命中');
+});
+
+test('matched 标注全集与顺序：title→tags→summary→path→body（五字段同词命中的固定序）', () => {
+  const { db, emp } = setup();
+  const vid = addVault(db, 'docs', emp);
+  addMember(db, vid, emp, 'reader', emp);
+  seedIndex(db, vid, 'deploy/deploy.md', {
+    title: 'deploy 手册',
+    tags: ['deploy'],
+    summary: 'deploy 步骤首段。',
+    body: '\ndeploy 步骤首段。\n\ndeploy 全文第二段。\n',
+  });
+  const hit = searchKeyword(db, emp, 'deploy').hits[0]!;
+  assert.equal(hit.path, 'deploy/deploy.md');
+  assert.deepEqual(hit.matched, ['title', 'tags', 'summary', 'path', 'body'], 'S11-T1 标注集 = 五字段固定序');
+});
+
+test('path/body 的 LIKE 语义与既有完全同一：%/_ 按字面匹配（不充当通配符）', () => {
+  const { db, emp } = setup();
+  const vid = addVault(db, 'docs', emp);
+  addMember(db, vid, emp, 'reader', emp);
+  seedIndex(db, vid, 'rate.md', { title: null, tags: [], summary: '', body: '达成率 100% 的正文。\n' });
+  seedIndex(db, vid, 'snake_case.md', { title: null, tags: [], summary: '' }); // 路径含 _
+  seedIndex(db, vid, 'wild.md', { title: null, tags: [], summary: '', body: 'aXc 正文\n' }); // a_c 作通配才会命中
+  assert.deepEqual(searchKeyword(db, emp, '100%').hits.map((h) => h.path), ['rate.md'], 'body 中 % 字面匹配');
+  assert.deepEqual(searchKeyword(db, emp, 'snake_case').hits.map((h) => h.path), ['snake_case.md'], 'path 中 _ 字面匹配');
+  assert.deepEqual(searchKeyword(db, emp, 'a_c').hits, [], '下划线不通配 body/path');
+});
+
+test('非成员库的 path/body 命中不可见（可见性过滤延续到新命中面）', () => {
+  const { db, emp } = setup();
+  const other = addEmployee(db, { username: 'bob' });
+  const mine = addVault(db, 'mine', emp);
+  const theirs = addVault(db, 'theirs', other);
+  addMember(db, mine, emp, 'reader', emp);
+  addMember(db, theirs, other, 'admin', other); // bob 是自有库成员（对照侧可命中）
+  seedIndex(db, mine, 'roadmap-mine.md', { title: null, tags: [], summary: '', body: 'keyword 正文' });
+  seedIndex(db, theirs, 'roadmap-theirs.md', { title: null, tags: [], summary: '', body: 'keyword 正文' });
+  assert.deepEqual(searchKeyword(db, emp, 'roadmap').hits.map((h) => h.path), ['roadmap-mine.md'], '仅本人成员库');
+  assert.deepEqual(searchKeyword(db, other, 'keyword').hits.map((h) => h.path), ['roadmap-theirs.md']);
 });

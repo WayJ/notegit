@@ -1,15 +1,22 @@
 import { execGit } from '../publish/git-exec.ts';
-import { extractFrontmatter } from 'notegit-validation';
+import { defaultConfig, extractFrontmatter } from 'notegit-validation';
 
 /**
  * 派生面（S5-T3；架构 §3.1 派生数据、§9 内容搜索基于已发布分支派生索引）：
  * 从库的已发布默认分支读出 .md 全集，逐文件提取 frontmatter title/tags 与正文
  * 首段摘要。纯函数面——不写库、不记状态；索引器（indexer.ts）消费本面落表。
  *
+ * S11-T1（D20）：新增 body 派生——frontmatter 剥离后的 .md 正文全文（README
+ * 等 frontmatter 豁免文件为文件全文），供查询面 path+body 命中（全文检索 v1；
+ * F-3 对照：q=roadmap 此前 0 命中）。截断上界与 validation.limits.
+ * maxDocumentBytes 同源（经 defaultConfig 读取——不引入第二套常量）：已发布
+ * 文档本就经 E-LIMIT-001 ≤ maxDocumentBytes，此界为防御面（如管理员事后收紧
+ * 上限时的存量内容）；派生可重建，截断不损失权威数据。
+ *
  * 输入消费面（breakdown 行：「消费 packages/validation 的解析或 git 读取面」）：
  * - frontmatter 块提取 = notegit-validation 的 extractFrontmatter（三入口同一
  *   解析面——暂存区/服务端/网页怎么切 frontmatter，索引就怎么切，不另写一套
- *   边界语义）；
+ *   边界语义；body 切块与 summary 同一 closeLine 切面）；
  * - 内容读取 = execGit（publish/git-exec.ts，与 web/history、browse 同一 git
  *   执行面）：rev-parse（分支头）→ ls-tree -r（已发布 tree 快照）→ cat-file
  *   （按 oid 读 blob——与分支头一致的一致性快照，不受并发推送影响）。
@@ -29,6 +36,8 @@ export interface DerivedDoc {
   readonly tags: readonly string[];
   /** 正文首段摘要（段内换行合并为空格；超长截断） */
   readonly summary: string;
+  /** frontmatter 剥离后的正文全文（S11-T1；豁免文件 = 文件全文；超长按字节截断） */
+  readonly body: string;
 }
 
 /** 一次派生结果：默认分支头 + 逐路径文档行 */
@@ -40,6 +49,22 @@ export interface DerivedIndex {
 
 /** 摘要存储上界（字节）：首段超长截断（架构只要求「摘要片段」，不承诺全文） */
 export const SUMMARY_MAX_CHARS = 500;
+
+/**
+ * 正文入库字节上界（S11-T1）：与 validation.limits.maxDocumentBytes 同源
+ * （validation-defaults.json 唯一机器来源——不引入第二套常量）。已发布文档
+ * 本就 ≤ 该界（E-LIMIT-001），此界是防御面（存量内容 vs 事后收紧的配置）。
+ */
+export const BODY_MAX_BYTES = defaultConfig().maxDocumentBytes;
+
+/** 字节截断（UTF-8 完整字符边界）：end 落在多字节序列首字节处即边界 */
+function truncateBytes(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text;
+  const buf = Buffer.from(text, 'utf8');
+  let end = Math.min(maxBytes, buf.length);
+  while (end > 0 && (buf[end]! & 0xc0) === 0x80) end -= 1; // 回退至序列边界（不残缺多字节字符）
+  return buf.subarray(0, end).toString('utf8');
+}
 
 /** 去除成对包裹引号（YAML 双/单引号标量的常见形态） */
 function unquote(value: string): string {
@@ -114,13 +139,18 @@ function parseSummary(body: string): string {
 export function parseDerivedDoc(text: string): Omit<DerivedDoc, 'path'> {
   const extracted = extractFrontmatter(text);
   if (extracted.kind !== 'block') {
-    // 无 frontmatter / 未闭合：README 等豁免文件走无 title 形态；
-    // 正文仍从头取首段（未闭合块按无 frontmatter 对待——已发布面不该出现）
-    return { title: null, tags: [], summary: parseSummary(text) };
+    // 无 frontmatter / 未闭合：README 等豁免文件走无 title 形态，正文全文入库
+    // （未闭合块按无 frontmatter 对待——已发布面不该出现）
+    return { title: null, tags: [], summary: parseSummary(text), body: truncateBytes(text, BODY_MAX_BYTES) };
   }
   const blockText = extracted.blockText ?? '';
   const body = text.split('\n').slice(extracted.closeLine).join('\n');
-  return { title: parseTitle(blockText), tags: parseTags(blockText), summary: parseSummary(body) };
+  return {
+    title: parseTitle(blockText),
+    tags: parseTags(blockText),
+    summary: parseSummary(body),
+    body: truncateBytes(body, BODY_MAX_BYTES),
+  };
 }
 
 interface TreeEntry {

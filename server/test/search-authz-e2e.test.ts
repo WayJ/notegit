@@ -82,6 +82,9 @@ function expectedFor(vault: string, files: Record<string, string>): Expected[] {
     if (title !== null && title.toLowerCase().includes(KEYWORD)) matched.push('title');
     if (tags.some((t) => t.toLowerCase().includes(KEYWORD))) matched.push('tags');
     if (summary.toLowerCase().includes(KEYWORD)) matched.push('summary');
+    // S11-T1（D20）：命中面扩 path/body——对账期望同步扩展（顺序 title→tags→summary→path→body）
+    if (p.toLowerCase().includes(KEYWORD)) matched.push('path');
+    if (body.toLowerCase().includes(KEYWORD)) matched.push('body');
     if (matched.length > 0) out.push({ vault, path: p, title, tags, summary, matched });
   }
   return out;
@@ -238,7 +241,7 @@ test('全量对账：alice（alpha+gamma 成员）的 API 结果集 == 构造期
   const expected = [...expectedFor('alpha', ALPHA_FILES), ...expectedFor('gamma', GAMMA_FILES)].sort((a, b) =>
     a.vault === b.vault ? (a.path < b.path ? -1 : 1) : a.vault < b.vault ? -1 : 1,
   );
-  assert.equal(expected.length, 4, '期望集自检：alpha 3 行（README 摘要/runbook 标题/oncall 标签）+ gamma 1 行（infra 摘要）');
+  assert.equal(expected.length, 4, '期望集自检：alpha 3 行（README 摘要+body/runbook 标题+path/oncall 标签）+ gamma 1 行（infra 摘要+body）');
 
   const { truncated, results } = await apiSearch(h.aliceToken, KEYWORD);
   assert.equal(truncated, false);

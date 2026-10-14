@@ -20,6 +20,12 @@ import type { DatabaseSync } from 'node:sqlite';
  * tags 匹配语义：候选行按 JSON 文本 LIKE 粗筛（与 title/summary 同一模式），
  * 命中字段在应用层按**逐标签**精确复核（跨标签 JSON 边界的子串不算命中），
  * 无字段精确认证的行整行丢弃——粗筛只放大候选集，不产生假阳性结果。
+ *
+ * S11-T1 全文检索 v1（D20）：命中面扩 path（文件名）与 body（派生正文列，
+ * 迁移 0010）。LIKE 子串语义与既有完全同一（ASCII 大小写不敏感、其他文字
+ * 精确子串、%/`_`/`\` 字面化）；可见性过滤（逐请求 JOIN）与 100 截断/确定性
+ * 排序不变；matched 标注集扩为 title→tags→summary→path→body。body=''
+ * （迁移前行/非正文语义）不参与命中。api.md §3.6 建议稿 docs/s11/api-amendments.md。
  */
 
 /** 关键词长度上界（路由层校验消费：超长 422 E-RES-007） */
@@ -36,8 +42,8 @@ export interface SearchHit {
   readonly title: string | null;
   readonly tags: readonly string[];
   readonly summary: string;
-  /** 关键词命中的字段（title→tags→summary 固定顺序；至少一项） */
-  readonly matched: readonly ('title' | 'tags' | 'summary')[];
+  /** 关键词命中的字段（title→tags→summary→path→body 固定顺序；至少一项。path/body 为 S11-T1 全文检索 v1 扩展——D20） */
+  readonly matched: readonly ('title' | 'tags' | 'summary' | 'path' | 'body')[];
 }
 
 export interface SearchResult {
@@ -74,12 +80,14 @@ interface CandidateRow {
   title: string | null;
   tags: string;
   summary: string;
+  body: string;
 }
 
 /**
- * 按关键词查找本人有权库的已发布元数据（title/tags/summary 子串）。
- * 每次调用发起全新查库（授权过滤无任何跨调用状态——D-IC-05/D7）。
- * 空/纯空白关键词返回空结果（防御面；路由层另有 400 校验）。
+ * 按关键词查找本人有权库的已发布内容（title/tags/summary/path/body 子串——
+ * S11-T1 起命中面扩文件名与正文，D20）。每次调用发起全新查库（授权过滤无任何
+ * 跨调用状态——D-IC-05/D7）。空/纯空白关键词返回空结果（防御面；路由层另有
+ * 400 校验）。
  */
 export function searchKeyword(
   db: DatabaseSync,
@@ -95,15 +103,18 @@ export function searchKeyword(
       : '';
   const sql =
     `SELECT v.slug AS slug, v.name AS name, i.path AS path, i.commit_oid AS commit_oid,
-            i.title AS title, i.tags AS tags, i.summary AS summary
+            i.title AS title, i.tags AS tags, i.summary AS summary, i.body AS body
      FROM search_index i
      JOIN vault_members m ON m.vault_id = i.vault_id AND m.employee_id = ?
      JOIN vaults v ON v.id = i.vault_id
-     WHERE (i.title LIKE ? ESCAPE '\\' OR i.tags LIKE ? ESCAPE '\\' OR i.summary LIKE ? ESCAPE '\\')${scopeSql}
+     WHERE (i.title LIKE ? ESCAPE '\\' OR i.tags LIKE ? ESCAPE '\\' OR i.summary LIKE ? ESCAPE '\\'
+            OR i.path LIKE ? ESCAPE '\\' OR i.body LIKE ? ESCAPE '\\')${scopeSql}
      ORDER BY v.slug, i.path
      LIMIT ?`;
   const params: (number | string)[] = [
     employeeId,
+    pattern,
+    pattern,
     pattern,
     pattern,
     pattern,
@@ -116,10 +127,12 @@ export function searchKeyword(
   for (const row of rows.slice(0, SEARCH_RESULT_LIMIT)) {
     // 命中字段应用层复核（tags 逐标签）：无精确认证的候选行（JSON 文本假阳性）丢弃
     const tags = JSON.parse(row.tags) as string[];
-    const matched: ('title' | 'tags' | 'summary')[] = [];
+    const matched: ('title' | 'tags' | 'summary' | 'path' | 'body')[] = [];
     if (row.title !== null && matches(keyword, row.title)) matched.push('title');
     if (tags.some((tag) => matches(keyword, tag))) matched.push('tags');
     if (matches(keyword, row.summary)) matched.push('summary');
+    if (matches(keyword, row.path)) matched.push('path');
+    if (matches(keyword, row.body)) matched.push('body');
     if (matched.length === 0) continue;
     hits.push({
       vaultSlug: row.slug,
