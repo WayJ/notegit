@@ -6,6 +6,7 @@ import { buildApp } from '../src/app.ts';
 import { createSession, DEFAULT_SESSION_TIMEOUTS } from '../src/auth/sessions.ts';
 import { newDb, addEmployee, addVault, addMember } from './credentials-fixtures.ts';
 import { citeUnresolvablePage, diffPage, versionPage } from '../src/web/history/pages.ts';
+import { editStatePage } from '../src/web/edit/pages.ts';
 
 /**
  * S12-T2 顶栏账户菜单（G09；research F-9「登出仅首页」/P1-7 竞品通用顶栏形态）：
@@ -151,24 +152,26 @@ test('首页：原独立退出按钮移除（登出控件唯一=顶栏）；身�
 
 // ── 既有页面布局回归（顶栏加入后各页仍 200 且关键元素在位） ─────────────────
 
-test('布局回归：/vaults /credentials /search /cite /admin 各页 200，关键元素在位，账户位与唯一 script 保持', async () => {
+test('布局回归：/vaults /credentials /search /cite /admin 各页 200，关键元素在位，账户位与 script 形态保持', async () => {
   const h = await harness();
   try {
     const alice = addEmployee(h.db, { username: 'alice' });
     const boss = addEmployee(h.db, { username: 'boss', is_instance_admin: 1 });
-    const cases: { url: string; sid: number; marker: string; note: string }[] = [
-      { url: '/vaults', sid: alice, marker: '知识库', note: '库列表页' },
-      { url: '/credentials', sid: alice, marker: 'id="cred-form"', note: '凭据页表单' },
-      { url: '/search', sid: alice, marker: 'class="search-form"', note: '查找页表单' },
-      { url: '/cite', sid: alice, marker: 'class="form-card"', note: '引用解析页表单' },
-      { url: '/admin', sid: boss, marker: 'class="admin-section"', note: '管理页分区卡' },
+    // S12-T3：credentials/admin 为共享脚本改造页（内联块 + 恰一个 src 引用 = 2）；
+    // 其余页未改造（唯一内联块 = 1）
+    const cases: { url: string; sid: number; marker: string; note: string; scripts: number }[] = [
+      { url: '/vaults', sid: alice, marker: '知识库', note: '库列表页', scripts: 1 },
+      { url: '/credentials', sid: alice, marker: 'id="cred-form"', note: '凭据页表单', scripts: 2 },
+      { url: '/search', sid: alice, marker: 'class="search-form"', note: '查找页表单', scripts: 1 },
+      { url: '/cite', sid: alice, marker: 'class="form-card"', note: '引用解析页表单', scripts: 1 },
+      { url: '/admin', sid: boss, marker: 'class="admin-section"', note: '管理页分区卡', scripts: 2 },
     ];
     for (const c of cases) {
       const res = await h.app.inject({ method: 'GET', url: c.url, headers: sidCookie(h.session(c.sid)) });
       assert.equal(res.statusCode, 200, `${c.url} 200`);
       assert.ok(res.body.includes(c.marker), `${c.note}关键元素在位`);
       assert.ok(res.body.includes('<details class="nav-account">'), `${c.url} 顶栏账户位`);
-      assert.equal(scriptCount(res.body), 1, `${c.url} 唯一 <script>`);
+      assert.equal(scriptCount(res.body), c.scripts, `${c.url} script 形态（${c.scripts === 2 ? 'src 引用+内联块' : '唯一内联块'}）`);
     }
   } finally {
     await h.close();
@@ -239,6 +242,31 @@ test('状态页（存储未挂接形态）：history/upload/rename 状态页认�
       assert.ok(res.body.includes('<details class="nav-account">'), `${url} 状态页账户位`);
       assert.equal(scriptCount(res.body), 1, `${url} 唯一 <script>`);
     }
+  } finally {
+    await h.close();
+  }
+});
+
+// ── S12-T3 收口（T2 建议稿 A3-1 待办）：edit 域状态页账户位（与 T2 已做的
+//    cite/history/upload/rename 状态页同形——顶栏账户位全覆盖） ────────────────
+
+test('edit 域状态页（存储未挂接形态）：edit/<路径> 与 edit/new 状态页认证渲染顶栏账户位（S12-T3 收口）', async () => {
+  const h = await harness();
+  try {
+    const alice = addEmployee(h.db, { username: 'alice' });
+    const v = addVault(h.db, 'alpha', alice);
+    addMember(h.db, v, alice, 'editor', alice);
+    for (const url of ['/vaults/alpha/edit/docs/a.md', '/vaults/alpha/edit/new']) {
+      const res = await h.app.inject({ method: 'GET', url, headers: sidCookie(h.session(alice)) });
+      assert.equal(res.statusCode, 200, `${url} 200`);
+      assert.ok(res.body.includes('内容暂不可用'), `${url} 状态页形态`);
+      assert.ok(res.body.includes('<details class="nav-account">'), `${url} edit 状态页账户位（T2 遗留收口）`);
+      assert.ok(!res.body.includes('href="/admin"'), '普通成员无管理链接');
+      assert.equal(scriptCount(res.body), 1, `${url} 唯一 <script>（状态页零交互脚本）`);
+    }
+    // 模板兼容：无 viewer 旧调用形态不落账户位（可选参数——不虚构登录态）
+    const bare = editStatePage({ slug: 'alpha', name: 'Alpha' }, '内容暂不可用（仅测试形态）。');
+    assert.ok(!bare.includes('nav-account'), '无 viewer 形态不落账户位');
   } finally {
     await h.close();
   }

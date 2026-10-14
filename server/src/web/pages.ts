@@ -9,7 +9,8 @@
  * UI-RESTYLE：layout() 升级为 DESIGN.md 视觉契约壳（top-nav 64px 米色栏 +
  * spike-mark 字标 + 深色页脚；样式唯一来源 /assets/styles.css——见 web/assets.ts
  * 与 assets/styles.css 头注）。插值通道不变：文本仅 escapeHtml；结构与类名由
- * 本模板生成。每页恰好一个 <script> 块（既有测试断言）。
+ * 本模板生成。每页恰好一个内联 <script> 块（既有测试断言）；S12-T3 起改造页
+ * 在内联块前另含恰一个共享脚本 <script src="/assets/app.js"> 引用（见下）。
  *
  * S11-T2：indexPage 追加「最近变更」区块（服务端渲染、无新增脚本——区块纯
  * 呈现）；条目行渲染 activityEntryRow 为首页与库内 activity 页共用（同形态），
@@ -20,6 +21,12 @@
  * 用户名；我的凭据/管理（仅实例管理员）/退出登录——id="logout" 由顶栏承担，
  * 首页原独立退出按钮移除）；顶栏新增「我的草稿」入口（认证全员）；登出脚本
  * ACCOUNT_SCRIPT 并入页面唯一 <script> 块（渐进增强——菜单开合零 JS 可用）。
+ *
+ * S12-T3（D19-A 第一步）：原内联 FETCH_HELPER（api/show）全文迁入共享脚本
+ * /assets/app.js（web/assets/assets.ts 注册；全局命名空间 window.ngt——语义
+ * 与原内联逐字一致，行为零变化）。用共享脚本的页面（login/admin/credentials）
+ * 调 layout(..., sharedScript=true)：内联块前置 <script src> 引用，页面内联块
+ * 顶部一行别名取用（SHARED_ALIAS——页面特有逻辑的调用面零改写）。
  */
 
 import { ACTIVITY_LIMIT, type ActivityEntry } from './activity/query.ts';
@@ -122,9 +129,12 @@ const SITE_FOOTER = `<footer class="site-footer">
   </div>
 </footer>`;
 
-export function layout(title: string, body: string, script = '', nav?: PageNav): string {
+export function layout(title: string, body: string, script = '', nav?: PageNav, sharedScript = false): string {
   // S12-T2：登录态页面把账户菜单脚本并入页面唯一 script 块（每页仍恰好一个 <script>）
   const inline = (nav?.user !== undefined ? [ACCOUNT_SCRIPT, script] : [script]).filter((s) => s !== '').join('\n');
+  // S12-T3：共享脚本页（sharedScript=true）在内联块前置 <script src> 引用——
+  // 经典 script 按文档序执行，保证内联块的 ngt 别名取用时 window.ngt 已就位
+  const sharedRef = sharedScript ? '<script src="/assets/app.js"></script>\n' : '';
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -139,31 +149,19 @@ ${topNav(nav)}
 ${body}
 </main>
 ${SITE_FOOTER}
-<script>
+${sharedRef}<script>
 ${inline}
 </script>
 </body>
 </html>`;
 }
 
-/** 同源 fetch JSON 封装：非 2xx 时抛出含错误码的可读信息（页面统一呈现） */
-const FETCH_HELPER = `
-async function api(method, url, body) {
-  const res = await fetch(url, {
-    method,
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (res.status === 204) return null;
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = data.error || {};
-    throw new Error((err.code || res.status) + ': ' + (err.message || JSON.stringify(data)));
-  }
-  return data;
-}
-function show(el, text) { el.textContent = text; }
-`;
+/**
+ * S12-T3 共享脚本页内联块顶部别名行（原 FETCH_HELPER 迁入 /assets/app.js 后的
+ * 机械替换——页面特有逻辑的 api()/show() 调用面零改写；apiEnvelope=「code:
+ * message」错误信封族，语义与原内联逐字一致，web-assets.test.ts 形态锁定）。
+ */
+const SHARED_ALIAS = `const api = ngt.apiEnvelope, show = ngt.show;`;
 
 export function loginPage(): string {
   return layout(
@@ -181,7 +179,7 @@ export function loginPage(): string {
   </div>
 </div>
 `,
-    `${FETCH_HELPER}
+    `${SHARED_ALIAS}
 document.getElementById('login-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const f = ev.target;
@@ -196,6 +194,8 @@ document.getElementById('login-form').addEventListener('submit', async (ev) => {
   }
 });
 `,
+    undefined,
+    true, // S12-T3：引用共享脚本 /assets/app.js（FETCH_HELPER 迁出——行为零变化）
   );
 }
 
@@ -365,7 +365,7 @@ export function adminPage(viewer?: { username: string; is_instance_admin: boolea
   </section>
 </div>
 `,
-    `${FETCH_HELPER}
+    `${SHARED_ALIAS}
 
 // —— 员工管理：列表（分页 limit=50 + cursor「加载更多」）+ 停用/启用 + 实例管理员开关 + 重置口令 ——
 
@@ -560,6 +560,7 @@ document.getElementById('maint-off').addEventListener('click', async () => {
 });
 `,
     viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'admin' } : undefined,
+    true, // S12-T3：引用共享脚本 /assets/app.js（FETCH_HELPER 迁出——行为零变化）
   );
 }
 
@@ -601,7 +602,7 @@ export function credentialsPage(viewer?: { username: string; is_instance_admin: 
   </section>
 </div>
 `,
-    `${FETCH_HELPER}
+    `${SHARED_ALIAS}
 
 async function loadCredentials() {
   const tbody = document.querySelector('#cred-table tbody');
@@ -662,6 +663,7 @@ document.getElementById('cred-form').addEventListener('submit', async (ev) => {
 });
 `,
     viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'credentials' } : undefined,
+    true, // S12-T3：引用共享脚本 /assets/app.js（FETCH_HELPER 迁出——行为零变化）
   );
 }
 
