@@ -245,7 +245,7 @@ CREATE TABLE app_settings (
 
 ### 3.11 派生数据表（非权威面；D13 登记）
 
-标题/标签/摘要搜索索引（架构 §3.1 派生、可从 Git 全量重建、不入备份一致性集合）。**权威 DDL = 迁移 0009**（server/src/db/migrations.ts，逐字防漂移对照见 server/test/search-migration.test.ts——契约侧不复制全文防双源漂移）：`search_index`（逐库逐路径一行，新版本全量替换；无外键——vaults 行删除不被陈旧派生行阻塞，孤儿行由启动对账清理）与 `search_index_state`（可观测状态行：head/live commit、lag/duration、失败告警面）。重建入口与语义见 api.md §3.5（backup §7 步骤 9）。
+标题/标签/摘要/文件名/正文搜索索引（架构 §3.1 派生、可从 Git 全量重建、不入备份一致性集合）。**权威 DDL = 迁移 0009 + 迁移 0010**（server/src/db/migrations.ts，逐字防漂移对照见 server/test/search-migration.test.ts——契约侧不复制全文防双源漂移）：`search_index`（逐库逐路径一行，新版本全量替换；无外键——vaults 行删除不被陈旧派生行阻塞，孤儿行由启动对账清理；**0010（S11-T1/D20）增 `body` 列**：frontmatter 剥离后的 .md 正文全文，README 等豁免文件=文件全文，非 .md/迁移前行=空串不参与正文命中，字节上界与 validation.limits.maxDocumentBytes 同源）与 `search_index_state`（可观测状态行：head/live commit、lag/duration、失败告警面）。重建入口与语义见 api.md §3.5（backup §7 步骤 9）。
 
 ## 4. 运行时检查查询（`-- @query`，实时查库、无缓存）
 

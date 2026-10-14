@@ -410,6 +410,7 @@ p.note, .draft-note { font-size: var(--body-sm); color: var(--muted); }
 }
 .page-meta a { color: var(--muted); }
 .page-meta code { font-size: 0.85em; }
+.page-head .page-meta { margin-top: var(--sp-xs); }  /* S11-T3 browse 头「最近变更」入口一行 */
 .page-narrow { max-width: 780px; }   /* 表单页阅读宽 */
 
 /* 分页 */
@@ -491,6 +492,14 @@ ul.entries li .type-tag {          /* 类型标注（目录/文件/引用）→ 
 ul.entries li a { overflow-wrap: anywhere; }
 .entry-ops { margin-left: auto; flex: none; font-size: var(--caption); color: var(--muted-soft); white-space: nowrap; }
 .entry-ops a { color: var(--muted); font-size: var(--caption); }
+ul.entries li .entry-meta {      /* S11-T3 最后提交作者/相对时间——次要文本色（DESIGN.md muted） */
+  margin-left: auto;
+  flex: none;
+  font-size: var(--caption);
+  color: var(--muted-soft);
+  white-space: nowrap;
+}
+ul.entries li .entry-meta + .entry-ops { margin-left: 0; } /* 元数据占右对齐位时，操作紧随（不双摊余量） */
 
 /* README 导航卡 */
 .readme-card {
@@ -510,6 +519,53 @@ ul.entries li a { overflow-wrap: anywhere; }
   margin: 0;
   color: var(--body-strong);
 }
+.readme-card .readme-note {      /* 如实标注行（超限回退 / HTML 剥离提示） */
+  font-size: var(--caption);
+  color: var(--muted);
+  margin: 0 0 var(--sp-md);
+}
+.readme-card .readme-note + .readme-body, .readme-card .readme-note + pre { margin-top: 0; }
+
+/* README 安全渲染正文（S11-T3：view 管线输出——卡片内排版，token 同 article#doc 语义） */
+.readme-body { font-size: var(--body-sm); line-height: 1.55; color: var(--body); }
+.readme-body > :first-child { margin-top: 0; }
+.readme-body h1, .readme-body h2, .readme-body h3,
+.readme-body h4, .readme-body h5, .readme-body h6 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--ink);
+  margin: var(--sp-lg) 0 var(--sp-xs);
+}
+.readme-body h1 { font-size: var(--title-lg); }
+.readme-body h2 { font-size: var(--title-md); }
+.readme-body h3, .readme-body h4, .readme-body h5, .readme-body h6 { font-size: var(--title-sm); }
+.readme-body p { margin: 0 0 var(--sp-sm); }
+.readme-body pre {               /* 围栏代码块 → 深色代码窗（产品 chrome） */
+  background: var(--surface-dark-soft);
+  color: var(--on-dark);
+  border-radius: var(--r-md);
+  padding: var(--sp-md);
+  overflow-x: auto;
+  margin: 0 0 var(--sp-sm);
+}
+.readme-body pre code { background: transparent; color: inherit; padding: 0; font-size: var(--body-sm); line-height: 1.6; white-space: pre; }
+.readme-body code { font-family: var(--font-mono); font-size: 0.9em; background: var(--surface-soft); border-radius: var(--r-xs); padding: 1px 6px; }
+.readme-body blockquote {
+  margin: 0 0 var(--sp-sm);
+  padding: var(--sp-xs) 0 var(--sp-xs) var(--sp-md);
+  border-left: 3px solid var(--hairline);
+  color: var(--muted);
+}
+.readme-body table { border-collapse: collapse; width: 100%; margin: 0 0 var(--sp-sm); display: block; overflow-x: auto; }
+.readme-body th, .readme-body td { border: 1px solid var(--hairline); padding: var(--sp-xs) var(--sp-sm); font-size: var(--body-sm); text-align: left; }
+.readme-body th { background: var(--surface-soft); color: var(--ink); font-weight: 500; }
+.readme-body img { max-width: 100%; height: auto; border-radius: var(--r-md); }
+.readme-body hr { border: none; border-top: 1px solid var(--hairline); margin: var(--sp-md) 0; }
+.readme-body ul, .readme-body ol { padding-left: var(--sp-lg); margin: 0 0 var(--sp-sm); }
+.readme-body a { color: var(--primary); }  /* text-link：珊瑚内联链接（DESIGN.md Components） */
+.readme-body .img-attachment, .readme-body .img-refused { color: var(--muted); font-size: var(--caption); }
 
 /* ── 文档阅读（view：衬线标题 + 正文 16px/1.55） ─────────────────────────── */
 article#doc {

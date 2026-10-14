@@ -16,14 +16,17 @@ import { SEARCH_MAX_Q_CHARS, searchKeyword } from './query.ts';
  *   - 实时新鲜度：up_to_date（state.head_commit vs 默认分支当前实际头——stale 即刻可见）。
  *   只读端点：无审计行、无状态改变（GET 免 CSRF）。
  *
- * - GET /api/v1/search?q=（S5-T4 查询端点，任意认证员工）：按 title/tags/summary
- *   关键词（LIKE 子串，%/_ 字面化）查本人有权库的已发布元数据；**鉴权过滤 =
- *   查询面实时 JOIN vault_members**（identity §5.1 第 2 层同一张表，逐请求查库
- *   无缓存——D7「不在此建权限缓存」；撤权下一查询即消失）+ token scope 交集
- *   （identity §3.4，与 GET /api/v1/vaults 同一收窄面）。结果含 库/路径/commit/
- *   摘要片段与命中字段；确定性排序（vault slug → path）；上限 SEARCH_RESULT_LIMIT
- *   行 + truncated 如实标注。错误：401（§1 通用）；400 E-RES-004（缺/空 q）；
+ * - GET /api/v1/search?q=（S5-T4 查询端点，任意认证员工；S11-T1 起命中面扩
+ *   path/body——全文检索 v1，D20）：按 title/tags/summary/path（文件名）/body
+ *   （派生正文列）关键词（LIKE 子串，%/_ 字面化）查本人有权库的已发布内容；
+ *   **鉴权过滤 = 查询面实时 JOIN vault_members**（identity §5.1 第 2 层同一张
+ *   表，逐请求查库无缓存——D7「不在此建权限缓存」；撤权下一查询即消失）+
+ *   token scope 交集（identity §3.4，与 GET /api/v1/vaults 同一收窄面）。结果含
+ *   库/路径/commit/摘要片段与命中字段（matched ∈ title→tags→summary→path→body）；
+ *   确定性排序（vault slug → path）；上限 SEARCH_RESULT_LIMIT 行 + truncated
+ *   如实标注。错误：401（§1 通用）；400 E-RES-004（缺/空 q）；
  *   422 E-RES-007（q 超 SEARCH_MAX_Q_CHARS）。只读：无审计行（GET 免 CSRF）。
+ *   api.md §3.6 行更新建议稿：docs/s11/api-amendments.md（draft-first）。
  *
  * - POST /api/v1/admin/search-index/rebuild（S5-T5 全量重建入口，实例管理员）：
  *   触发索引器全量重建（reconcile 原语的强制全量面），202 + 进度面；重建中再触发

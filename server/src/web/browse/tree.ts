@@ -111,6 +111,61 @@ export async function readBlobText(dataDir: string, vaultId: number, oid: string
 /** README 渲染上限：超限不渲染正文、页面如实标注（防超大文件拖垮页面） */
 export const README_RENDER_MAX_BYTES = 1024 * 1024;
 
+// ── S11-T3 目录行最后提交元数据（批量派生） ─────────────────────────────────
+
+/** 条目最新触及提交的呈现元数据（作者/时间——G07） */
+export interface LastCommitInfo {
+  readonly author: string;
+  /** 作者时间 ISO 8601（相对时间呈现 + title 绝对时间提示所依） */
+  readonly isoTime: string;
+}
+
+/** git 执行面注入缝（缺省 execGit；测试以计数包装证明批量派生——恒单次 spawn） */
+export type RunGit = typeof execGit;
+
+/**
+ * 批量派生「当前目录条目 → 最新触及提交」：单次 `git log -z --name-only
+ * --format=…`（记录分隔 %x1e / 字段分隔 %x1f——NUL 由 -z 保留给路径，防转义
+ * 与换行歧义）由新到旧扫描全历史路径名单，条目名首见即定——blob=精确路径
+ * 触及、tree=子路径前缀触及（`docs/nested-x` 不误配 `docs/nested/`）。逐条
+ * spawn 禁止（D4：N+1 子进程风爆）；每请求实时派生、无缓存（D-IC-05 精神，
+ * 与 readDirTree 同 spawn 面，不另受 githttp 闸门约束）。条目集与序不经此
+ * 面——仅附加元数据（页面一致性断言仍以 ls-tree 为准）。记录首字段 commit
+ * hash 未消费（解析健全性锚）；合并提交默认无路径名单，自然跳过（发布面无
+ * 合并提交——语义与「任一父提交触及」近似）。
+ */
+export async function readLastCommits(
+  dataDir: string,
+  vaultId: number,
+  defaultBranch: string,
+  dirPath: string,
+  entries: readonly TreeEntry[],
+  runGit: RunGit = execGit,
+): Promise<Map<string, LastCommitInfo>> {
+  const latest = new Map<string, LastCommitInfo>();
+  if (entries.length === 0) return latest;
+  const out = await runGit(
+    ['log', '-z', '--name-only', '--format=\x1e%H\x1f%an\x1f%aI', refOf(defaultBranch)],
+    { cwd: vaultRepoPath(dataDir, vaultId) },
+  );
+  const prefix = dirPath === '' ? '' : `${dirPath}/`;
+  for (const record of out.split('\x1e')) {
+    const headEnd = record.indexOf('\0'); // 记录头（hash\x1fauthor\x1fiso）止于首个 NUL
+    if (headEnd === -1) continue;
+    const [hash, author, iso] = record.slice(0, headEnd).split('\x1f');
+    if (hash === undefined || hash === '' || author === undefined || iso === undefined) continue;
+    // -z 下首个路径前有一换行（名单分隔），其后路径逐个 NUL 终止（路径可含换行）
+    for (const p of record.slice(headEnd + 1).replace(/^\n/, '').split('\0')) {
+      if (p === '') continue;
+      const rel = prefix === '' ? p : p.startsWith(prefix) ? p.slice(prefix.length) : null;
+      if (rel === null || rel === '') continue;
+      const seg = rel.split('/', 1)[0]; // 当前目录直接子项名
+      if (seg !== '' && !latest.has(seg)) latest.set(seg, { author, isoTime: iso });
+    }
+  }
+  return latest;
+}
+
 /** 以「父目录列表 + 文件名」解析单个条目（view 占位定位用；空路径不是条目） */
 export async function readEntryAt(
   dataDir: string,

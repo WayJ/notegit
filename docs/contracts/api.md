@@ -188,7 +188,7 @@
 
 ### 3.6 元数据查找（任意认证员工；架构 §9 派生索引按权限过滤、§4.2 未授权的库不进搜索结果）
 
-- **GET /api/v1/search?q=<关键词>**（读）：按标题/标签/摘要关键词查找**本人有权库**的已发布元数据。匹配=SQL LIKE 子串（`%`/`_`/`\` 字面化；ASCII 大小写不敏感，其他文字精确子串；不引全文引擎——容量选型）；鉴权过滤=实时 JOIN 当前成员关系（identity §5.1 同一无缓存判定面，撤权下一查询即消失）+ token scope 交集（§3.4）。成功 200 `{q, truncated, results:[{vault_slug, vault_name, path, commit_oid, title, tags, summary, matched}]}`（title=null=frontmatter 豁免文件如实记录；确定性排序 vault→path；上限 100 行超出 truncated:true，不承诺分页）。错误：401；400 E-RES-004（缺/空 q）；422 E-RES-007（q 超 200 字符）。只读不记审计；索引滞后语义见 §3.5。（2026-10-13 ADR D13 补录；实现自 S5-T4。）
+- **GET /api/v1/search?q=<关键词>**（读）：按标题/标签/摘要/**文件名（path）/正文（body）**关键词查找**本人有权库**的已发布内容。匹配=SQL LIKE 子串（`%`/`_`/`\` 字面化；ASCII 大小写不敏感，其他文字精确子串；五字段同一语义；不引全文引擎——容量选型）。body=派生正文列（frontmatter 剥离后的 .md 全文，README 等豁免文件为文件全文；截断上界与 `validation.limits.maxDocumentBytes` 同源；空串=迁移前行/无正文语义，不参与命中）。鉴权过滤=实时 JOIN 当前成员关系（identity §5.1 同一无缓存判定面，撤权下一查询即消失）+ token scope 交集（§3.4）。成功 200 `{q, truncated, results:[{vault_slug, vault_name, path, commit_oid, title, tags, summary, matched}]}`（title=null=frontmatter 豁免文件如实记录；**matched ∈ {title, tags, summary, path, body}，顺序 title→tags→summary→path→body，至少一项**；正文片段不随响应回传——正文经 view 页呈现；确定性排序 vault→path；上限 100 行超出 truncated:true，不承诺分页）。错误：401；400 E-RES-004（缺/空 q）；422 E-RES-007（q 超 200 字符）。只读不记审计；索引滞后语义见 §3.5。（2026-10-13 ADR D13 补录；**2026-10-14 S11-T1/D20 命中面扩 path+body**。）
 
 ## 4. 访问凭据（ngt_ token）
 
@@ -408,7 +408,7 @@ src/
 | 路由 | 页面 | 来源 |
 |---|---|---|
 | GET /login | 登录页（提交走 §3 login 端点） | S2-T8 |
-| GET / | 入口页（管理入口仅实例管理员可见） | S2-T8 |
+| GET / | 入口页（管理入口仅实例管理员可见）；S11-T2 追加「最近变更」区块（跨库最近发布事件，按当前员工成员关系实时过滤——与检索同一判定面；条目形态与 /vaults/{slug}/activity 页共用；上限 20 条） | S2-T8 |
 | GET /admin | 管理页外壳（未认证 302；非实例管理员 403） | S2-T8 |
 | GET /credentials | 员工自助凭据页（数据走 §4） | S2-T8 |
 | GET /vaults | 有权库列表（实时成员关系，与 §5 GET /vaults 同判定面） | S4-T1 |
@@ -430,6 +430,7 @@ src/
 | POST /vaults/{slug}/delete/{path} | 删除端点（S4-T5）：单条 delete 变更走 S3-T7 发布组件 `publishWebSubmit`——**不做元数据校验**（validation §2.5 第 5 点）；Git 历史不动（旧提交与对象原样保留，S5 历史页可查旧版本）；base commit=CAS 旧值；拒绝按阶段映射同页回显（同上行）；成功 302 → 所在目录 browse；维护模式 503 同页提示（S4-T5 web 写缝）；会话 Cookie 载体受 CSRF 同源校验（identity §4） | S4-T5 |
 | GET /vaults/{slug}/history[?page=N] | 库级提交历史页（S5-T1）：默认分支实时读 `git log`（每请求异步 spawn、无缓存——sprint S5 D5 历史读取直接走 Git 无独立历史存储）；分页 `?page=N`（每页 20，跨页导航 rel=prev/next——窗口与 `git log --skip/-n` 一致）；主体呈现=当前认证员工视角，commit 作者仅元数据展示并页面标注（操作主体以服务端审计记录的认证员工为准，DOD-03——作者字段推送方可填写）；空库如实空态（非 404）；页面门槛=read 成员（D-IC-06 无权=不存在 404 同页） | S5-T1 |
 | GET /vaults/{slug}/history/{path}[?page=N] | 路径级提交历史页（S5-T1）：与库级同判同构，限定该路径的提交（与 `git log <ref> -- <path>` 同集同序——含创建与删除提交，删除后旧版本历史可查）；每行附逐文件 diff 链接；从未存在/无记录路径如实空态（不冒充 404）；畸形路径形态 404 同页（反存在性） | S5-T1 |
+| GET /vaults/{slug}/activity | 库内最近变更页（S11-T2，S11 D3）：该库最近发布事件列表——数据源=审计发布事件成功行（vault.push / vault.web_submit 且 status='succeeded'；只读审计、不新增存储）；条目=作者（审计主体=认证员工，DOD-03——不信 Git 提交元数据）/相对时间/分支/入口动作（站内编辑/git 推送）/commit 短码（链接库级 history 既有页）；detail 携带路径则链 view；排序新→旧（occurred_at DESC, id DESC）、上限 20 条（不承诺分页）；页面门槛=read 成员（D-IC-06 无权=不存在 404 同页同体；未认证 302 /login）；GET 免 CSRF、无写操作 | S11-T2 |
 | GET /vaults/{slug}/diff/{oid}/{path} | 逐文件 diff 页（S5-T1）：父提交↔目标（与 `git diff --no-color <父> <目标> -- <路径>` 同文；根提交以空树为基线=整文件新增呈现；合并提交取第一父）；diff 文本逐行转义呈现（S4-T2 安全管不变量——原文 HTML 不被解释执行，行类以 data-kind 标注）；目标未触及该路径如实标注空 diff；OID 形态=hex 缩写/全 SHA（未知/非提交对象/畸形一律 404 反存在性）；页面门槛=read 成员（D-IC-06） | S5-T1 |
 | GET /vaults/{slug}/version/{oid}/{path} | 历史版本只读预览页（S5-T2）：任意提交处该路径文件的只读预览——S4 view 渲染复用、commit 参数化（`.md` 服务端安全渲染管（render.ts 清理唯一通道；frontmatter 不入正文；仓库相对图片引用按**该提交树**解析为鉴权附件通道 URL——历史 blob 仍在库内，两遍法同 view 族）；图片附件经鉴权附件通道内嵌（内嵌集合同 view 直开页，svg 等不内嵌——纵深防御）；其余类型如实标注不预览；超渲染上限（1 MiB）仅元信息）；OID 形态=hex 缩写/全 SHA（未知/非提交对象/该版本处缺失路径/畸形一律 404 反存在性）；页面标注所依 commit 并链接该路径历史/diff/还原入口；页面门槛=read 成员（D-IC-06 无权=不存在 404 同页；未认证 302 /login） | S5-T2 |
 | GET /vaults/{slug}/restore/{oid}/{path} | 还原确认页（S5-T2）：目标=路径@commit 呈现（路径、commit OID、大小）+「以新提交恢复内容、不删除历史（旧版本仍可查）」如实标注 + 先预览该版本/返回该路径历史入口 + POST 确认表单（无字段——确认即提交）；目标须为该提交处的 blob（tree/该版本处缺失路径 404 反存在性）；页面门槛=read 成员（写权限由提交时发布组件判定——D-IC-06 同判） | S5-T2 |

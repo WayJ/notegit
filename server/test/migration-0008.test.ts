@@ -30,6 +30,11 @@ function migrationV8Lines(): string[] {
   return v8.statements.join('\n').split('\n').map((l) => l.trimEnd()).filter((l) => l.length > 0);
 }
 
+/** 派生版本表（S11-T1 起本文件同样采用）：从 1 连续递增即合法——append 新迁移不再需要改本文件 */
+function allVersions(): number[] {
+  return Array.from({ length: MIGRATIONS.length }, (_, i) => i + 1);
+}
+
 test('迁移 0008：与契约 @schema 块逐行等价（防漂移，D6/D11 模式）', () => {
   assert.deepEqual(
     migrationV8Lines(),
@@ -46,8 +51,9 @@ test('迁移 0008：schema_version 引导行不在迁移内容中（runner 持�
 
 test('迁移 0008：全量应用后 drafts 表/列落地，重入跳过', () => {
   const db = memory();
+  const versions = allVersions();
   const first = migrate(db, MIGRATIONS);
-  assert.deepEqual(first.applied, [1, 2, 3, 4, 5, 6, 7, 8, 9]); // 9 = S5-T3 追加（search_index/search_index_state）
+  assert.deepEqual(first.applied, versions); // 从 1 连续递增（S5-T3 追加 9、S11-T1 追加 10 起「包含且有序」派生）
 
   const cols = (db.prepare('PRAGMA table_info(drafts)').all() as { name: string }[]).map((c) => c.name);
   assert.deepEqual(cols.sort(), [
@@ -57,7 +63,7 @@ test('迁移 0008：全量应用后 drafts 表/列落地，重入跳过', () => 
 
   const again = migrate(db, MIGRATIONS);
   assert.deepEqual(again.applied, []);
-  assert.deepEqual(again.skipped, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(again.skipped, versions);
   db.close();
 });
 

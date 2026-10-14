@@ -81,6 +81,9 @@ function expectedFor(vault: string, files: Record<string, string>): Expected[] {
     if (title !== null && title.toLowerCase().includes(KEYWORD)) matched.push('title');
     if (tags.some((t) => t.toLowerCase().includes(KEYWORD))) matched.push('tags');
     if (summary.toLowerCase().includes(KEYWORD)) matched.push('summary');
+    // S11-T1（D20）：命中面扩 path/body——对账期望同步扩展（顺序 title→tags→summary→path→body）
+    if (p.toLowerCase().includes(KEYWORD)) matched.push('path');
+    if (body.toLowerCase().includes(KEYWORD)) matched.push('body');
     if (matched.length > 0) out.push({ vault, path: p, matched });
   }
   return out;
@@ -358,10 +361,11 @@ test('降级态：重建中无权库已重建行不泄露（陷阱复测）、�
     assert.ok(betaRow !== undefined, 'beta 行已在表（降态陷阱的前提：无权库数据物理存在）');
 
     // 陷阱复测（T4 同款断言在降级态）：root 只见 alpha 三行，beta/gamma 一律不可见
+    // （matched 含 S11-T1 扩展：README 摘要+body、runbook 标题+path——见 expectedFor）
     const rootMid = await apiSearch(h.rootToken);
     assert.deepEqual(
       keyOf(rootMid),
-      ['alpha:README.md:summary', 'alpha:deploy-runbook.md:title', 'alpha:notes/oncall.md:tags'],
+      ['alpha:README.md:summary,body', 'alpha:deploy-runbook.md:title,path', 'alpha:notes/oncall.md:tags'],
       '降级态不泄露：无权库（beta）已重建的行不出现在高权账号结果（数量精确）',
     );
     assert.ok(!JSON.stringify(rootMid).includes('机密'), '无权库标题文本不进降级态响应');
@@ -370,7 +374,7 @@ test('降级态：重建中无权库已重建行不泄露（陷阱复测）、�
     const aliceMid = await apiSearch(h.aliceToken);
     assert.deepEqual(
       keyOf(aliceMid),
-      ['alpha:README.md:summary', 'alpha:deploy-runbook.md:title', 'alpha:notes/oncall.md:tags'],
+      ['alpha:README.md:summary,body', 'alpha:deploy-runbook.md:title,path', 'alpha:notes/oncall.md:tags'],
       '部分降级：在途库的命中缺省、已重建库的命中完整',
     );
 
@@ -408,7 +412,7 @@ test('降级态：重建中无权库已重建行不泄露（陷阱复测）、�
     const aliceFull = await apiSearch(h.aliceToken);
     assert.deepEqual(
       keyOf(aliceFull).sort(),
-      [...keyOf(aliceMid), 'gamma:infra.md:summary'].sort(),
+      [...keyOf(aliceMid), 'gamma:infra.md:summary,body'].sort(), // matched 含 S11-T1 扩展（infra 摘要+body——见 expectedFor）
       '收口后全量恢复：降级缺省的 gamma 命中回归',
     );
   } finally {

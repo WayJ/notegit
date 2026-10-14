@@ -348,3 +348,37 @@ test('stop() 后不再消费新审计行（生命周期可关停）', async () =
   assert.equal(stateRow(f.db, vaultId2)!.updates, updatesAtStop + 1, '显式 pollOnce 消费新行');
   assert.equal(stateRow(f.db, vaultId2)!.head_commit, head);
 });
+
+test('S11-T1 body 落表：frontmatter 剥离正文入库、README 全文；全量重建后 body 逐字一致', async () => {
+  const vaultId3 = addVault(f.db, 'fulltext', 1);
+  addMember(f.db, vaultId3, 1, 'editor', 1);
+  await initBareVaultRepo(f.dataDir, vaultId3);
+  const repo3 = vaultRepoPath(f.dataDir, vaultId3);
+  const work = path.join(f.dataDir, 'seed-fulltext');
+  await git(['init', '-b', 'main', work]);
+  await writeMd(work, 'README.md', '# fulltext nav\n');
+  await writeMd(work, 'docs/roadmap.md', '---\ntitle: 路线图\ntags: [规划]\n---\n\n首段说明。\n\n差旅政策正文。\n');
+  await commitAll(work, 'fulltext seed');
+  await git(['-C', work, 'push', repo3, 'main']);
+  const head = (await git(['--git-dir', repo3, 'rev-parse', 'main'])).trim();
+
+  const { ix } = newIndexer();
+  settledPublishRow(f.db, vaultId3, 'refs/heads/main', head, T0);
+  await ix.pollOnce();
+
+  const bodyRows = f.db
+    .prepare('SELECT path, body FROM search_index WHERE vault_id = ? ORDER BY path')
+    .all(vaultId3) as { path: string; body: string }[];
+  assert.deepEqual(bodyRows.map((r) => r.path), ['README.md', 'docs/roadmap.md']);
+  assert.equal(bodyRows[0]!.body, '# fulltext nav\n', 'README 全文入库（frontmatter 豁免）');
+  assert.equal(bodyRows[1]!.body, '\n首段说明。\n\n差旅政策正文。\n', 'frontmatter 剥离后的正文入库');
+  assert.ok(!bodyRows[1]!.body.includes('title:'), 'frontmatter 键不进 body 列');
+
+  // 全量重建（S5-T5 面）走同一写面：body 与首索引逐字一致（D20：派生可重建）
+  assert.equal(ix.rebuild(), true, '触发全量重建');
+  await ix.stop(); // 排空重建在途句柄（stop 语义）
+  const afterRebuild = f.db
+    .prepare('SELECT path, body FROM search_index WHERE vault_id = ? ORDER BY path')
+    .all(vaultId3) as { path: string; body: string }[];
+  assert.deepEqual(afterRebuild, bodyRows, '重建后 body 一致（派生可重建——不含索引器私有状态）');
+});
