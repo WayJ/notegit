@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthSuccess } from '../auth/lifecycle.ts';
 import { indexPage, loginPage, adminPage, credentialsPage, layout } from './pages.ts';
 import { html } from './page-kit.ts';
+import { recentChangesForEmployee } from './activity/query.ts';
 
 /**
  * S2-T8 最小页面外壳路由（GET；数据由页内 fetch 调 api.md 既有端点）：
@@ -39,13 +40,19 @@ export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptio
     const row = opts.db
       .prepare('SELECT display_name FROM employees WHERE id = ?')
       .get(outcome.subject.employee_id) as { display_name: string } | undefined;
+    // S11-T2 首页「最近变更」区块：跨库最近发布（查询面实时成员过滤——
+    // web/activity/query.ts，与检索同一判定面；本接线行不含判定逻辑）
+    const recent = recentChangesForEmployee(opts.db, outcome.subject.employee_id);
     return html(
       reply,
-      indexPage({
-        username: outcome.subject.username,
-        display_name: row?.display_name ?? outcome.subject.username,
-        is_instance_admin: outcome.subject.is_instance_admin,
-      }),
+      indexPage(
+        {
+          username: outcome.subject.username,
+          display_name: row?.display_name ?? outcome.subject.username,
+          is_instance_admin: outcome.subject.is_instance_admin,
+        },
+        recent,
+      ),
     );
   });
 
