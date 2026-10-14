@@ -10,7 +10,14 @@
  * spike-mark 字标 + 深色页脚；样式唯一来源 /assets/styles.css——见 web/assets.ts
  * 与 assets/styles.css 头注）。插值通道不变：文本仅 escapeHtml；结构与类名由
  * 本模板生成。每页恰好一个 <script> 块（既有测试断言）。
+ *
+ * S11-T2：indexPage 追加「最近变更」区块（服务端渲染、无新增脚本——区块纯
+ * 呈现）；条目行渲染 activityEntryRow 为首页与库内 activity 页共用（同形态），
+ * 数据面在 web/activity/query.ts（审计成功发布行——sprint S11 D3）。
  */
+
+import { ACTIVITY_LIMIT, type ActivityEntry } from './activity/query.ts';
+
 
 /** HTML 文本转义：服务端渲染的唯一插值通道 */
 export function escapeHtml(s: string): string {
@@ -154,15 +161,67 @@ document.getElementById('login-form').addEventListener('submit', async (ev) => {
   );
 }
 
+// ── S11-T2 最近变更（首页区块与 web/activity 库页共用呈现件） ────────────────
+
+/** 相对时间：一分钟内=刚刚，此后分钟/小时/天，超一周回绝对日期（时钟异常如实回退原文） */
+export function formatRelativeTime(iso: string, now: Date = new Date()): string {
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return iso;
+  const diffSec = Math.max(0, Math.floor((now.getTime() - at) / 1000));
+  if (diffSec < 60) return '刚刚';
+  const min = Math.floor(diffSec / 60);
+  if (min < 60) return `${min} 分钟前`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour} 小时前`;
+  const day = Math.floor(hour / 24);
+  if (day <= 7) return `${day} 天前`;
+  return iso.slice(0, 10);
+}
+
+/** view 页 URL（与 browse viewUrl 同构；本文件不 import browse——防环，逐段编码同语义） */
+function activityViewHref(slug: string, treePath: string): string {
+  return `/vaults/${encodeURIComponent(slug)}/view/${treePath.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+/** 最近变更条目行（首页区块与库内 activity 页同形态；data 属性为一致性断言所依）。
+ *  审计 schema 无 commit message（identity §8：作者元数据不入审计）——「主题」
+ *  呈现=分支+入口动作+commit 短码（链接该库历史页既有页）；detail 携带路径则
+ *  链 view；new commit 缺失或全零（删引用形态）不生成 commit 链接。 */
+export function activityEntryRow(e: ActivityEntry): string {
+  const vaultHref = `/vaults/${encodeURIComponent(e.vaultSlug)}`;
+  const branch = e.refName !== null && e.refName.startsWith('refs/heads/') ? e.refName.slice('refs/heads/'.length) : e.refName;
+  const action = e.eventKind === 'vault.web_submit' ? '站内编辑' : 'git 推送';
+  const newCommit = e.newCommit ?? '';
+  const commitLink =
+    /^[0-9a-f]{40}$/.test(newCommit) && !/^0+$/.test(newCommit)
+      ? ` · <a href="${vaultHref}/history"><code>${escapeHtml(newCommit.slice(0, 7))}</code></a>`
+      : '';
+  const pathLinks = e.paths
+    .map((p) => ` · <a href="${activityViewHref(e.vaultSlug, p)}">${escapeHtml(p)}</a>`)
+    .join('');
+  const branchText = branch === null || branch === '' ? '' : ` · ${escapeHtml(branch)}`;
+  return `<li class="commit activity-item" data-vault="${escapeHtml(e.vaultSlug)}" data-actor="${escapeHtml(e.actorUsername)}" data-when="${escapeHtml(e.occurredAt)}" data-commit="${escapeHtml(newCommit)}" data-entry="${escapeHtml(e.entry)}"><a href="${vaultHref}">${escapeHtml(e.vaultSlug)}</a> · ${escapeHtml(e.actorDisplay)}（${escapeHtml(e.actorUsername)}）· ${escapeHtml(formatRelativeTime(e.occurredAt))}${branchText} · ${action}${commitLink}${pathLinks}</li>`;
+}
+
 /**
  * 入口页：服务端渲染当前员工与入口清单——管理入口仅实例管理员可见（S2-T8 验收断言）。
  * UI-RESTYLE：入口清单落位 feature-card 网格（DESIGN.md 卡片族；整卡可点）。
+ * S11-T2：追加「最近变更」区块（recent=跨库最近发布，按当前员工成员关系过滤
+ * ——数据面 web/activity/query.ts 实时 JOIN；区块纯服务端渲染，无新增脚本）。
  */
-export function indexPage(user: { username: string; display_name: string; is_instance_admin: boolean }): string {
+export function indexPage(
+  user: { username: string; display_name: string; is_instance_admin: boolean },
+  recent?: readonly ActivityEntry[],
+): string {
   const adminCard = user.is_instance_admin
     ? `
   <a class="feature-card" href="/admin"><h3>管理</h3><p>员工、邀请、库、成员角色、维护模式</p></a>`
     : '';
+  const entries = recent ?? [];
+  const activityBody =
+    entries.length === 0
+      ? '<p class="state-note">尚无最近变更（各库发布动作产生后在此呈现）。</p>'
+      : `<ul class="commits">\n  ${entries.map(activityEntryRow).join('\n  ')}\n  </ul>`;
   return layout(
     '首页',
     `<div class="page">
@@ -174,6 +233,11 @@ export function indexPage(user: { username: string; display_name: string; is_ins
   <a class="feature-card" href="/vaults"><h3>知识库</h3><p>有权库列表与目录浏览</p></a>
   <a class="feature-card" href="/credentials"><h3>我的访问凭据</h3><p>创建 / 撤销 / 查看，脱敏显示</p></a>${adminCard}
   </div>
+  <section class="card" aria-label="最近变更">
+  <h2>最近变更</h2>
+  ${activityBody}
+  <p class="page-meta">按你的成员关系呈现各库最近发布（成功发布事件，最近 ${ACTIVITY_LIMIT} 条；主体=服务端审计记录的认证员工）。</p>
+  </section>
   <p><button id="logout" type="button">退出登录</button></p>
   <p id="logout-msg"></p>
 </div>
