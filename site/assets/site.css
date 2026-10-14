@@ -1,0 +1,498 @@
+/*
+ * Notegit 站点样式（S13-T1）。
+ * 视觉契约：DESIGN.md（AGENTS.md UI 条款对站点同样强制）。
+ * 规则：色板 / 字体 / 字号 / 间距 / 圆角全部经 :root 语义 token 引用；
+ * token 定义之外不得出现裸 hex —— 由 site/test/landing.test.mjs 看守。
+ * 零外部依赖（D21）：系统字体栈本地回退，不引字体服务与 CDN。
+ */
+
+:root {
+  /* 色板 —— 米色画布 / 珊瑚主色 / 深色表面 三色体系（DESIGN.md Colors） */
+  --canvas: #faf9f5;
+  --surface-soft: #f5f0e8;
+  --surface-card: #efe9de;
+  --surface-dark: #181715;
+  --surface-dark-soft: #1f1e1b;
+  --surface-dark-elevated: #252320;
+  --primary: #cc785c;
+  --primary-active: #a9583e;
+  --hairline: #e6dfd8;
+  --hairline-soft: #ebe6df;
+  --ink: #141413;
+  --body-strong: #252523;
+  --body: #3d3d3a;
+  --muted: #6c6a64;
+  --on-primary: #ffffff;
+  --on-dark: #faf9f5;
+  --on-dark-soft: #a09d96;
+  --accent-teal: #5db8a6;
+
+  /* 字体族 —— DESIGN.md Typography 本地回退栈 + CJK 兜底 */
+  --font-display: "Tiempos Headline", Garamond, "Times New Roman", "Songti SC", "Noto Serif CJK SC", serif;
+  --font-body: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* 字号（DESIGN.md Hierarchy 摘录；display 400 + 负字距） */
+  --text-display-lg: 48px;
+  --text-display-md: 36px;
+  --text-display-sm: 28px;
+  --text-hero-mobile: 32px;
+  --text-title-lg: 22px;
+  --text-title-md: 18px;
+  --text-body-md: 16px;
+  --text-body-sm: 14px;
+  --text-button: 14px;
+  --text-caption-uppercase: 12px;
+  --text-code: 14px;
+
+  /* 间距（4px 基）与圆角（层级化） */
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  --spacing-section: 96px;
+  --spacing-band-lg: 64px;
+  --rounded-sm: 6px;
+  --rounded-md: 8px;
+  --rounded-lg: 12px;
+  --rounded-xl: 16px;
+}
+
+/* —— 基础 —— */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-body-md);
+  line-height: 1.55;
+  color: var(--body);
+  background: var(--canvas);
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+pre {
+  margin: 0;
+}
+
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+svg {
+  display: block;
+}
+
+.container {
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: var(--spacing-md);
+}
+
+/* —— 区段节奏：cream → soft → cream → dark → soft → dark-footer —— */
+
+.band {
+  padding-block: var(--spacing-section);
+}
+
+.band-soft {
+  background: var(--surface-soft);
+}
+
+.band-dark {
+  background: var(--surface-dark);
+  color: var(--on-dark-soft);
+}
+
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--ink);
+}
+
+h1 {
+  font-size: var(--text-display-lg);
+  line-height: 1.1;
+  letter-spacing: -1px;
+}
+
+h2 {
+  font-size: var(--text-display-md);
+  line-height: 1.15;
+  letter-spacing: -0.5px;
+}
+
+h3 {
+  font-family: var(--font-body);
+  font-size: var(--text-title-md);
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.band-dark h2,
+.band-dark h3 {
+  color: var(--on-dark);
+}
+
+.eyebrow {
+  font-size: var(--text-caption-uppercase);
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+}
+
+.lead {
+  font-size: var(--text-title-md);
+  line-height: 1.55;
+  color: var(--body-strong);
+  max-width: 34em;
+}
+
+.section-intro {
+  margin-top: var(--spacing-md);
+  max-width: 46em;
+}
+
+/* —— 页头（DESIGN.md top-nav：cream、64px、右侧按钮簇） —— */
+
+.site-header {
+  background: var(--canvas);
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+.header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-height: 64px;
+  padding-block: var(--spacing-sm);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: var(--text-title-lg);
+  letter-spacing: -0.3px;
+  color: var(--ink);
+}
+
+.tagline {
+  font-size: var(--text-body-sm);
+  color: var(--muted);
+}
+
+.header-cta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+/* —— 按钮（DESIGN.md buttons：coral 主 CTA 稀缺使用） —— */
+
+.button-primary,
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 12px 20px;
+  border-radius: var(--rounded-md);
+  font-size: var(--text-button);
+  font-weight: 500;
+}
+
+.button-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  border: none;
+}
+
+.button-primary:active {
+  background: var(--primary-active);
+}
+
+.button-secondary {
+  background: var(--canvas);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+}
+
+/* 深色带上的次级按钮：保持深色，不反白（DESIGN.md button-secondary-on-dark） */
+.band-dark .button-secondary {
+  background: var(--surface-dark-elevated);
+  color: var(--on-dark);
+  border: none;
+}
+
+/* —— hero（6/6 网格：文案左，产品 chrome 右） —— */
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: var(--spacing-xl);
+  align-items: center;
+}
+
+.hero-copy h1 {
+  margin-top: var(--spacing-md);
+}
+
+.hero-copy .lead {
+  margin-top: var(--spacing-md);
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+
+/* —— 代码窗口（DESIGN.md code-window-card：深色面板 + 内嵌更深代码块） —— */
+
+.code-window {
+  background: var(--surface-dark);
+  border-radius: var(--rounded-lg);
+  padding: var(--spacing-lg);
+}
+
+.band-dark .code-window {
+  background: var(--surface-dark-elevated);
+}
+
+.code-title {
+  margin-bottom: var(--spacing-sm);
+  font-size: var(--text-body-sm);
+  color: var(--on-dark-soft);
+}
+
+.code-window pre {
+  background: var(--surface-dark-soft);
+  border-radius: var(--rounded-md);
+  padding: var(--spacing-md);
+  overflow-x: auto;
+}
+
+.code-window code {
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  line-height: 1.6;
+  color: var(--on-dark);
+  white-space: pre;
+}
+
+.code-window .cmt {
+  color: var(--on-dark-soft);
+}
+
+.code-window .status-ok {
+  color: var(--accent-teal);
+}
+
+/* —— 能力卡（feature-card：surface-card 底、圆角 lg、内距 32） —— */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-lg);
+  margin-top: var(--spacing-xl);
+}
+
+.feature-card {
+  background: var(--surface-card);
+  border-radius: var(--rounded-lg);
+  padding: var(--spacing-xl);
+}
+
+.card-mark {
+  width: 20px;
+  height: 20px;
+  color: var(--primary);
+}
+
+.feature-card h3 {
+  margin-top: var(--spacing-md);
+}
+
+.feature-card p {
+  margin-top: var(--spacing-sm);
+}
+
+/* —— 三入口（canvas + hairline 卡，model-comparison 形态） —— */
+
+.entrance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-lg);
+  margin-top: var(--spacing-xl);
+}
+
+.entrance-item {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--rounded-lg);
+  padding: var(--spacing-xl);
+}
+
+.entrance-item p {
+  margin-top: var(--spacing-sm);
+}
+
+/* —— 快速部署（深色带：代码窗口 + 要点列表） —— */
+
+.deploy-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: var(--spacing-lg);
+  align-items: start;
+  margin-top: var(--spacing-xl);
+}
+
+.deploy-notes ul li + li {
+  margin-top: var(--spacing-sm);
+}
+
+.deploy-notes .button-secondary {
+  margin-top: var(--spacing-lg);
+}
+
+/* —— 文档导航（分组卡） —— */
+
+.doc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-lg);
+  margin-top: var(--spacing-xl);
+}
+
+.doc-group {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--rounded-lg);
+  padding: var(--spacing-xl);
+}
+
+.doc-group h3 {
+  font-size: var(--text-caption-uppercase);
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+}
+
+.doc-group ul {
+  margin-top: var(--spacing-sm);
+}
+
+.doc-group li + li {
+  border-top: 1px solid var(--hairline-soft);
+}
+
+.doc-group a {
+  display: block;
+  padding-block: var(--spacing-sm);
+}
+
+/* —— 页脚（深色收尾，永不反色） —— */
+
+.site-footer {
+  background: var(--surface-dark);
+  color: var(--on-dark-soft);
+  padding-block: var(--spacing-band-lg);
+}
+
+.footer-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.footer-brand {
+  font-family: var(--font-display);
+  font-size: var(--text-title-lg);
+  color: var(--on-dark);
+}
+
+.footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-lg);
+}
+
+.footer-nav a {
+  font-size: var(--text-body-sm);
+  color: var(--on-dark-soft);
+}
+
+.footer-meta {
+  font-size: var(--text-body-sm);
+}
+
+.footer-meta a {
+  color: var(--on-dark);
+}
+
+/* —— 响应式 —— */
+
+@media (max-width: 1024px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-grid,
+  .entrance-grid,
+  .doc-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  h1 {
+    font-size: var(--text-hero-mobile);
+  }
+
+  h2 {
+    font-size: var(--text-display-sm);
+  }
+
+  .band {
+    padding-block: var(--spacing-xxl);
+  }
+
+  .tagline {
+    display: none;
+  }
+
+  .hero-grid,
+  .card-grid,
+  .entrance-grid,
+  .doc-grid,
+  .deploy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-card,
+  .entrance-item,
+  .doc-group {
+    padding: var(--spacing-lg);
+  }
+}
