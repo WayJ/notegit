@@ -187,8 +187,13 @@ export function deleteConfirmPage(input: DeleteConfirmInput): string {
   );
 }
 
-/** 存储/读取不可用态（成员已确认——非 404；与 browseStatePage 同规） */
-export function opStatePage(vault: { slug: string; name: string }, message: string): string {
+/** 存储/读取不可用态（成员已确认——非 404；与 browseStatePage 同规）。
+ *  S12-T2（coordinator 批准扩展）：可选 viewer → 顶栏账户位（缺省兼容旧调用形态）。 */
+export function opStatePage(
+  vault: { slug: string; name: string },
+  message: string,
+  viewer?: { username: string; is_instance_admin?: boolean },
+): string {
   return layout(
     `${vault.name} 操作`,
     `<div class="page">
@@ -197,5 +202,9 @@ export function opStatePage(vault: { slug: string; name: string }, message: stri
   <p class="state-note">${escapeHtml(message)}</p>
 </div>
 `,
+    '',
+    viewer !== undefined
+      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      : undefined,
   );
 }

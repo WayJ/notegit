@@ -14,6 +14,7 @@ import { registerRenameRoutes } from './rename/routes.ts';
 import { registerHistoryRoutes } from './history/routes.ts';
 import { registerSearchPageRoutes } from './search/routes.ts';
 import { registerActivityRoutes } from './activity/routes.ts';
+import { registerDraftsPageRoutes } from './drafts/routes.ts';
 import { submissionsPlugin } from './edit/submissions.ts';
 
 /**
@@ -60,6 +61,7 @@ export function registerWebRoutes(app: FastifyInstance, opts: WebRoutesOptions):
   registerHistoryRoutes(app, shared); // S5-T1 提交历史与文档 diff（默认分支实时读 Git；库级/路径级历史页 + 逐文件 diff；无权=不存在 404）
   registerSearchPageRoutes(app, shared); // S5-T4 元数据查找页（/search?q=——查询面实时成员过滤，与 API 端点同一判定面）
   registerActivityRoutes(app, shared); // S11-T2 库内最近变更页（/vaults/{slug}/activity——审计成功发布行，门槛=read 成员；首页区块数据面同源 web/activity/query.ts）
+  registerDraftsPageRoutes(app, shared); // S12-T2 我的草稿页（/drafts——跨库本人现行草稿，成员关系实时过滤；门槛=任意认证员工）
   // S4-T7 提交端点（api.md §8.2 POST /api/v1/vaults/{slug}/submissions）：编辑页
   // 「提交」按钮消费端——/api/v1 域（认证 401 JSON、app 级 maintenanceGuard/
   // CSRF 自动覆盖）；冲突保护 409 E-RES-003 含当前 tip（组件层 gate 透传为最后一道）

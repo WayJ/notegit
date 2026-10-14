@@ -1,0 +1,58 @@
+# api.md 修订建议稿（S12）
+
+> S12 各并行任务各持一节（二级标题隔离；只追加自己的节，不动他人内容——T1 编辑体验（预览/自动保存/粘贴上传）/ T2 我的草稿 + 顶栏）。master 裁决落契后按节归档。
+>
+> 本文件由 S12-T2 先建（A 节）；T1 追加自己的节请另起二级标题与条目前缀。
+
+## §13 我的草稿页行 + 共享布局顶栏账户菜单（S12-T2——G08/G09）
+
+- **状态**：S12-T2 起草（2026-10-14）；待 master 裁决。
+- **范围**：新页面 `GET /drafts`（跨库本人现行草稿列表）+ 共享布局 `layout()` 顶栏账户菜单（全站登录态页面右上用户下拉）+ 首页 `GET /` 微调（原独立退出按钮移除，顶栏取代）+ 顶栏「我的草稿」入口。
+- **来源**：sprint S12 D3（复用 §7 既有 drafts 存储，零新 API）；research §2.3 F-9（登出仅首页）/ P1-2（草稿只能逐路径撞见）/ P1-7（竞品通用顶栏形态）；实现 `server/src/web/drafts/`（query/pages/routes 新模块）+ `web/pages.ts`（layout/topNav/indexPage）+ `web/routes.ts`（组装点 append 一行）+ coordinator 2026-10-14 批准的呈现层扩展（cite 族三页与 history/upload/rename 域状态页/diff/历史版本页可选 viewer 接线）；测试 `server/test/web-drafts-routes.test.ts`（6 例）+ `web-topbar-account.test.ts`（9 例）——先红后绿。
+- **约定**：给「现状 → 建议 api.md 文本（逐字可用）→ 理由 → 待裁决点」。
+
+### A1 我的草稿页（已实现、未入契约）
+
+**现状**：S12-T2 已实现 `GET /drafts`（`server/src/web/drafts/routes.ts`，组装点 append 一行注册）：跨库列出当前员工本人现行草稿——数据源=drafts 表既有按作者私有存储（§7 写入面不变，本页只读，零写入）；现行语义=status='active'（committed 终态行不列，与 `DraftsService.list` 一致）；条目=库 slug（browse 入口链接）/路径/更新时间（相对时间——与最近变更条目同形态件 `formatRelativeTime`）/「继续编辑」链接（既有 edit 页 URL 同构、逐段编码）；按当前员工库成员关系实时过滤（查询 SQL JOIN `vault_members`——与检索/最近变更同一判定面、无缓存）；排序更新时间新→旧（同刻库 slug/路径稳定序），无上限截断（本页是本人现行草稿的唯一汇总入口——截断即不可达；行数受库内路径数天然约束）；空态如实呈现；页面门槛=任意认证员工（未认证 302 /login）；GET 免 CSRF、无写操作。
+
+**撤权呈现形态（裁决记录）**：撤权库的草稿行**不呈现**（呈现层过滤，非删除——草稿数据保留，重新获权后恢复可见，页面标注过滤口径）。依据：其「继续编辑」链接对非成员将 404（D-IC-06 反存在性同判）——呈现不可达入口不如如实隐藏；且与检索/最近变更的成员过滤同一判定面（identity §5.1 第 2 层实时查表）。测试锁定（撤权后该库行消失、未撤权库不受影响、数据行保留 3 断言）。
+
+**建议 api.md 文本**（§13 表新增一行，置于页面族行后）：
+
+```markdown
+| GET /drafts | 我的草稿页（S12-T2，S12 D3）：跨库列出当前员工本人现行草稿（status='active'；committed 终态不列）——数据源=drafts 表既有按作者私有存储（§7 写入面不变，本页只读）；条目=库 slug（browse 入口链接）/路径/更新时间（相对时间）/「继续编辑」链接（既有 edit 页）；按当前员工库成员关系实时过滤（JOIN vault_members——与检索/最近变更同一判定面；撤权库草稿行不呈现，数据保留、重新获权后恢复可见）；排序更新时间新→旧（同刻库 slug/路径稳定序），无上限截断（本人现行草稿唯一汇总入口）；页面门槛=任意认证员工（未认证 302 /login）；GET 免 CSRF、无写操作 | S12-T2 |
+```
+
+**理由**：「草稿只能逐路径撞见」（research P1-2）的汇总面成为页面族正式 URL；不落契约则成员过滤语义（与检索同一判定面）、现行草稿口径（active-only）、撤权呈现形态无词汇表，验收与后续消费无统一参照。行为已实现并有 6 测试锁定（三态门槛、跨库排序、作者私有零混入、撤权形态、committed 不列）。
+
+**待裁决**：(a)「无上限截断」是否入契约（也可只记「有排序无分页」留实现余地——本建议保留明示，与测试锁定一致）；(b) 撤权呈现形态是否同时在 §7 草稿端点节补一句（本页与 §7 API 列表面共用该语义——§7 的按库列表经 authorize 先行 404，天然不呈现；跨库页才显式过滤，若 master 认为无需双记，仅保留 §13 行）。
+
+### A2 共享布局顶栏账户菜单（建议 §13 layout 壳补记）
+
+**现状**：S12-T2 起 `layout()`（`web/pages.ts`，全站共享壳）登录态页面右上呈现账户菜单：`<details class="nav-account">` 零 JS 下拉（原生开合——无脚本依赖，渐进增强）——摘要=display_name 徽章（DESIGN.md badge-pill 既有 token；displayName 缺省如实回落用户名）+ 用户名（.nav-user，小屏沿既有折叠）；下拉=「我的凭据」（/credentials）/「管理」（/admin，仅实例管理员——呈现层沿用 `PageNav.user.isAdmin` 既有判定源，S2-T8「普通成员全页无 /admin」断言不变）/「退出登录」（id="logout"——顶栏全域承担；页内脚本调既有 `POST /api/v1/auth/logout` 后跳 /login，端点幂等语义不变；脚本并入页面唯一 `<script>` 块——每页恰一脚本的既有断言保持）。首页原独立退出按钮与提示位移除（登出入口不重复）；顶栏主菜单新增「我的草稿」入口（/drafts，认证全员可见——匿名壳不呈现）。账户位覆盖面：模板传 viewer 的页面族全量 + coordinator 批准扩展（cite 族三页、history/upload/rename 域状态页、diff/历史版本页——可选 viewer 参数，缺省兼容旧调用形态）；edit/ 域状态页本次未接（见 A3 待办）。
+
+**建议**：§13 既有共享布局（layout 壳）描述**追加一句**（措辞 master 定）：
+
+```markdown
+；S12-T2 起登录态页面右上账户菜单（零 JS 下拉：display_name 徽章+用户名；我的凭据/管理（仅实例管理员）/退出登录——调既有 POST /api/v1/auth/logout 后跳 /login，端点语义不变；首页原独立退出按钮移除）+ 主菜单「我的草稿」入口（认证全员）
+```
+
+**理由**：登出从「仅首页」（research F-9）转为布局级全域可用是 G09 的验收面（S12 场景 S5「登出全域可用」）；GET / 行的原退出按钮移除需契约锚点，避免后续任务误判为回归。
+
+**待裁决**：追加一句（本建议）还是在 A1 行内含描述（双记漂移风险——若 master 取后者，本条撤）。
+
+### A3 形状差异与待办记录（无需契约变更）
+
+1. **edit/ 域状态页未接 viewer**（coordinator 2026-10-14 裁决）：T1 并行持有 edit/ 域，本任务不碰；`editStatePage` 的顶栏账户位接线留给 Wave 2 T3 共享抽取时统一收口（T3 机械改造全部页面）。
+2. **display_name 徽章渐进接线**：`PageNav.user.displayName` 为可选字段——首页与 /drafts 已接（路由实时查库，与 shell GET / 同形态）；其余页面模块 viewer 暂不携带 display_name（徽章如实回落用户名，结构同形）；T3 收口时统一补传。
+3. **restorePage（还原确认页）未接 viewer**：不在本次批准清单（coordinator 批准面=cite 族/状态页/diff/version）；T3 收口候选。
+4. **账户菜单样式**：零 JS 形态优先（任务约束——assets/ 为 T3 写面，本任务零改）；复用既有 token 类（badge/nav-user/nav-side/commits/commit/state-note），`nav-account`/`account-menu`/`draft-item` 为结构钩子（原生 details 行为可用）；视觉精修（下拉定位/间距）随 T3 assets 域统一。
+5. **移动端**：小屏沿既有折叠策略（.nav-menu/.nav-user 隐藏，账户徽章+CTA 保留——登出移动端可达）；汉堡折叠按钮为既有后置项，不在本任务面。
+
+### 落点汇总
+
+| id | 契约文件 | 落点 | 性质 | 实现状态 |
+|---|---|---|---|---|
+| A1 | api.md | §13 表新增 /drafts 行 | 页面路由入册 | 已实现（S12-T2） |
+| A2 | api.md | §13 共享布局（layout 壳）补记一句 | 顶栏账户菜单入册 | 已实现（S12-T2） |
+| A3 | —（本文件记录） | — | 形状差异与待办（edit/ 域状态页、display_name 接线、restorePage、样式与移动端随 T3） | — |
