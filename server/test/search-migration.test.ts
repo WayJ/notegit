@@ -17,6 +17,10 @@ import { MIGRATIONS } from '../src/db/migrations.ts';
 //   （全量替换语义，T5 重建复用同一写面）。
 // - state 表按库一行：head_commit/indexed_at/lag_ms/consecutive_failures 等
 //   可观测字段（延迟指标 + 时间戳 + 失败告警的数据面）。
+//
+// S11-T1（迁移 0010，本任务独占）：search_index 扩 body 列（D20：派生可重建；
+// 全文检索 v1 的存储面）。ALTER ADD COLUMN 保留既有行（body=''——空串不参与
+// 正文命中）；STRICT/主键不变；建议稿 docs/s11/storage-amendments.md。
 
 const NOW = '2026-10-13T12:00:00.000Z';
 
@@ -27,14 +31,55 @@ function freshDb(): DatabaseSync {
   return db;
 }
 
-test('迁移 0009：search_index/search_index_state 落地，版本号追加于 0008 之后', () => {
+test('迁移 0009/0010：search_index/search_index_state 落地，版本号「包含且有序」（E1 惯例——append 不改本断言）', () => {
   const db = freshDb();
   const versions = db.prepare('SELECT version FROM schema_version ORDER BY version').all() as { version: number }[];
-  assert.equal(versions[versions.length - 1]!.version, 9, '最新迁移版本 = 9（S5-T3 独占，0008 之后 append）');
+  const list = versions.map((r) => r.version);
+  // 「包含且有序」而非全等硬编码：9（S5-T3 两表）与 10（S11-T1 body 列）先后在场，
+  // 且从 1 连续递增（后续任务 append 新版本不需要回头改这里）
+  assert.ok(list.indexOf(9) >= 0 && list.indexOf(10) > list.indexOf(9), '9 与 10 先后在场（S11-T1 于 0009 后 append）');
+  assert.deepEqual(list, Array.from({ length: list.length }, (_, i) => i + 1), '版本号从 1 连续递增');
   const tables = (
     db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('search_index','search_index_state')`).all() as { name: string }[]
   ).map((r) => r.name);
   assert.deepEqual(tables.sort(), ['search_index', 'search_index_state']);
+});
+
+test('迁移 0010：search_index 增 body 列（TEXT NOT NULL DEFAULT \'\'）——既有写面不携带 body 仍可插入', () => {
+  const db = freshDb();
+  const cols = (db.prepare('PRAGMA table_info(search_index)').all() as { name: string; type: string; notnull: number; dflt_value: string }[])
+    .filter((c) => c.name === 'body');
+  assert.equal(cols.length, 1, 'body 列存在（S11-T1 全文检索 v1——D20 派生可重建）');
+  const body = cols[0]!;
+  assert.equal(body.type, 'TEXT');
+  assert.equal(body.notnull, 1, 'NOT NULL（缺省空串——非 .md/历史行 body=\'\'，不参与正文命中）');
+  assert.equal(body.dflt_value, "''", 'DEFAULT \'\'：迁移前的既有行与未携带 body 的写面自动得空串');
+  // 迁移前的既有写面形态（v9 的 INSERT 列清单）不携带 body——仍可插入，读回空串
+  db.prepare(
+    `INSERT INTO search_index (vault_id, path, commit_oid, title, tags, summary, indexed_at) VALUES (1, 'a.md', '${'a'.repeat(40)}', 't', '[]', 's', ?)`,
+  ).run(NOW);
+  const row = db.prepare('SELECT body FROM search_index WHERE path = ?').get('a.md') as { body: string };
+  assert.equal(row.body, '');
+  // STRICT 与主键不变：vault_id 仍拒 TEXT；同库同路径仍唯一
+  assert.throws(
+    () => db.prepare(`INSERT INTO search_index (vault_id, path, commit_oid, tags, summary, body, indexed_at) VALUES ('one', 'x.md', '${'a'.repeat(40)}', '[]', '', '', ?)`).run(NOW),
+    /cannot store TEXT value in INTEGER column/,
+  );
+  assert.throws(
+    () => db.prepare(`INSERT INTO search_index (vault_id, path, commit_oid, title, tags, summary, body, indexed_at) VALUES (1, 'a.md', '${'b'.repeat(40)}', null, '[]', '', 'x', ?)`).run(NOW),
+    /UNIQUE constraint failed/,
+  );
+});
+
+test('迁移重入：0010 应用后全量再跑 applied=[]，body 列与既有行不变', () => {
+  const db = freshDb();
+  db.prepare(
+    `INSERT INTO search_index (vault_id, path, commit_oid, title, tags, summary, body, indexed_at) VALUES (1, 'a.md', '${'a'.repeat(40)}', 't', '[]', 's', '正文', ?)`,
+  ).run(NOW);
+  const again = migrate(db, MIGRATIONS);
+  assert.equal(again.applied.length, 0, '重入零应用（迁移重入测试延续）');
+  const row = db.prepare('SELECT path, body FROM search_index').get() as { path: string; body: string };
+  assert.deepEqual({ path: row.path, body: row.body }, { path: 'a.md', body: '正文' }, '既有行与 body 值原样保留');
 });
 
 test('search_index：vault/path 主键去重，title 可空（README 豁免文件），tags 为 JSON 文本', () => {

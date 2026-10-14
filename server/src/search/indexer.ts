@@ -401,11 +401,11 @@ export class SearchIndexer {
       try {
         this.db.prepare('DELETE FROM search_index WHERE vault_id = ?').run(vaultId);
         const ins = this.db.prepare(
-          `INSERT INTO search_index (vault_id, path, commit_oid, title, tags, summary, indexed_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO search_index (vault_id, path, commit_oid, title, tags, summary, body, indexed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         );
         for (const doc of derived.docs) {
-          ins.run(vaultId, doc.path, derived.headCommit ?? '', doc.title, JSON.stringify(doc.tags), doc.summary, indexedAt);
+          ins.run(vaultId, doc.path, derived.headCommit ?? '', doc.title, JSON.stringify(doc.tags), doc.summary, doc.body, indexedAt);
         }
         this.db
           .prepare(

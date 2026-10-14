@@ -252,4 +252,20 @@ CREATE TABLE search_index_state (
 ) STRICT;`,
     ],
   },
+  {
+    // S11-T1（迁移 0010，本任务独占）：全文检索 v1——search_index 扩 body 列
+    // （D20 ADR：派生可重建、LIKE 子串语义；FTS5 因 2 字 CJK 致命被否）。列 =
+    // frontmatter 剥离后的 .md 正文（README 豁免文件全文），截断上界与
+    // validation.limits.maxDocumentBytes 同源（1MiB——不引入第二套常量；见
+    // search/derive.ts）。ALTER ADD COLUMN：既有行自动得 body=''（空串不参与
+    // 正文命中——迁移前行如实「无正文」）；STRICT/主键不变；派生可全量重建
+    // （T5 重建入口同源）。0009 之后 append（迁移独占约束同前任务）；建议稿
+    // docs/s11/storage-amendments.md（D11 模式：实现 + 契约补正建议稿，不动
+    // docs/contracts/）。
+    version: 10,
+    description: "S11-T1: search_index body column — derived full-text of published .md body for path+body search (D20; storage-model §2 派生不入权威 schema)",
+    statements: [
+      `ALTER TABLE search_index ADD COLUMN body TEXT NOT NULL DEFAULT ''`,
+    ],
+  },
 ];
