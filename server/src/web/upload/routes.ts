@@ -207,7 +207,14 @@ export function registerUploadRoutes(app: FastifyInstance, opts: UploadRoutesOpt
     if (!guard) return reply;
     const { who, vault } = guard;
     if (opts.dataDir === undefined) {
-      return html(reply, uploadStatePage(vault, '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。'));
+      return html(
+        reply,
+        uploadStatePage(
+          vault,
+          '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。',
+          { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin }, // S12-T2 账户位（批准扩展）
+        ),
+      );
     }
     const dirPath = (((req.params as Record<string, string>)['*'] ?? '')).replace(/\/+$/, '');
     if (dirPath !== '' && !treePathOk(dirPath)) return sendPageNotFound(reply); // 畸形=不存在（与 POST 同判）

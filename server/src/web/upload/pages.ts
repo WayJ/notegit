@@ -160,8 +160,13 @@ document.getElementById('upload-form').addEventListener('submit', async (ev) => 
   );
 }
 
-/** 状态页（存储未挂接——与 browseStatePage/editStatePage 同风格如实标注） */
-export function uploadStatePage(vault: { slug: string; name: string }, note: string): string {
+/** 状态页（存储未挂接——与 browseStatePage/editStatePage 同风格如实标注）。
+ *  S12-T2（coordinator 批准扩展）：可选 viewer → 顶栏账户位（缺省兼容旧调用形态）。 */
+export function uploadStatePage(
+  vault: { slug: string; name: string },
+  note: string,
+  viewer?: { username: string; is_instance_admin?: boolean },
+): string {
   return layout(
     `上传 — ${vault.name}`,
     `<div class="page">
@@ -170,5 +175,9 @@ export function uploadStatePage(vault: { slug: string; name: string }, note: str
   <p class="state-note">${escapeHtml(note)}</p>
 </div>
 `,
+    '',
+    viewer !== undefined
+      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      : undefined,
   );
 }
