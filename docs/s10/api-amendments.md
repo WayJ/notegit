@@ -1,6 +1,6 @@
 # api.md §13 补录修订建议（S10-T3 站内新建笔记）
 
-- **状态**：S10-T3 起草（2026-10-14），待 master 评审。评审通过后由 master 落 `docs/contracts/api.md` §13 页面路由表——按仓库约束，本文件不改契约原文。
+- **状态**：S10-T3 起草（2026-10-14）；**2026-10-14 master 已裁决落契**：A1 逐字采纳（api.md §13 新增 edit/new 行）；A2 撤——A1 行自足（browse 入口 editor+ 可见已含），避免双记漂移；A3 知悉在案（upsert 语义不变、HEAD 探测依赖记录——未来 view 缺失路径形态变化时需同步，已记入 E2 cross-cutting 关注）。
 - **范围**：S10-T3 交付的站内新建页面（`GET /vaults/{slug}/edit/new`）+ browse 目录页「新建笔记」入口呈现 + 一笔形状差异如实记录（A3，无需契约变更）。
 - **来源**：E2 research §2.3 F-5/P0-2（现状：新建须本地造好 .md 再上传）；sprint S10 D5 裁决（站内新建 = browse 入口 → edit/new 模板表单 → 既有 submissions 端点，不新建平行写通道）；S10-T3 实现与测试（`server/test/web-edit-new.test.ts` 11 测试）。
 - **约定**：每条给「现状 → 建议 api.md 文本（逐字可用）→ 理由 → 待 master 裁决点」。建议文本中的行文为建议值，master 可改置。
