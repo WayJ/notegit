@@ -52,8 +52,9 @@ function parentDirOf(entryPath: string): string {
   return slash === -1 ? '' : entryPath.slice(0, slash);
 }
 
-/** 上传附件入口（编辑页头部：指向文档所在目录的上传页） */
-function uploadAttachmentLink(vault: { slug: string }, entryPath: string): string {
+/** 上传附件入口（编辑页头部：指向文档所在目录的上传页；S10-T2 reader 隐藏——写入口） */
+function uploadAttachmentLink(vault: { slug: string }, entryPath: string, canWrite: boolean): string {
+  if (!canWrite) return '';
   const dir = parentDirOf(entryPath);
   const href = `/vaults/${encodeURIComponent(vault.slug)}/upload${dir === '' ? '' : '/' + dir.split('/').map(encodeURIComponent).join('/')}`;
   return ` · <a href="${href}">上传附件</a>`;
@@ -69,9 +70,18 @@ export interface EditPageInput {
   readonly prefill: ParsedForForm;
   /** S4-T7 草稿预填信息（本人现行草稿回填时呈现；缺省 = 无草稿） */
   readonly draft?: { baseCommit: string | null; updatedAt: string; stale: boolean };
+  /** S10-T2 权限感知：当前会话员工对该库的写权（canWriteVault 实算；false=只读态
+   *  ——D4：门槛保持 read 成员（200），字段禁用 + 只读标注、不渲染保存草稿/提交
+   *  控件；正文可看不可改。本人草稿回填逻辑不动（草稿是 read 成员可用的既有
+   *  能力——回填照常，仅不可改）。缺省 = 写者形态：模板直调测试兼容；生产路由
+   *  恒传实算值（D17 呈现层，非安全边界）） */
+  readonly canWrite?: boolean;
   /** UI-RESTYLE：顶部导航登录态（可选——测试直调形态缺省） */
   readonly viewer?: PageViewer;
 }
+
+/** 只读徽章（S10-T2：DESIGN.md badge-pill 形态——`.badge` 既有类，token 语义） */
+const READONLY_BADGE = '<span class="badge">只读成员</span>';
 
 /** 回填标注（T6 移交：呈现草稿 base_commit 旧值；stale=分支已前进如实提示） */
 function draftNote(draft: { baseCommit: string | null; updatedAt: string; stale: boolean }): string {
@@ -100,6 +110,8 @@ export function editPage(input: EditPageInput): string {
   const { vault, entryPath, mode, baseCommit, prefill, draft, viewer } = input;
   const name = nameOf(entryPath);
   const isNew = mode === 'new';
+  const ro = input.canWrite === false; // S10-T2 reader 只读态（D4）
+  const dis = ro ? ' disabled' : ''; // 字段禁用（正文可看不可改）
   const statusEnum = ['active', 'draft', 'deprecated'];
   const rawStatus = prefill.fields.status;
   const statusOptions = [
@@ -114,7 +126,8 @@ export function editPage(input: EditPageInput): string {
   ];
 
   const apiBase = `/api/v1/vaults/${encodeURIComponent(vault.slug)}`;
-  const script = `
+  // S10-T2 reader 只读态：不携带交互脚本（脚本绑定保存/提交控件——只读态不渲染）
+  const script = ro ? '' : `
 const PATH = ${js(entryPath)};
 const BASE = ${baseCommit === null ? "null" : js(baseCommit)};
 const VIEW_URL = ${JSON.stringify(`/vaults/${encodeURIComponent(vault.slug)}/view/${entryPath.split('/').map(encodeURIComponent).join('/')}`)};
@@ -221,27 +234,29 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
   <div class="page-head">
   <h1>${isNew ? '新建' : '编辑'}：${escapeHtml(name)}</h1>
   <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
-  <p class="page-meta">类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath)}${isNew ? (draft ? ' · <strong>新建</strong>' : ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）') : ''}</p>
-  </div>
+  <p class="page-meta">类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath, !ro)}${isNew ? (draft ? ' · <strong>新建</strong>' : ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）') : ''}</p>
+${ro ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：正文可看不可改。</p>\n` : ''}  </div>
   ${draft ? draftNote(draft) : ''}
-  <form id="edit-form" class="form-card">
-${fieldRow('标题 <strong>（必填）</strong>', `<input name="title" required maxlength="200" value="${attr(prefill.fields.title)}">`, 'title')}
-${fieldRow('负责人（可选，知识负责人）', `<input name="owner" maxlength="100" value="${attr(prefill.fields.owner)}">`, 'owner')}
-${fieldRow('摘要（可选，简短摘要）', `<textarea name="description" rows="2" maxlength="500">${attr(prefill.fields.description)}</textarea>`, 'description')}
-${fieldRow('标签（可选，逗号分隔）', `<input name="tags" value="${attr(prefill.fields.tags)}">`, 'tags')}
-${fieldRow('状态（可选，下拉封闭集）', `<select name="status">${statusOptions.join('')}</select>`, 'status')}
-${fieldRow('来源（可选，原始资料或依据）', `<input name="source" maxlength="500" value="${attr(prefill.fields.source)}">`, 'source')}
-${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</code>；允许标量/列表/映射）', `<textarea name="extra" rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
-  <label>正文（Markdown，多行纯文本）<br><textarea name="body" rows="18">${attr(prefill.body)}</textarea></label>
-  <label>提交说明（可选）<br><input name="message" placeholder="缺省：Web 编辑：${attr(entryPath)}"></label>
+  <form id="edit-form" class="form-card"${ro ? ' aria-disabled="true"' : ''}>
+${fieldRow('标题 <strong>（必填）</strong>', `<input name="title"${dis} required maxlength="200" value="${attr(prefill.fields.title)}">`, 'title')}
+${fieldRow('负责人（可选，知识负责人）', `<input name="owner"${dis} maxlength="100" value="${attr(prefill.fields.owner)}">`, 'owner')}
+${fieldRow('摘要（可选，简短摘要）', `<textarea name="description"${dis} rows="2" maxlength="500">${attr(prefill.fields.description)}</textarea>`, 'description')}
+${fieldRow('标签（可选，逗号分隔）', `<input name="tags"${dis} value="${attr(prefill.fields.tags)}">`, 'tags')}
+${fieldRow('状态（可选，下拉封闭集）', `<select name="status"${dis}>${statusOptions.join('')}</select>`, 'status')}
+${fieldRow('来源（可选，原始资料或依据）', `<input name="source"${dis} maxlength="500" value="${attr(prefill.fields.source)}">`, 'source')}
+${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</code>；允许标量/列表/映射）', `<textarea name="extra"${dis} rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
+  <label>正文（Markdown，多行纯文本）<br><textarea name="body"${dis} rows="18">${attr(prefill.body)}</textarea></label>
+  <label>提交说明（可选）<br><input name="message"${dis} placeholder="缺省：Web 编辑：${attr(entryPath)}"></label>
   <p id="form-warn" class="form-warn"></p>
   <p id="form-msg" role="alert"></p>
-  <div class="form-actions">
+${ro
+  ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：仅可查看本页，不能保存草稿或提交发布。</p>`
+  : `  <div class="form-actions">
   <button type="button" id="save-draft">保存草稿</button>
   <button type="submit">提交</button>
-  </div>
+  </div>`}
   </form>
-  <p class="form-foot"><small>保存=草稿（按作者私有、不产生 Git 版本，可再保存覆盖）；提交=正式发布（走统一校验与发布组件）——提交成功后草稿标记为已提交。</small></p>
+${ro ? '' : `  <p class="form-foot"><small>保存=草稿（按作者私有、不产生 Git 版本，可再保存覆盖）；提交=正式发布（走统一校验与发布组件）——提交成功后草稿标记为已提交。</small></p>`}
 </div>
 `,
     script,
@@ -253,8 +268,11 @@ ${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</c
 export function readmeEditPage(input: Omit<EditPageInput, 'prefill'> & { body: string }): string {
   const { vault, entryPath, mode, baseCommit, body, draft, viewer } = input;
   const name = nameOf(entryPath);
+  const ro = input.canWrite === false; // S10-T2 reader 只读态（D4）
+  const dis = ro ? ' disabled' : '';
   const apiBase = `/api/v1/vaults/${encodeURIComponent(vault.slug)}`;
-  const script = `
+  // S10-T2 reader 只读态：不携带交互脚本（同六字段页）
+  const script = ro ? '' : `
 const PATH = ${js(entryPath)};
 const BASE = ${baseCommit === null ? "null" : js(baseCommit)};
 const DRAFT_URL = ${JSON.stringify(draftPutUrl(vault.slug, entryPath))};
@@ -303,16 +321,18 @@ document.getElementById('readme-form').addEventListener('submit', async (ev) => 
   <div class="page-head">
   <h1>编辑：${escapeHtml(name)}</h1>
   <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
-  <p class="page-meta">类型：README 导航文档 · <strong>frontmatter 豁免</strong>（架构 §5.2——不套用六字段表单，正文直接编辑） · base commit：<code>${baseCommit === null ? '（空库）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath)}${mode === 'new' ? ' · 新建' : ''}</p>
-  </div>
+  <p class="page-meta">类型：README 导航文档 · <strong>frontmatter 豁免</strong>（架构 §5.2——不套用六字段表单，正文直接编辑） · base commit：<code>${baseCommit === null ? '（空库）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath, !ro)}${mode === 'new' ? ' · 新建' : ''}</p>
+${ro ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：正文可看不可改。</p>\n` : ''}  </div>
   ${draft ? draftNote(draft) : ''}
-  <form id="readme-form" class="form-card">
-  <label>正文（Markdown，多行纯文本）<br><textarea id="readme-body" name="body" rows="18">${escapeHtml(body)}</textarea></label>
+  <form id="readme-form" class="form-card"${ro ? ' aria-disabled="true"' : ''}>
+  <label>正文（Markdown，多行纯文本）<br><textarea id="readme-body" name="body"${dis} rows="18">${escapeHtml(body)}</textarea></label>
   <p id="form-msg" role="alert"></p>
-  <div class="form-actions">
+${ro
+  ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：仅可查看本页，不能保存草稿或提交发布。</p>`
+  : `  <div class="form-actions">
   <button type="button" id="save-draft">保存草稿</button>
   <button type="submit">提交</button>
-  </div>
+  </div>`}
   </form>
 </div>
 `,

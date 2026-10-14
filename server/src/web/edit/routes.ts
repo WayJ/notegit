@@ -7,6 +7,7 @@ import { VaultService } from '../../vaults/service.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
 import { execGit } from '../../publish/git-exec.ts';
 import { html, sendPageNotFound } from '../page-kit.ts';
+import { canWriteVault } from '../role-gate.ts';
 import { browseUrl } from '../browse/pages.ts';
 import { readEntryAt, readBlobText, README_RENDER_MAX_BYTES } from '../browse/tree.ts';
 import { parseDocForForm, titleFromFilename } from './form.ts';
@@ -130,6 +131,9 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
           entryPath,
           mode: 'new',
           baseCommit,
+          // S10-T2 权限感知：reader 只读态（D4：门槛 read 成员不变；canWriteVault
+          // 唯一判定面，D17 呈现层——POST 侧鉴权原样）
+          canWrite: canWriteVault(membershipSource, vault.who.subject.employee_id, vault.slug),
           viewer: { username: vault.who.subject.username, is_instance_admin: vault.who.subject.is_instance_admin },
           prefill:
             draft !== null
@@ -156,6 +160,8 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
           entryPath,
           mode: 'edit',
           baseCommit,
+          // S10-T2 权限感知：同六字段页——reader 只读态（D4/D17）
+          canWrite: canWriteVault(membershipSource, vault.who.subject.employee_id, vault.slug),
           viewer: { username: vault.who.subject.username, is_instance_admin: vault.who.subject.is_instance_admin },
           body: draft?.content ?? text,
           ...draftInfoOf(draft, baseCommit),
@@ -169,6 +175,8 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
         entryPath,
         mode: 'edit',
         baseCommit,
+        // S10-T2 权限感知：reader 只读态——字段禁用、无保存/提交控件（D4/D17）
+        canWrite: canWriteVault(membershipSource, vault.who.subject.employee_id, vault.slug),
         viewer: { username: vault.who.subject.username, is_instance_admin: vault.who.subject.is_instance_admin },
         prefill: draft !== null ? parseDocForForm(draft.content) : parseDocForForm(text),
         ...draftInfoOf(draft, baseCommit),

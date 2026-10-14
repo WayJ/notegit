@@ -53,9 +53,16 @@ export interface RenamePageInput {
   /** 当前输入值（GET 预填源路径；失败回显用户提交值） */
   readonly to: string;
   readonly notice?: OpNotice;
+  /** S10-T2 权限感知：当前会话员工对该库的写权（canWriteVault 实算；false=只读态
+   *  ——D4：门槛保持 read 成员（200），表单禁用、无提交控件 + 无写权限标注。
+   *  缺省 = 写者形态：模板直调/POST 回显形态兼容；生产 GET 路由恒传实算值（D17）） */
+  readonly canWrite?: boolean;
   /** UI-RESTYLE：顶部导航登录态（呈现层透传） */
   readonly viewer?: { username: string; is_instance_admin: boolean };
 }
+
+/** 只读徽章（S10-T2：DESIGN.md badge-pill 形态——`.badge` 既有类，token 语义） */
+const READONLY_BADGE = '<span class="badge">只读成员</span>';
 
 /** 重命名表单页（GET 无写操作；POST 走发布组件——写权限在提交时判定） */
 export function renamePage(input: RenamePageInput): string {
@@ -64,6 +71,33 @@ export function renamePage(input: RenamePageInput): string {
   const cancelHref = from.includes('/')
     ? `/vaults/${encodeURIComponent(vault.slug)}/browse/${encPath(from.slice(0, from.lastIndexOf('/')))}`
     : `/vaults/${encodeURIComponent(vault.slug)}/browse`;
+  // S10-T2 只读态（D4）：reader 直开 URL——表单禁用、无提交控件 + 无写权限标注
+  if (input.canWrite === false) {
+    return layout(
+      `重命名 ${from}`,
+      `<div class="page page-narrow">
+  <div class="page-head">
+  <h1>重命名</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, from)}</nav>
+  </div>
+  ${noticeHtml(notice)}
+  <form class="form-card" aria-disabled="true">
+  <fieldset disabled>
+  <p class="page-meta">原路径：<code>${escapeHtml(from)}</code></p>
+  <label>新路径（库内绝对路径，可含子目录；文件名须含扩展名）<br>
+  <input type="text" name="to" value="${escapeHtml(to)}" disabled maxlength="1024"></label>
+  </fieldset>
+  <p class="page-meta">${READONLY_BADGE} 无写权限：仅可查看，不能重命名。</p>
+  <div class="form-actions">
+  <a href="${cancelHref}">取消</a>
+  </div>
+  </form>
+</div>
+`,
+      '',
+      viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    );
+  }
   return layout(
     `重命名 ${from}`,
     `<div class="page page-narrow">
@@ -93,6 +127,8 @@ export interface DeleteConfirmInput {
   readonly vault: { slug: string; name: string };
   readonly path: string;
   readonly notice?: OpNotice;
+  /** S10-T2 权限感知：同 RenamePageInput.canWrite（false=只读态——D4） */
+  readonly canWrite?: boolean;
   /** UI-RESTYLE：顶部导航登录态（呈现层透传） */
   readonly viewer?: { username: string; is_instance_admin: boolean };
 }
@@ -104,6 +140,30 @@ export function deleteConfirmPage(input: DeleteConfirmInput): string {
   const cancelHref = path.includes('/')
     ? `/vaults/${encodeURIComponent(vault.slug)}/browse/${encPath(path.slice(0, path.lastIndexOf('/')))}`
     : `/vaults/${encodeURIComponent(vault.slug)}/browse`;
+  // S10-T2 只读态（D4）：reader 直开 URL——无提交控件 + 无写权限标注
+  if (input.canWrite === false) {
+    return layout(
+      `删除 ${path}`,
+      `<div class="page page-narrow">
+  <div class="page-head">
+  <h1>删除确认</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, path)}</nav>
+  </div>
+  ${noticeHtml(notice)}
+  <p class="page-meta">将删除：<code>${escapeHtml(path)}</code></p>
+  <p class="warn-block"><small>说明：删除不做元数据校验；Git 历史保留——旧提交中的历史版本仍可查（后续历史/还原功能基于此）。</small></p>
+  <form class="form-card" aria-disabled="true">
+  <p class="page-meta">${READONLY_BADGE} 无写权限：仅可查看，不能删除。</p>
+  <div class="form-actions">
+  <a href="${cancelHref}">取消</a>
+  </div>
+  </form>
+</div>
+`,
+      '',
+      viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    );
+  }
   return layout(
     `删除 ${path}`,
     `<div class="page page-narrow">
