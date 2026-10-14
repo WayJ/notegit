@@ -57,7 +57,7 @@
     <article class="doc-article">
 <h1>已知限制（v0.1 · 2026-10-14）</h1>
 <p>Notegit 第一版（E1 范围）能力边界的集中声明，DOD-15 交付材料之一。三条来源逐条对齐：<strong>架构 §12 边界</strong>（设计决定，非缺陷）、<strong>第一版明确排除</strong>（roadmap 声明的范围外项）、<strong>本周期遗留</strong>（实现现状中尚未收口的具体项，附依据）。本文只声明现状，不承诺时间表；与架构 §12 的一致性由 <code>cli/test/delivery-docs-consistency.test.ts</code> 自动看守。</p>
-<p>规则版本基线：<code>1.0.0-draft.2</code>（draft；<a href="contracts/rules-version.json">rules-version.json</a>）。</p>
+<p>规则版本基线：<code>1.0.0-draft.2</code>（draft；<a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/rules-version.json">rules-version.json</a>）。</p>
 <h2>1. 架构边界（架构 §12，逐条）</h2>
 <p>这些是第一版的<strong>设计边界</strong>，按 §12 的处理方式运行：</p>
 <table>
@@ -90,12 +90,12 @@
     <tr><th>项</th><th>现状与影响</th><th>依据</th></tr>
   </thead>
   <tbody>
-    <tr><td>小屏导航折叠后置</td><td>&lt;768px 视口隐藏菜单簇（保留字标+CTA），折叠按钮按任务约定后置——移动端导航不完整</td><td><a href="../.agents/notes/2026-10-13-ui-restyle.txt">UI-RESTYLE 遗留</a></td></tr>
+    <tr><td>小屏导航折叠后置</td><td>&lt;768px 视口隐藏菜单簇（保留字标+CTA），折叠按钮按任务约定后置——移动端导航不完整</td><td><a href="https://github.com/WayJ/notegit/blob/main/.agents/notes/2026-10-13-ui-restyle.txt">UI-RESTYLE 遗留</a></td></tr>
     <tr><td>web font 未自托管</td><td>Inter/Cormorant Garamond 未随实例分发，多数客户端落到系统兜底字体（Garamond/Times + 系统 sans），品牌观感不一致；未引外部字体服务是安全决定</td><td>同上</td></tr>
     <tr><td>共享只读对象缓存后续</td><td>托管 Harness 跨员工共享 git 对象/浅克隆缓存本版不提供；未来引入须独立评估缓存读取权限（对象可达性是权限数据）</td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/harness/hosted-runbook.md">hosted-runbook §5</a></td></tr>
     <tr><td>单实例假设</td><td>初版为单实例、单应用进程：无高可用承诺，进程生命周期靠容器 restart policy；多实例/水平扩展未评估</td><td>架构 §9/§10、<a href="deploy/README.html">deploy/README</a></td></tr>
     <tr><td>Q9 未定</td><td>可用性/备份频率/可接受恢复损失（RPO/RTO）三要素的数值目标尚未与试用方确认——当前备份频率与恢复时限无量化承诺</td><td><a href="https://github.com/WayJ/notegit/blob/main/.agents/notes/2026-10-14-S8-T8-capacity.md">S8-T8 容量档案</a>、roadmap Q9</td></tr>
-    <tr><td>规则版本未定稿</td><td>rulesVersion 仍为 <code>1.0.0-draft.2</code>（draft），<code>1.0.0</code> 定稿升版未发生；不影响三端一致性（同一版本号全链一致）</td><td><a href="contracts/rules-version.json">rules-version.json</a></td></tr>
+    <tr><td>规则版本未定稿</td><td>rulesVersion 仍为 <code>1.0.0-draft.2</code>（draft），<code>1.0.0</code> 定稿升版未发生；不影响三端一致性（同一版本号全链一致）</td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/rules-version.json">rules-version.json</a></td></tr>
     <tr><td>配置 HTTP 端点未挂接</td><td><code>GET/PUT /api/v1/admin/config</code> 契约已定稿、HTTP 挂接未实现——运行时改限制键走 <code>app_settings</code> 行（SQL）或环境变量（均热生效）</td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/api.md">api.md §3.4</a></td></tr>
     <tr><td>管理员锁死恢复未实现</td><td>规划的主机侧命令 <code>notegit admin recover</code> 尚未实现，且无「最后管理员」保护——实例管理员全员锁死当前无自助恢复路径；<strong>保持至少两名实例管理员</strong></td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/dev/architecture-notes.md">architecture-notes</a> §6.3/§6.6</td></tr>
     <tr><td>搜索索引边界</td><td>重建期间查询降级为部分结果（鉴权过滤不降级）；frontmatter 折叠多行标量（<code>&gt;</code>/`</td><td>` 罕见形态）在索引中退化为 title=NULL/tags=[]（行仍入索引）</td></tr>

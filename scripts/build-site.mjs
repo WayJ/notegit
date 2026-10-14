@@ -102,14 +102,14 @@ export function rewriteHref(href, srcDir, outDir) {
   const hashAt = href.indexOf('#');
   const path = hashAt === -1 ? href : href.slice(0, hashAt);
   const anchor = hashAt === -1 ? '' : href.slice(hashAt);
-  if (path === '' || !path.endsWith('.md')) return null; // 非 md 资产
+  if (path === '') return null;
   const target = posix.normalize(posix.join(srcDir, path));
   if (target.startsWith('..')) return null; // 越出仓库根
   const out = srcToOut.get(target);
   if (out !== undefined) {
     return posix.join(posix.relative(outDir, posix.dirname(out)), posix.basename(out)) + anchor;
   }
-  // 未入映射表的仓库文档（契约/手册/选型等源互链）：站内无此页——改写为 GitHub
+  // 未入映射表的仓库路径（契约/手册/选型/数据文件等源互链，任意扩展名）：站内无此页——改写为 GitHub
   // blob 绝对 URL（锚点 GitHub 形态一致），站内零死链（DOD-E3-02；2026-10-14 master
   // 修正：原「原样保留」在静态站上是死链）。路径分支=main（源文档随仓库演进）。
   return `https://github.com/WayJ/notegit/blob/main/${target}${anchor}`;

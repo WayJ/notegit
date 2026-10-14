@@ -187,7 +187,7 @@ docker exec notegit node src/audit/reconcile-cli.ts reconcile \
   <li>审计查询：<code>GET /api/v1/admin/audit</code>（按库/主体/事件/状态/时间过滤）。</li>
 </ul>
 <h2>8. 容量与限制配置</h2>
-<p>限制键的唯一源是 <a href="../contracts/validation-defaults.json">validation-defaults.json</a>（文档/附件大小、附件类型清单、单次 push、库容量、豁免、校验超时/并发/内存）+ <code>git.maxConcurrentChildren</code>（git 子进程并发上限，默认 8，超出 FIFO 排队不拒绝）。覆盖链：契约默认 ← 环境变量 <code>NOTEGIT_&lt;键名&gt;</code>（JSON 字面量）← <code>app_settings</code> 行（同键胜环境）。全部<strong>热生效</strong>，非法值 fail-closed（拒绝并指名键，不静默回退）。</p>
+<p>限制键的唯一源是 <a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/validation-defaults.json">validation-defaults.json</a>（文档/附件大小、附件类型清单、单次 push、库容量、豁免、校验超时/并发/内存）+ <code>git.maxConcurrentChildren</code>（git 子进程并发上限，默认 8，超出 FIFO 排队不拒绝）。覆盖链：契约默认 ← 环境变量 <code>NOTEGIT_&lt;键名&gt;</code>（JSON 字面量）← <code>app_settings</code> 行（同键胜环境）。全部<strong>热生效</strong>，非法值 fail-closed（拒绝并指名键，不静默回退）。</p>
 <ul>
   <li>运行时改值 = 写 <code>app_settings</code> 行（SQL/ops）；HTTP 配置端点（<code>GET/PUT /api/v1/admin/config</code>）契约已定稿、<strong>HTTP 挂接尚未实现</strong>，勿按端点方式操作。</li>
   <li>大批量初始导入会超默认 push 上限——临时调高、完成后回落的示例见 <a href="../deploy/README.html">deploy/README.md</a>「初始导入指引」。</li>

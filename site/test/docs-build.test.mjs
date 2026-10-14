@@ -157,8 +157,8 @@ test('链接改写单元：rewriteHref 外链/锚点不动、未映射→GitHub 
   // 未入映射表的仓库路径：改写为 GitHub blob 绝对 URL（站内零死链——2026-10-14 master 修正原「不动」策略）
   assert.equal(F('contracts/api.md', 'docs', 'site/docs'), 'https://github.com/WayJ/notegit/blob/main/docs/contracts/api.md');
   assert.equal(F('../../cli/README.md', 'docs/admin', 'site/docs/admin'), 'https://github.com/WayJ/notegit/blob/main/cli/README.md');
-  // 非 md 资产：不改
-  assert.equal(F('img/a.png', 'docs/user', 'site/docs/user'), null);
+  // 非映射资产（任意扩展名，仓库内路径）：同改写 blob URL
+  assert.equal(F('img/a.png', 'docs/user', 'site/docs/user'), 'https://github.com/WayJ/notegit/blob/main/docs/user/img/a.png');
   // 映射内：同目录、跨目录、锚点保留
   assert.equal(F('quickstart.md', 'docs/user', 'site/docs/user'), 'quickstart.html');
   assert.equal(F('contributing.md#冲突处理', 'docs/user', 'site/docs/user'), 'contributing.html#冲突处理');

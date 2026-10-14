@@ -104,7 +104,7 @@ selection §5 / roadmap Q2 的正式修订已由
   ← app_settings 行（管理员运行时配置；同键胜环境——SQL/ops 写行即可，
      管理端点随 api.md 契约补录，见 capacity-face-amendments G5）</code></pre>
 <p><strong>校验限制</strong>（10 键，语义与默认值见
-<a href="../docs/contracts/validation-defaults.json">validation-defaults.json</a> 与
+<a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/validation-defaults.json">validation-defaults.json</a> 与
 <a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/validation.md">validation §5.1</a>）：文档/附件大小、附件类型
 清单、单次 push 大小、库容量、豁免清单、校验超时/并发/内存。非法值 fail-closed
 （对应入口拒绝并指名配置键，不静默回退默认值）。</p>
@@ -155,7 +155,7 @@ node server/src/backup/cli.ts verify --data-item ./backup-set/&lt;时间戳&gt;-
 <p>运维义务（backup §6）：<strong>K3 TLS 私钥位置、K4 DB 口令保管处</strong>的记录须与密钥件
 同置保存（工具不代管部署层机密）；密钥件建议移至独立介质/访问控制域静态加密
 存放。演练证据（真实容器 16 步全绿）：
-<a href="../.agents/notes/2026-10-13-S8-T4-backup-drill.txt">.agents/notes/2026-10-13-S8-T4-backup-drill.txt</a>。</p>
+<a href="https://github.com/WayJ/notegit/blob/main/.agents/notes/2026-10-13-S8-T4-backup-drill.txt">.agents/notes/2026-10-13-S8-T4-backup-drill.txt</a>。</p>
 <h2>HTTPS 接入（选型记录）</h2>
 <p><strong>定稿：反向代理终结 TLS，容器保持 HTTP。</strong>（K3 交付形态——identity §6.1 K3：
 TLS 证书/私钥由部署方提供与管控，属实例外流程；selection §5 网络行「反代终结或
