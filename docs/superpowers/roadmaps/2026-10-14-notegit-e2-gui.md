@@ -48,7 +48,7 @@ E2 关闭须逐条附证据链接；部分满足不勾整条。**全部新改页
 
 | sprint | state | note |
 |---|---|---|
-| S10 | started | 可达性与权限（G01–G04）；2026-10-14 go：用户指令「GUI 重新思考产品功能并开发」、research.md 已合并 @ cd6eb76、任务由 research §5 Sprint A 派生、四要素明确（范围=本表与 S10 plan、执行=Orca worker ≤3 superpowers+TDD、评审=master、验证=TDD+gates+场景实测）；与 E1 无未决依赖（E1 侧 T3/T4 挂起不阻塞本 sprint）；2026-10-14 started：[2026-10-14-S10-plan.md](../sprints/2026-10-14-S10-plan.md) |
+| S10 | merged | 可达性与权限（G01–G04）；2026-10-14 验收 pass（六场景全绿）并合并 main @ 87ac712——DOD-E2-01~04+10 达标（acceptances/2026-10-14-S10-acceptance.md） | [2026-10-14-S10-plan.md](../sprints/2026-10-14-S10-plan.md)；原始启动裁决：research §5 Sprint A 派生、Orca worker ≤3 superpowers+TDD |
 | S11 | planned | 检索与动态（G05–G07）；依赖 S10（browse 页面基线先稳定）；启动前确认全文检索实现选型方向（Q-E2-2 有方案稿） |
 | S12 | planned | 编辑体验与框架落地（G08–G10）；依赖 S11；Q-E2-1 已裁决 A（D19）——S12 含共享组件抽取第一步 |
 
