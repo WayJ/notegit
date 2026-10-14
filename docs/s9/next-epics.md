@@ -54,3 +54,12 @@ SSH、Git LFS、多实例、知识巡检）——定义、依赖与验证要点�
   现已过时——提请 S9-T8/master 复核该行（v0.1 发布说明兼容矩阵与 deploy/README 均已按 768MB 陈述）。
 - 单实例/HA、多实例、Windows CLI、SSH、Git LFS 等**第一版明确排除项**：roadmap 后续演进主题已
   覆盖（§1），不重复登记。
+
+## E2 收口追记（2026-10-14）
+
+| 候选 | 说明 | 来源 |
+|---|---|---|
+| 升级后索引重建提示 | 迁移 0010 后存量库需一次 search-index rebuild 回填 body——upgrade-drill 补一行提示 | S11 acceptance Obstacles |
+| edit 域共享块抽取候选 | composeDoc/renderReport/自动保存（域内单源，迁移即行为面外溢——须单列任务） | S12 D 批裁决 (c) |
+| 两族错误信封统一 | ngt.api/ngt.apiEnvelope 双语义保留为行为零变化所依；统一须单列任务 | S12 D 批裁决 (b) |
+| restorePage viewer 接线 | T2 批准面外的收口候选（已由 T3 同形态覆盖大部分状态页） | S12-T2 A3-3 |
