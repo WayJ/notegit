@@ -13,6 +13,7 @@ import { readEntryAt, readBlobText, README_RENDER_MAX_BYTES, treePathOk } from '
 import { parseDocForForm, titleFromFilename } from './form.ts';
 import { editPage, readmeEditPage, editStatePage, newNotePage, newNoteExistsPage } from './pages.ts';
 import { DraftsService, type DraftContent } from '../../drafts/service.ts';
+import { editPreviewPlugin } from './preview.ts';
 
 /**
  * S4-T3 编辑族路由（元数据表单 + 正文编辑）：
@@ -56,6 +57,14 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
   const vaults = new VaultService({ db: opts.db }); // 只读消费（getVaultRow）
   const membershipSource = createDbMembershipSource(opts.db); // 三入口同源成员判定
   const drafts = new DraftsService({ db: opts.db }); // 只读消费（get——回填预取）
+
+  // S12-T1 编辑预览片段端点（sprint D2——POST /edit-preview/{slug}/{path}；
+  // 插件作用域自带 JSON 传输护栏；维护放行先例与路径裁决见 preview.ts 头注）
+  app.register(editPreviewPlugin, {
+    db: opts.db,
+    ...(opts.dataDir !== undefined ? { dataDir: opts.dataDir } : {}),
+    requirePageUser: opts.requirePageUser,
+  });
 
   async function requireVault(
     req: FastifyRequest,
