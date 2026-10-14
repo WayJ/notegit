@@ -83,6 +83,9 @@ export interface EditPageInput {
 /** 只读徽章（S10-T2：DESIGN.md badge-pill 形态——`.badge` 既有类，token 语义） */
 const READONLY_BADGE = '<span class="badge">只读成员</span>';
 
+/** 自动保存缺省间隔（D3：页内可调常量的唯一服务端来源——脚本常量与状态行文案同源防漂移） */
+const AUTOSAVE_INTERVAL_MS_DEFAULT = 30_000;
+
 /** 回填标注（T6 移交：呈现草稿 base_commit 旧值；stale=分支已前进如实提示） */
 function draftNote(draft: { baseCommit: string | null; updatedAt: string; stale: boolean }): string {
   const base = draft.baseCommit === null ? '（空库）' : escapeHtml(draft.baseCommit);
@@ -139,6 +142,38 @@ async function api(method, url, body) {
   if (!res.ok) { const e = new Error((data.error && data.error.message) || res.status); e.status = res.status; e.data = data; throw e; }
   return data;
 }
+`;
+
+// ── 草稿自动保存共享块（S12-T1 D3）：定时（默认 30s——常量在块顶可调，不引
+//    配置面）+ 失焦触发（focusout 冒泡——离开字段即点检）；仅内容较上次保存
+//    有变化才落库（未变不写）；状态行如实呈现（已保存 HH:MM / 失败重试提示——
+//    非阻断，不打断编辑）。页各异的部分由 autosaveContent/autosavePut 两函数
+//    提供（函数声明提升——共享块先包含、页函数随后定义即可）。
+const autosaveJs = (formId: string): string => `
+// ── 草稿自动保存（S12-T1 D3）──
+const AUTOSAVE_INTERVAL_MS = ${AUTOSAVE_INTERVAL_MS_DEFAULT};
+let autosaveSaved = null; // 上次已落库内容（脏判定——未变不写）
+let autosaveBusy = false; // 在途防重入（上笔未归则本轮跳过）
+let autosaveHalted = false; // 提交成功后停自动保存（草稿清理语义不变——迟到 PUT 不得复活草稿）
+function autosaveStatus(text) { document.getElementById('autosave-status').textContent = text; }
+function autosaveClock() { const t = new Date(); return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); }
+async function autosaveNow() {
+  if (autosaveBusy || autosaveHalted) return;
+  const content = autosaveContent();
+  if (content === null || content === autosaveSaved) return;
+  autosaveBusy = true;
+  try {
+    await autosavePut(content);
+    autosaveSaved = content;
+    autosaveStatus('草稿已自动保存（' + autosaveClock() + '）');
+  } catch (err) {
+    autosaveStatus('自动保存失败：' + err.message + '——内容保留在表单中，下个间隔自动重试');
+  } finally {
+    autosaveBusy = false;
+  }
+}
+setInterval(autosaveNow, AUTOSAVE_INTERVAL_MS);
+document.getElementById('${formId}').addEventListener('focusout', autosaveNow);
 `;
 
 const RENDER_REPORT_JS = `
@@ -200,11 +235,64 @@ const BASE = ${baseCommit === null ? "null" : js(baseCommit)};
 const VIEW_URL = ${JSON.stringify(`/vaults/${encodeURIComponent(vault.slug)}/view/${entryPath.split('/').map(encodeURIComponent).join('/')}`)};
 const DRAFT_URL = ${JSON.stringify(draftPutUrl(vault.slug, entryPath))};
 const SUBMIT_URL = ${JSON.stringify(`${apiBase}/submissions`)};
-${COMPOSE_DOC_JS}${API_FN_JS}${RENDER_REPORT_JS}
+${COMPOSE_DOC_JS}${API_FN_JS}${RENDER_REPORT_JS}${autosaveJs('edit-form')}
+// 自动保存页适配（D3）：内容=组装全文（frontmatter+正文，与手动保存同一形状）
+function autosaveContent() { return composeDoc(); }
+async function autosavePut(content) { await api('PUT', DRAFT_URL, { content: content, base_commit: BASE }); }
+
+// ── 附件粘贴/拖拽（S12-T1 D4）：正文 textarea paste/drop 取 File → 既有上传
+// 端点（octet-stream；判定单一来源=端点——编辑器不预判类型白名单，端点拒即
+// 如实呈现 error.code+hint）→ 成功按类型回插引用（image/* → ![](url)；其余
+// → [name](url)）。目标路径=文档所在目录+原文件名（重名覆盖由端点 upsert 判定）。
+const UPLOAD_BASE = ${JSON.stringify(`/vaults/${encodeURIComponent(vault.slug)}/upload`)};
+const UPLOAD_DIR = ${JSON.stringify(parentDirOf(entryPath) === '' ? '' : `${parentDirOf(entryPath).split('/').map(encodeURIComponent).join('/')}/`)};
+const bodyTA = document.getElementById('edit-form').body;
+function insertRef(ta, text) {
+  const at = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? at;
+  ta.value = ta.value.slice(0, at) + text + ta.value.slice(end);
+  const caret = at + text.length;
+  ta.setSelectionRange(caret, caret);
+  ta.dispatchEvent(new Event('input', { bubbles: true })); // 正文变化广播（预览随 input 刷新；自动保存随脏判定跟进）
+}
+async function uploadAndInsert(file) {
+  const status = document.getElementById('autosave-status');
+  status.textContent = '附件上传中：' + file.name + '…';
+  try {
+    const res = await fetch(UPLOAD_BASE + '/' + UPLOAD_DIR + encodeURIComponent(file.name), {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: file,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      const err = data.error || {};
+      throw new Error((err.code ? err.code + ' ' : '') + (err.message || ('HTTP ' + res.status)) + (err.hint ? '（' + err.hint + '）' : ''));
+    }
+    insertRef(bodyTA, (file.type.startsWith('image/') ? '![](' : '[' + file.name + '](') + data.url + ')\\n');
+    status.textContent = '附件已上传并插入引用：' + file.name;
+  } catch (err) {
+    status.textContent = '上传失败：' + file.name + '——' + err.message + '（未插入引用；可重试或经上传页）';
+  }
+}
+bodyTA.addEventListener('paste', (ev) => {
+  const files = ev.clipboardData && ev.clipboardData.files;
+  if (!files || files.length === 0) return; // 纯文本粘贴不拦截——浏览器默认行为
+  ev.preventDefault();
+  for (const file of files) uploadAndInsert(file);
+});
+bodyTA.addEventListener('drop', (ev) => {
+  const files = ev.dataTransfer && ev.dataTransfer.files;
+  if (!files || files.length === 0) return;
+  ev.preventDefault();
+  for (const file of files) uploadAndInsert(file);
+});
+bodyTA.addEventListener('dragover', (ev) => ev.preventDefault());
 document.getElementById('save-draft').addEventListener('click', async () => {
   const msg = document.getElementById('form-msg');
   try {
     const r = await api('PUT', DRAFT_URL, { content: composeDoc(), base_commit: BASE });
+    autosaveSaved = composeDoc(); // 手动保存成功即对齐基线（自动保存不重复落库）
     msg.textContent = '草稿已保存' + (r && r.updated_at ? '（' + r.updated_at + '）' : '') + '。';
   } catch (err) {
     msg.textContent = '保存草稿失败：' + err.message;
@@ -221,6 +309,7 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
       message: f.message.value.trim() || ('Web 编辑：' + PATH),
       changes: [{ path: PATH, content: composeDoc() }],
     });
+    autosaveHalted = true; // 已发布：停自动保存（迟到 PUT 不得复活已清理草稿）
     msg.textContent = '已发布（commit ' + (r.commit || '?') + '）——草稿已标记为已提交。';
     setTimeout(() => { location.href = VIEW_URL; }, 600);
   } catch (err) {
@@ -236,6 +325,7 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
     }
   }
 });
+autosaveSaved = autosaveContent(); // 基线=装入内容（此后仅变化触发落库）
 `;
 
   return layout(
@@ -261,12 +351,13 @@ ${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</c
   <p id="form-msg" role="alert"></p>
 ${ro
   ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：仅可查看本页，不能保存草稿或提交发布。</p>`
-  : `  <div class="form-actions">
+  : `  <p class="form-foot" id="autosave-status" role="status" aria-live="polite">自动保存已就绪（编辑期间每 30 秒与失焦时自动保存草稿）。</p>
+  <div class="form-actions">
   <button type="button" id="save-draft">保存草稿</button>
   <button type="submit">提交</button>
   </div>`}
   </form>
-${ro ? '' : `  <p class="form-foot"><small>保存=草稿（按作者私有、不产生 Git 版本，可再保存覆盖）；提交=正式发布（走统一校验与发布组件）——提交成功后草稿标记为已提交。</small></p>`}
+${ro ? '' : `  <p class="form-foot"><small>保存=草稿（按作者私有、不产生 Git 版本，可再保存覆盖；编辑期间每 30 秒与失焦时自动保存草稿）；提交=正式发布（走统一校验与发布组件）——提交成功后草稿标记为已提交。</small></p>`}
 </div>
 `,
     script,
@@ -296,9 +387,14 @@ async function api(method, url, body) {
   if (!res.ok) { const e = new Error((data.error && data.error.message) || res.status); e.status = res.status; e.data = data; throw e; }
   return data;
 }
+${autosaveJs('readme-form')}
+// 自动保存页适配（D3）：README 豁免 frontmatter——内容=正文 textarea 全量
+function autosaveContent() { return document.getElementById('readme-body').value; }
+async function autosavePut(content) { await api('PUT', DRAFT_URL, { content: content, base_commit: BASE }); }
 document.getElementById('save-draft').addEventListener('click', async () => {
   try {
     await api('PUT', DRAFT_URL, { content: document.getElementById('readme-body').value, base_commit: BASE });
+    autosaveSaved = document.getElementById('readme-body').value; // 手动保存成功即对齐基线
     document.getElementById('form-msg').textContent = '草稿已保存。';
   } catch (err) {
     document.getElementById('form-msg').textContent = '保存草稿失败：' + err.message;
@@ -312,6 +408,7 @@ document.getElementById('readme-form').addEventListener('submit', async (ev) => 
       message: 'Web 编辑：' + PATH,
       changes: [{ path: PATH, content: document.getElementById('readme-body').value }],
     });
+    autosaveHalted = true; // 已发布：停自动保存（迟到 PUT 不得复活已清理草稿）
     document.getElementById('form-msg').textContent = '已发布（commit ' + (r.commit || '?') + '）——草稿已标记为已提交。';
     setTimeout(() => { location.href = VIEW_URL; }, 600);
   } catch (err) {
@@ -324,6 +421,7 @@ document.getElementById('readme-form').addEventListener('submit', async (ev) => 
     }
   }
 });
+autosaveSaved = autosaveContent(); // 基线=装入内容（此后仅变化触发落库）
 `;
   return layout(
     `编辑：${name} — ${vault.name}`,
@@ -339,7 +437,8 @@ ${ro ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：正文可看不�
   <p id="form-msg" role="alert"></p>
 ${ro
   ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：仅可查看本页，不能保存草稿或提交发布。</p>`
-  : `  <div class="form-actions">
+  : `  <p class="form-foot" id="autosave-status" role="status" aria-live="polite">自动保存已就绪（编辑期间每 30 秒与失焦时自动保存草稿）。</p>
+  <div class="form-actions">
   <button type="button" id="save-draft">保存草稿</button>
   <button type="submit">提交</button>
   </div>`}
@@ -429,7 +528,14 @@ function pathProblem(p) {
 }
 const encPath = (p) => p.split('/').map(encodeURIComponent).join('/');
 const viewUrlOf = (p) => VIEW_BASE + encPath(p);
-${COMPOSE_DOC_JS}${API_FN_JS}${RENDER_REPORT_JS}
+${COMPOSE_DOC_JS}${API_FN_JS}${RENDER_REPORT_JS}${autosaveJs('edit-form')}
+// 自动保存页适配（D3）：键=路径+内容（路径输入变化也算脏——新路径下留草稿）；
+// 路径未定形（必填/.md/非法段）时 null——不落库，路径定形后随内容变化保存
+function autosaveContent() {
+  const p = currentPath();
+  return pathProblem(p) !== null ? null : p + '\\n' + composeDoc();
+}
+async function autosavePut(_content) { await api('PUT', DRAFT_BASE + encPath(currentPath()), { content: composeDoc(), base_commit: BASE }); }
 document.getElementById('save-draft').addEventListener('click', async () => {
   const msg = document.getElementById('form-msg');
   const p = currentPath();
@@ -438,6 +544,7 @@ document.getElementById('save-draft').addEventListener('click', async () => {
   document.getElementById('err-path').textContent = '';
   try {
     const r = await api('PUT', DRAFT_BASE + encPath(p), { content: composeDoc(), base_commit: BASE });
+    autosaveSaved = p + '\\n' + composeDoc(); // 手动保存成功即对齐基线
     msg.textContent = '草稿已保存（路径 ' + p + (r && r.updated_at ? '，' + r.updated_at : '') + '）——重新打开本页（带 path=' + p + '）可回填。';
   } catch (err) {
     msg.textContent = '保存草稿失败：' + err.message;
@@ -465,6 +572,7 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
       message: f.message.value.trim() || ('Web 新建：' + p),
       changes: [{ path: p, content: composeDoc() }],
     });
+    autosaveHalted = true; // 已发布：停自动保存（迟到 PUT 不得复活已清理草稿）
     msg.textContent = '已创建并发布（commit ' + (r.commit || '?') + '）——即将打开新文档。';
     setTimeout(() => { location.href = viewUrlOf(p); }, 600);
   } catch (err) {
@@ -480,6 +588,7 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
     }
   }
 });
+autosaveSaved = autosaveContent(); // 基线=装入内容（此后仅变化触发落库）
 `;
   return layout(
     `新建笔记 — ${vault.name}`,
@@ -505,7 +614,8 @@ ${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</c
   <p id="form-msg" role="alert"></p>
 ${ro
   ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：仅可查看本页，不能保存草稿或提交发布。</p>`
-  : `  <div class="form-actions">
+  : `  <p class="form-foot" id="autosave-status" role="status" aria-live="polite">自动保存已就绪（路径定形后，每 30 秒与失焦时自动保存草稿）。</p>
+  <div class="form-actions">
   <button type="button" id="save-draft">保存草稿</button>
   <button type="submit">创建</button>
   </div>`}
