@@ -50,14 +50,14 @@ E2 关闭须逐条附证据链接；部分满足不勾整条。**全部新改页
 |---|---|---|
 | S10 | started | 可达性与权限（G01–G04）；2026-10-14 go：用户指令「GUI 重新思考产品功能并开发」、research.md 已合并 @ cd6eb76、任务由 research §5 Sprint A 派生、四要素明确（范围=本表与 S10 plan、执行=Orca worker ≤3 superpowers+TDD、评审=master、验证=TDD+gates+场景实测）；与 E1 无未决依赖（E1 侧 T3/T4 挂起不阻塞本 sprint）；2026-10-14 started：[2026-10-14-S10-plan.md](../sprints/2026-10-14-S10-plan.md) |
 | S11 | planned | 检索与动态（G05–G07）；依赖 S10（browse 页面基线先稳定）；启动前确认全文检索实现选型方向（Q-E2-2 有方案稿） |
-| S12 | planned | 编辑体验与框架落地（G08–G10）；依赖 S11 与 Q-E2-1 用户裁决 |
+| S12 | planned | 编辑体验与框架落地（G08–G10）；依赖 S11；Q-E2-1 已裁决 A（D19）——S12 含共享组件抽取第一步 |
 
 ```mermaid
 flowchart LR
     E1["E1 (open: 试用缺口)"] -.不阻塞.-> S10["S10 可达性与权限"]
     S10 --> S11["S11 检索与动态"]
     S11 --> S12["S12 编辑体验"]
-    Q["Q-E2-1 框架裁决(用户)"] --> S12
+    Q["Q-E2-1 框架裁决→A(D19)"] -.已决.-> S12
 ```
 
 ### S10：可达性与权限
@@ -94,6 +94,7 @@ ADR 编号接续 E1（D1–D14）。
 | D16 | Sprint A/B（S10/S11）设计为前端框架无关——服务端渲染 + 既有页面族内演进；框架选型只影响 S12 及以后 | research.md §4 矩阵显示 A/B 方案权衡集中在交互复杂页（edit/admin/credentials）；避免裁决悬置阻塞止损 | 2026-10-14；research.md §4/§5 |
 | D17 | 页面域 UI 改动不触碰安全判定：写入口的显示/隐藏只是呈现层优化，POST 侧全量鉴权与 D-IC-06（无权=不存在同 404）不变，独立测试锁定 | 权限感知 UI（P0-4）最大风险是「前端门禁」错觉；E1 DOD-02/03 语义不可回归 | 2026-10-14；research.md §2.2、E1 D1/D3 |
 | D18 | 全文检索 v1 不引外部全文引擎：沿用 SQL 派生面（LIKE 扫描或 SQLite 内建能力），容量约束与「索引可重建」原则（架构 §9）不变 | api.md §3.6 明文「不引全文引擎——容量选型」；E1 D7 容量纪律 | 2026-10-14；D18 本行、Q-E2-2 |
+| D19 | 前端框架裁决 A（Q-E2-1 closed）：维持纯 SSR + 内联 vanilla JS，零构建链/零外部 JS 依赖不变；重复内联逻辑（api() 封装等）抽为共享 assets 脚本；S12 编辑器功能用原生 fetch 覆盖。回看条件：产品立项实时协作/离线能力时重开（彼时按 C 方案重估迁移成本） | 用户裁决 2026-10-14；research.md §4 矩阵——A 在包体积/构建链/SSR 共存/安全与测试面冲击四维全为 ★ 最优；安全不变量（服务端转义唯一通道/D-IC-06/CSRF）无需迁移 | 2026-10-14；用户裁决、research.md §4 |
 
 ## Asset Disposition
 
@@ -108,7 +109,7 @@ ADR 编号接续 E1（D1–D14）。
 
 | id | question | status | resolution | date / evidence |
 |---|---|---|---|---|
-| Q-E2-1 | 前端框架：A 维持纯 SSR+内联 JS / B 轻框架（htmx/Alpine）/ C SPA（React/Vue/Svelte）？ | open | research.md §4 三方案权衡矩阵已备（只列利弊）；**用户裁决**；不阻塞 S10/S11（D16） | 2026-10-14；research.md §4 |
+| Q-E2-1 | 前端框架：A 维持纯 SSR+内联 JS / B 轻框架（htmx/Alpine）/ C SPA（React/Vue/Svelte）？ | closed | **2026-10-14 用户裁决 A**：维持纯 SSR + 内联 JS，公共组件抽取（共享 assets 脚本）；D19 入册 | 2026-10-14；research.md §4、D19 |
 | Q-E2-2 | 全文检索 v1 实现形态：服务端 LIKE 扫描 / SQLite FTS5 / 派生索引扩列？ | open | S11 启动前由实现方出方案稿（约束：无外部引擎、索引可重建、鉴权过滤逐请求——D18） | 2026-10-14；D18 |
 
 ## Cross-cutting
@@ -125,3 +126,4 @@ ADR 编号接续 E1（D1–D14）。
 | date | change | evidence |
 |---|---|---|
 | 2026-10-14 | E2 立项：依据用户裁决 B 与 research.md；S10–S12 拆分、DoD-E2-01~10、D15–D18 | 本文件；cd6eb76；.agents/notes/2026-10-14-E2-research-settlement.md |
+| 2026-10-14 | Q-E2-1 用户裁决 A（纯 SSR+组件抽取）；ADR D19 入册；S12 依赖只剩 S11 | 用户裁决；research.md §4 |
