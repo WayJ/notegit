@@ -1,6 +1,8 @@
 # S12 编辑体验契约补正建议（§13 页面路由）
 
-- **状态**：S12-T1 起草（2026-10-14），draft-first——待 master 评审。评审通过后由 master 落契约原文（§13 表）并在 epic 的 Decisions (ADR) 记录；按仓库约束，本文件不改契约正文。先例：metrics-face-amendments.md（S8-T2）、docs/s11/api-amendments.md（S11 D-batch）。
+- **状态**：S12-T1 起草（2026-10-14），draft-first——待 master 评审。
+>
+> **2026-10-14 master 裁决落契（D 批）**：B1 逐字采纳（路径裁决=/edit-preview 终局——前缀外注册即语义陈述，不做 write-gate 豁免）；B2 及维护缝补句采纳；T2-A1 逐字采纳（无上限截断明示保留；§7 不双记）；T2-A2 采纳（落为共享布局壳句——锚在组装点段，独立于 A1 不属双记）；T3-C 闭环记录在案；T3-D 尾注句采纳（独立于 A2——资产面与布局面不同关切）；两族错误信封双语义保留为行为零变化所依（未来统一须单列任务）；edit 域共享块（composeDoc/renderReport/自动保存）列为后续抽取候选（记 next-epics）。gates 82/82 复验。评审通过后由 master 落契约原文（§13 表）并在 epic 的 Decisions (ADR) 记录；按仓库约束，本文件不改契约正文。先例：metrics-face-amendments.md（S8-T2）、docs/s11/api-amendments.md（S11 D-batch）。
 - **范围**：S12-T1 落地的契约外事实面——编辑预览片段端点（新行）+ 编辑页行为补记（自动保存/粘贴拖拽回插/双栏预览呈现）。自动保存与粘贴编排均**零新端点**（复用 §7 drafts PUT 与 §13 既有 upload POST——本建议稿只补呈现描述）。
 - **实现状态**：全部已实现并测试（预览端点 `server/src/web/edit/preview.ts`，注册点 `edit/routes.ts`；页面接线 `edit/pages.ts`；测试 `server/test/web-edit-preview.test.ts` 6 项 + `web-edit-autosave.test.ts` 4 项 + `web-edit-paste.test.ts` 3 项，先红后绿；npm test 全绿）。
 
