@@ -49,7 +49,7 @@ E2 关闭须逐条附证据链接；部分满足不勾整条。**全部新改页
 | sprint | state | note |
 |---|---|---|
 | S10 | merged | 可达性与权限（G01–G04）；2026-10-14 验收 pass（六场景全绿）并合并 main @ 87ac712——DOD-E2-01~04+10 达标（acceptances/2026-10-14-S10-acceptance.md） | [2026-10-14-S10-plan.md](../sprints/2026-10-14-S10-plan.md)；原始启动裁决：research §5 Sprint A 派生、Orca worker ≤3 superpowers+TDD |
-| S11 | planned | 检索与动态（G05–G07）；依赖 S10（browse 页面基线先稳定）；启动前确认全文检索实现选型方向（Q-E2-2 有方案稿） |
+| S11 | started | 检索与动态（G05–G07）；2026-10-14 go：S10 merged @ 87ac712（browse 基线稳定）、Q-E2-2 已关闭（D20 方案稿）、四要素明确（范围=本表与 S11 plan、执行=Orca worker ≤3 superpowers+TDD、评审=master、验证=TDD+gates+场景实测）；2026-10-14 started：[2026-10-14-S11-plan.md](../sprints/2026-10-14-S11-plan.md) |
 | S12 | planned | 编辑体验与框架落地（G08–G10）；依赖 S11；Q-E2-1 已裁决 A（D19）——S12 含共享组件抽取第一步 |
 
 ```mermaid
@@ -95,6 +95,7 @@ ADR 编号接续 E1（D1–D14）。
 | D17 | 页面域 UI 改动不触碰安全判定：写入口的显示/隐藏只是呈现层优化，POST 侧全量鉴权与 D-IC-06（无权=不存在同 404）不变，独立测试锁定 | 权限感知 UI（P0-4）最大风险是「前端门禁」错觉；E1 DOD-02/03 语义不可回归 | 2026-10-14；research.md §2.2、E1 D1/D3 |
 | D18 | 全文检索 v1 不引外部全文引擎：沿用 SQL 派生面（LIKE 扫描或 SQLite 内建能力），容量约束与「索引可重建」原则（架构 §9）不变 | api.md §3.6 明文「不引全文引擎——容量选型」；E1 D7 容量纪律 | 2026-10-14；D18 本行、Q-E2-2 |
 | D19 | 前端框架裁决 A（Q-E2-1 closed）：维持纯 SSR + 内联 vanilla JS，零构建链/零外部 JS 依赖不变；重复内联逻辑（api() 封装等）抽为共享 assets 脚本；S12 编辑器功能用原生 fetch 覆盖。回看条件：产品立项实时协作/离线能力时重开（彼时按 C 方案重估迁移成本） | 用户裁决 2026-10-14；research.md §4 矩阵——A 在包体积/构建链/SSR 共存/安全与测试面冲击四维全为 ★ 最优；安全不变量（服务端转义唯一通道/D-IC-06/CSRF）无需迁移 | 2026-10-14；用户裁决、research.md §4 |
+| D20 | 全文检索 v1 实现：派生索引扩 body（正文全文）列 + SQL LIKE 子串查询——检索语义与既有元数据面完全同一（ASCII 大小写不敏感、其他文字精确子串，CJK 2 字可命中）；派生/可重建/鉴权逐请求 JOIN 原则不变。FTS5(trigram) 否决：2 字 CJK 查询不可命中（trigram 最小 3 字符）+ 索引约 3 倍正文膨胀；node:sqlite FTS5 可用性已实测但非产品承诺面。回看条件：单库文档数 × 正文规模使 LIKE 实测延迟不可接受（>500ms）时重估混合方案 | research §2.3 F-3/P0-3；api.md §3.6 既有语义延伸；D18 约束（无外部引擎）；CJK 查询习惯（2 字词高频） | 2026-10-14；master 方案稿（FTS5 探测实测 node:sqlite 可用但 trigram 2 字限制致命） |
 
 ## Asset Disposition
 
@@ -110,7 +111,7 @@ ADR 编号接续 E1（D1–D14）。
 | id | question | status | resolution | date / evidence |
 |---|---|---|---|---|
 | Q-E2-1 | 前端框架：A 维持纯 SSR+内联 JS / B 轻框架（htmx/Alpine）/ C SPA（React/Vue/Svelte）？ | closed | **2026-10-14 用户裁决 A**：维持纯 SSR + 内联 JS，公共组件抽取（共享 assets 脚本）；D19 入册 | 2026-10-14；research.md §4、D19 |
-| Q-E2-2 | 全文检索 v1 实现形态：服务端 LIKE 扫描 / SQLite FTS5 / 派生索引扩列？ | open | S11 启动前由实现方出方案稿（约束：无外部引擎、索引可重建、鉴权过滤逐请求——D18） | 2026-10-14；D18 |
+| Q-E2-2 | 全文检索 v1 实现形态：服务端 LIKE 扫描 / SQLite FTS5 / 派生索引扩列？ | closed | D20：派生索引扩 body 列 + LIKE（语义同一、CJK 2 字可查）；FTS5(trigram) 否决（2 字 CJK 不可命中） | 2026-10-14；D20 |
 
 ## Cross-cutting
 
