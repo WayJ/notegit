@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>安装与快速上手（员工视角） · Notegit 文档</title>
+<link rel="stylesheet" href="../../docs.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="../../index.html">Notegit</a>
+    <a class="back-home" href="../../index.html">返回首页</a>
+  </div>
+</header>
+<div class="docs-layout">
+  <details class="docs-nav" open>
+    <summary class="docs-nav-toggle">文档导航</summary>
+      <nav class="docs-nav-tree" aria-label="文档导航">
+      <section class="nav-group">
+        <h2>用户文档</h2>
+        <ul>
+        <li><a href="README.html">Notegit 用户文档（员工视角）</a></li>
+        <li><a aria-current="page" class="current" href="quickstart.html">安装与快速上手（员工视角）</a></li>
+        <li><a href="contributing.html">贡献流程：网页与 Git 双通道</a></li>
+        <li><a href="permissions.html">权限与撤权边界</a></li>
+        <li><a href="history-boundary.html">历史边界：重命名与跨库移动</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>管理员</h2>
+        <ul>
+        <li><a href="../admin/README.html">Notegit 管理员手册</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>部署</h2>
+        <ul>
+        <li><a href="../deploy/README.html">Notegit 容器部署（S8-T1 发行包）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>已知限制</h2>
+        <ul>
+        <li><a href="../known-limitations.html">已知限制（v0.1 · 2026-10-14）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>发布说明</h2>
+        <ul>
+        <li><a href="../release-notes-v0.2.0.html">Notegit v0.2.0 发布说明</a></li>
+        </ul>
+      </section>
+      </nav>
+  </details>
+  <main class="docs-main">
+    <article class="doc-article">
+<h1>安装与快速上手（员工视角）</h1>
+<p>从拿到账号到能在网页和本地两条通道工作的最短路径：<strong>登录 → 浏览 → 编辑 → 上传 → 历史 → 搜索</strong>，最后装 CLI。</p>
+<ul>
+  <li>网页端无需安装——浏览器打开服务器地址即可。</li>
+  <li>命令行（CLI + 原生 Git）适合批量整理和 Agent 协作，安装见文末。</li>
+  <li>角色与撤权的完整语义见<a href="permissions.html">权限与撤权边界</a>；双通道贡献细节见<a href="contributing.html">贡献流程</a>。</li>
+</ul>
+<h2>0. 你会从管理员那里拿到什么</h2>
+<p>管理员邀请你时会创建账号并给你一段<strong>一次性口令令牌</strong>（30 分钟内有效、只能用一次，经企业内渠道交付）。首次使用要先用它设置自己的口令；此外别无自助注册途径。</p>
+<h2>1. 首次设口令并登录</h2>
+<p>登录页没有「忘记密码/首次激活」表单，首次设口令经一次性令牌消费端点完成（任意有 curl 的机器即可）：</p>
+<pre><code class="language-sh"># 用管理员给的一次性令牌设置口令（口令长度须在 12–64 个字符之间）
+curl -fsS -X POST https://&lt;服务器地址&gt;/api/v1/auth/password-reset \
+  -H &#39;content-type: application/json&#39; \
+  -d &#39;{&quot;reset_token&quot;:&quot;&lt;一次性令牌&gt;&quot;,&quot;new_password&quot;:&quot;&lt;你的新口令&gt;&quot;}&#39;</code></pre>
+<p>然后打开 <code>https://&lt;服务器地址&gt;/login</code>，用用户名和口令登录。会话由 <code>ngt_sid</code> Cookie 维持（约 7 天不活动或 30 天绝对上限后过期，届时重新登录）。</p>
+<blockquote>
+<p>口令遗忘了找管理员重置：重置后旧会话全部失效。</p>
+</blockquote>
+<h2>2. 浏览知识与文档预览</h2>
+<ol>
+  <li>登录后进入首页，点「知识库」到达 <code>/vaults</code>：这里列出<strong>你有权限的库</strong>（slug、名称、你的角色）。看不到的库不会出现——无权库与不存在的库表现一致。</li>
+  <li>点进一个库进入目录浏览页（<code>/vaults/&lt;slug&gt;/browse</code>）：多级目录逐层进入，<code>README.md</code> 作为导航文档在页首展示。</li>
+  <li>点任意 <code>.md</code> 文档进入预览页（<code>/vaults/&lt;slug&gt;/view/&lt;路径&gt;</code>）：安全渲染的 Markdown、frontmatter 元数据徽章；图片等附件经鉴权读取（无权者拿不到）。</li>
+</ol>
+<p>浏览器地址即知识位置：库 + 库内路径。引用某段知识时的完整格式（含 commit）见下文「历史、diff 与还原」一节。</p>
+<h2>3. 编辑文档</h2>
+<p>编辑器在「编辑页」，直达地址 <code>/vaults/&lt;slug&gt;/edit/&lt;路径&gt;.md</code>（editor 及以上角色）：</p>
+<ul>
+  <li><strong>改既有文档</strong>：把预览页地址里的 <code>view</code> 换成 <code>edit</code> 即是；<code>README.md</code> 豁免元数据表单，直接编辑正文。</li>
+  <li><strong>新建文档</strong>：直接访问一个尚不存在的路径（如 <code>/vaults/&lt;slug&gt;/edit/notes/新主题.md</code>）即进入新建模式，<code>title</code> 自动按文件名预填（提交前可改）。</li>
+  <li><strong>元数据表单</strong>：<code>title</code> 必填（去空白后非空）；<code>owner</code> / <code>description</code> / <code>tags</code> / <code>status</code> / <code>source</code> 可选。缺 <code>title</code> 或 frontmatter 缺失会就地提示（如 <code>E-FM-001</code>），不会发布。</li>
+  <li><strong>正文</strong>：Markdown 文本框。</li>
+  <li><strong>保存草稿</strong>：草稿按作者私有，存在服务端数据库，不进 Git；换台电脑登录也能恢复。</li>
+  <li><strong>提交</strong>：正式提交产生一笔 Git 提交并发布到默认分支。提交时服务端按你打开编辑器时的 base commit 检查——如果别人已先提交，你会收到<strong>冲突提示（409）</strong>，草稿保留、页面提示刷新后重试，绝不静默覆盖你的或对方的修改。处理办法见<a href="contributing.html#冲突处理">贡献流程·冲突处理</a>。</li>
+</ul>
+<p>目录浏览页的每个文件条目旁有「重命名 / 删除」入口（重命名/删除都是一笔提交、历史可追溯，见<a href="history-boundary.html">历史边界</a>）；整目录的上传入口见下节。</p>
+<h2>4. 上传 Markdown 与图片附件</h2>
+<p>目录浏览页「上传」（<code>/vaults/&lt;slug&gt;/upload/&lt;子目录&gt;</code>，editor 及以上角色）：</p>
+<ul>
+  <li>支持 Markdown 文档与常见图片附件；附件扩展名与大小受实例限制约束（超限会得到 <code>E-LIMIT-*</code> 错误并指明限额，不会默默截断）。</li>
+  <li>上传 <code>.md</code> 同样要走校验：<code>README.md</code>（名称大小写不敏感）豁免 frontmatter，其余知识文档必须自带 <code>title</code> 等必填元数据，否则提交被拒并就地提示；目标路径会按所选文件名预填（可改，可再嵌子目录）。</li>
+  <li>上传即产生一笔提交（附件与引用它的 Markdown 变更分步提交）；附件 URL 按 blob 寻址、不可枚举，读取仍受库权限约束。</li>
+</ul>
+<h2>5. 搜索</h2>
+<p>顶栏「查找」进入 <code>/search</code>：按<strong>标题 / 标签 / 摘要</strong>关键词查找你有权库中的已发布文档（ASCII 关键词不区分大小写；单次查询最多返回 100 条）。搜索基于派生索引，刚发布的内容可能有短暂延迟；索引不泄露无权库——查询按当前成员关系实时过滤，撤权后下一查询即消失。</p>
+<p>正文全文/语义检索不在第一版范围（见<a href="../known-limitations.html">已知限制</a>）。</p>
+<h2>6. 历史、diff 与还原</h2>
+<ul>
+  <li><strong>库级历史</strong>（<code>/vaults/&lt;slug&gt;/history</code>）：默认分支全部提交。</li>
+  <li><strong>路径历史</strong>（<code>/vaults/&lt;slug&gt;/history/&lt;路径&gt;</code>）：该文档的提交序列，重命名后历史跟随（旧路径历史同样保留，见<a href="history-boundary.html">历史边界</a>）。</li>
+  <li><strong>diff / 版本预览</strong>：逐版本对比与当时内容回看；逐提交寻址按该提交时的实际路径。</li>
+  <li><strong>还原</strong>：路径历史页每行「还原到此版本」——以<strong>一笔新提交</strong>恢复内容，不改写、不删除任何历史。</li>
+</ul>
+<p><strong>引用格式（三要素）</strong>：<code>库 / 路径 @ commit</code>，例如 <code>v-handbook / docs/getting-started.md @ 4c55b7a0…</code>。凭 commit 可在版本预览页回放核对；顶栏「引用解析」（<code>/cite</code>）页可粘贴解析。</p>
+<h2>7. 安装命令行（可选，本地/Git 通道）</h2>
+<p>需要 Node ≥ 22.13（macOS/Linux）与 Git。当前未发布公共 registry，使用发布方提供的 tarball（或仓库内打包）：</p>
+<pre><code class="language-sh"># 安装（单 tarball 自包含，校验规则已内嵌）
+npm install -g notegit-&lt;version&gt;.tgz
+notegit --version
+
+# 登录前，先在网页「我的凭据」页（/credentials）创建访问令牌
+# （ngt_ 前缀，明文仅创建时显示一次）
+
+# 登录（令牌经环境变量或隐藏交互输入，不接受命令行参数）
+NOTEGIT_TOKEN=ngt_… notegit login https://&lt;服务器地址&gt; --username &lt;你的用户名&gt;
+
+# 日常环境（ls/sync 的凭据面）
+export NOTEGIT_SERVER=https://&lt;服务器地址&gt;
+export NOTEGIT_TOKEN=ngt_…
+
+# 列出有权库与本地状态；同步到本地根目录（默认 ~/knowbase，可用 NOTEGIT_LOCAL_ROOT 覆盖）
+notegit ls
+notegit sync
+
+# 凭据文件位置（默认 ~/.config/notegit/credentials，0600）可用 NOTEGIT_CREDENTIALS_FILE 覆盖</code></pre>
+<p>此后即是原生 Git 工作流（clone/fetch/commit/push，提交前 <code>notegit lint --staged</code> 本地校验）：完整流程与错误修正见<a href="contributing.html">贡献流程</a>，逐命令细节见 <a href="../../cli/README.md">cli/README.md</a>，Agent 视角见 <a href="../harness/agent-guide.md">Agent 使用指南</a>。</p>
+    </article>
+  </main>
+</div>
+</body>
+</html>

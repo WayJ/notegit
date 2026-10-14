@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>贡献流程：网页与 Git 双通道 · Notegit 文档</title>
+<link rel="stylesheet" href="../../docs.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="../../index.html">Notegit</a>
+    <a class="back-home" href="../../index.html">返回首页</a>
+  </div>
+</header>
+<div class="docs-layout">
+  <details class="docs-nav" open>
+    <summary class="docs-nav-toggle">文档导航</summary>
+      <nav class="docs-nav-tree" aria-label="文档导航">
+      <section class="nav-group">
+        <h2>用户文档</h2>
+        <ul>
+        <li><a href="README.html">Notegit 用户文档（员工视角）</a></li>
+        <li><a href="quickstart.html">安装与快速上手（员工视角）</a></li>
+        <li><a aria-current="page" class="current" href="contributing.html">贡献流程：网页与 Git 双通道</a></li>
+        <li><a href="permissions.html">权限与撤权边界</a></li>
+        <li><a href="history-boundary.html">历史边界：重命名与跨库移动</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>管理员</h2>
+        <ul>
+        <li><a href="../admin/README.html">Notegit 管理员手册</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>部署</h2>
+        <ul>
+        <li><a href="../deploy/README.html">Notegit 容器部署（S8-T1 发行包）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>已知限制</h2>
+        <ul>
+        <li><a href="../known-limitations.html">已知限制（v0.1 · 2026-10-14）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>发布说明</h2>
+        <ul>
+        <li><a href="../release-notes-v0.2.0.html">Notegit v0.2.0 发布说明</a></li>
+        </ul>
+      </section>
+      </nav>
+  </details>
+  <main class="docs-main">
+    <article class="doc-article">
+<h1>贡献流程：网页与 Git 双通道</h1>
+<p>网页与原生 Git 两条通道<strong>共用同一套权限与内容校验</strong>（暂存区 pre-commit、服务端 pre-receive、网页提交三个入口同一规则实现、同一规则版本——当前 <code>1.0.0-draft.2</code>，以服务端为运行时权威）。选哪条只看顺手：改一两篇文档用网页，批量整理或 Agent 协作用 Git。</p>
+<ul>
+  <li>通道一的网页操作（编辑/上传/重命名/删除/还原）见<a href="quickstart.html">快速上手</a>。</li>
+  <li>权限与撤权语义见<a href="permissions.html">权限与撤权边界</a>。</li>
+</ul>
+<h2>通道一：网页</h2>
+<ol>
+  <li>打开编辑页（<code>/vaults/&lt;slug&gt;/edit/&lt;路径&gt;.md</code>；不存在的路径即新建模式，详见<a href="quickstart.html">快速上手</a>），填元数据表单（<code>title</code> 必填）与正文。</li>
+  <li>需要中断就「保存草稿」——草稿私有、可跨设备恢复、不产生 Git 版本。</li>
+  <li>「提交」发布到默认分支：服务端以你打开编辑器时的 base commit 做预期旧值检查，通过校验后产生一笔提交。</li>
+  <li>上传/重命名/删除/还原同理，各自产生一笔提交并进入同一份历史。</li>
+</ol>
+<h2>通道二：原生 Git</h2>
+<pre><code class="language-sh"># 0) 已完成 notegit login（凭据与 clone URL 见快速上手第 7 节；token 作 Git HTTP Basic 口令）
+# 1) 克隆（clone URL 形态：https://&lt;服务器地址&gt;/git/&lt;slug&gt;.git）
+git clone https://&lt;服务器地址&gt;/git/&lt;slug&gt;.git ~/knowbase/&lt;slug&gt;
+
+# 2) 修改 Markdown，检查并选择性暂存
+cd ~/knowbase/&lt;slug&gt;
+git diff
+git add docs/报销制度.md
+
+# 3) 提交前本地校验（与 pre-commit hook、服务端同一规则；未装 hook 也可手动跑）
+notegit lint --staged
+# 推荐一次性装好 pre-commit hook（此后每次 git commit 自动校验；不破坏已有外来 hook）
+notegit setup
+
+# 4) 提交并推送（默认分支快进推送成功即发布）
+git commit -m &quot;补充差旅报销流程&quot;
+git push origin main</code></pre>
+<p>分支规则（服务端固定执行，客户端改不掉）：</p>
+<table>
+  <thead>
+    <tr><th>规则</th><th>行为</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>默认分支（main）</td><td>editor 可<strong>快进</strong>推送；禁止 force push、禁止删除；库可配置 <code>main_admin_only</code> 后仅库管理员可写</td></tr>
+    <tr><td>非默认分支</td><td>editor 可创建、快进更新、删除（存放候选修改；网页端 v1 只提交默认分支）</td></tr>
+    <tr><td>tag / 其他 ref 命名空间</td><td>第一版不提供写入</td></tr>
+    <tr><td>多 ref 一次推送</td><td>先全部检查、通过才更新——一条违规整次拒绝</td></tr>
+  </tbody>
+</table>
+<p>推送被拒时 Git 输出会带 <code>路径:错误码:摘要</code>（含规则版本）——本地跑 <code>notegit lint</code> 能拿到同一份完整报告。</p>
+<h2>校验错误修正</h2>
+<p>校验失败的提交/推送/网页提交都会被拦下并给出<strong>可照做的修正提示</strong>。最常见的一例（知识文档缺 frontmatter）：</p>
+<pre><code class="language-sh">cd ~/knowbase/&lt;slug&gt;
+printf &#39;# 没有 frontmatter 的知识文档\n&#39; &gt; bad.md
+git add bad.md
+notegit lint --staged</code></pre>
+<pre><code class="language-text">bad.md：未通过
+  错误 E-FM-001 bad.md：知识文档缺少 frontmatter（首行须为 `---`）</code></pre>
+<p>按提示补上必填元数据后复跑，直到退出码 0（警告 <code>W-*</code> 不阻断）：</p>
+<pre><code class="language-sh">printf -- &#39;---\ntitle: 修复后的文档\n---\n\n正文。\n&#39; &gt; bad.md
+git add bad.md
+notegit lint --staged</code></pre>
+<p>常见错误速查（完整错误码注册表与消息模板见 <a href="../contracts/validation.md">validation 契约</a>）：</p>
+<table>
+  <thead>
+    <tr><th>错误码</th><th>含义</th><th>修正</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>E-FM-001</code></td><td>知识文档缺 frontmatter</td><td>首行起补 <code>---</code> 块</td></tr>
+    <tr><td><code>E-FM-*</code>（其余）</td><td>title 空 / 字段类型错 / 非法 status</td><td>按消息改 frontmatter</td></tr>
+    <tr><td><code>E-PATH-*</code></td><td>路径或 tree 条目违规（含符号链接、submodule、大小写冲突）</td><td>移除违规条目或改路径</td></tr>
+    <tr><td><code>E-LIMIT-*</code></td><td>附件类型/大小、文档大小、单次 push、库容量超限</td><td>拆分或压缩；确需导入大批内容找管理员临时调额</td></tr>
+  </tbody>
+</table>
+<p>三条提醒：</p>
+<ul>
+  <li><strong>本地 hook 可以被跳过，服务端校验永远在</strong>：<code>--no-verify</code> 提交、先写坏内容再删除、合并提交夹带、多 ref 推送都绕不过 pre-receive。</li>
+  <li><strong>格式合规 ≠ 事实正确</strong>：校验只管格式与边界，内容对不对靠贡献者与库管理员。</li>
+  <li>客户端规则版本旧于服务端时，lint 报告会附 <code>N-UPGRADE-001</code> 提示——重装新版本 CLI tarball 即更新内嵌规则（版本差异本身不构成拒绝理由，判定以服务端为准）。</li>
+</ul>
+<h2>冲突处理</h2>
+<p>两类冲突，都不静默覆盖：</p>
+<p><strong>网页 × 网页（或网页 × Git）并发提交</strong>：两人基于同一 base 编辑，后提交者收到 <strong>409 冲突提示</strong>（附当前分支 tip），草稿完整保留。处理：刷新拿到最新内容，把自己的修改合并进去再提交。</p>
+<p><strong>Git 非快进推送</strong>：默认分支只接受快进——本地落后时 push 被拒、本地改动保留。处理：</p>
+<pre><code class="language-sh"># 取回远端并在本地整合后再推（不要 force——force push 一律被拒）
+git fetch origin
+git rebase origin/main
+# 或 git merge --ff-only origin/main（本地无新提交时）
+git push origin main</code></pre>
+<p><strong>sync 不会替你解决冲突</strong>：<code>notegit sync</code> 只对干净且位于默认分支的副本快进更新；有未提交修改、未推送提交、分叉或位于其他分支时<strong>跳过并逐库报告</strong>，绝不自动 stash/reset/rebase。本地副本要怎么整合由你决定。</p>
+    </article>
+  </main>
+</div>
+</body>
+</html>
