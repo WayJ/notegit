@@ -139,7 +139,9 @@ after(async () => {
 test('安装：单 tarball 安装后 notegit 可执行，--version 与 --help 真实可用', async () => {
   const v = await runBin(['--version'])
   assert.equal(v.status, 0)
-  assert.equal(v.stdout.trim(), 'notegit 0.1.0', `--version 应输出版本，实际：${v.stdout}`)
+  // 版本断言派生自包元数据（禁全等硬编码——v0.2.0 冻结时的教训：硬编码随升版碎）
+  const pkgVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
+  assert.equal(v.stdout.trim(), `notegit ${pkgVersion}`, `--version 应输出版本，实际：${v.stdout}`)
   const h = await runBin(['--help'])
   assert.equal(h.status, 0)
   for (const name of ['login', 'ls', 'lint', 'setup', 'sync']) {

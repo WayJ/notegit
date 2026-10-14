@@ -20,7 +20,7 @@
   "devDependencies": {
     "@types/node": "24.19.2",
     "typescript": "7.0.2",
-    "notegit-validation": "0.1.0"
+    "notegit-validation": "0.2.0"
   },
   "files": [
     "dist/",
