@@ -8,11 +8,18 @@ import type { FastifyInstance } from 'fastify';
  *   落地文件，见 assets/styles.css 头注）。模块加载期一次读入（源码树直跑 /
  *   容器 COPY server/ 均覆盖该文件——deploy/Dockerfile；无打包层）。
  *
- * 公开访问（同 /login：样式不含实例数据）；GET 免 CSRF。api.md §13 既有页面
- * 路由与行为零变化——本路由是新增的纯资产端点。
+ * S12-T3（D19-A 第一步 / G10）：GET /assets/app.js —— 全站唯一共享页脚本
+ * （各页重复内联 api() fetch 封装的最小公共抽取，行为零变化；语义与缓存
+ * 约定见 assets/app.js 头注）。与 styles.css 同构注册：模块加载期一次读入、
+ * 公开访问（脚本不含实例数据）、GET 免 CSRF、短缓存（文件名无内容哈希，
+ * 部署重启即生效窗口）。
+ *
+ * api.md §13 既有页面路由与行为零变化——本路由是新增的纯资产端点（建议稿
+ * docs/s12/api-amendments.md D 节）。
  */
 
 const STYLES = readFileSync(new URL('./assets/styles.css', import.meta.url), 'utf8');
+const APP_JS = readFileSync(new URL('./assets/app.js', import.meta.url), 'utf8');
 
 export function registerAssetRoutes(app: FastifyInstance): void {
   app.get('/assets/styles.css', async (_req, reply) => {
@@ -21,5 +28,12 @@ export function registerAssetRoutes(app: FastifyInstance): void {
       .type('text/css; charset=utf-8')
       .header('cache-control', 'public, max-age=3600')
       .send(STYLES);
+  });
+  app.get('/assets/app.js', async (_req, reply) => {
+    // 同 styles.css 约定：短缓存 + 部署重启生效窗口（S12-T3 共享页脚本）
+    return reply
+      .type('application/javascript; charset=utf-8')
+      .header('cache-control', 'public, max-age=3600')
+      .send(APP_JS);
   });
 }

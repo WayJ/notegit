@@ -14,6 +14,11 @@ import type { ParsedForForm } from './form.ts';
  *
  * UI-RESTYLE：DESIGN.md 视觉契约落位——表单卡（form-card）、提交=珊瑚主按钮、
  * 保存草稿=米色描边按钮、行内错误位 error 语义色；viewer 透传顶部导航登录态。
+ *
+ * S12-T3（D19-A 第一步）：本域原内联 api()（API_FN_JS 语义）迁入共享脚本
+ * /assets/app.js（window.ngt.api——语义逐字一致）；三页写者形态内联块以别名行
+ * 取用并前置 <script src> 引用（layout sharedScript），调用面零改写；editStatePage
+ * 接入可选 viewer（T2 建议稿 A3-1 收口——顶栏账户位全覆盖）。
  */
 
 /** 顶部导航登录态（呈现层透传） */
@@ -130,18 +135,12 @@ function composeDoc() {
 }
 `;
 
-const API_FN_JS = `
-async function api(method, url, body) {
-  const res = await fetch(url, {
-    method,
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (res.status === 204) return null;
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { const e = new Error((data.error && data.error.message) || res.status); e.status = res.status; e.data = data; throw e; }
-  return data;
-}
+/**
+ * S12-T3 共享脚本别名行：原 API_FN_JS（api 语义全文）迁入 /assets/app.js
+ * （window.ngt.api——err.status/err.data 携带语义逐字一致，web-assets.test.ts
+ * 形态锁定）；页面内联块此位一行别名取用，页面特有逻辑调用面零改写。
+ */
+const API_ALIAS_JS = `const api = ngt.api;
 `;
 
 // ── 草稿自动保存共享块（S12-T1 D3）：定时（默认 30s——常量在块顶可调，不引
@@ -253,7 +252,7 @@ const VIEW_URL = ${JSON.stringify(`/vaults/${encodeURIComponent(vault.slug)}/vie
 const DRAFT_URL = ${JSON.stringify(draftPutUrl(vault.slug, entryPath))};
 const SUBMIT_URL = ${JSON.stringify(`${apiBase}/submissions`)};
 const PREVIEW_URL = ${JSON.stringify(`/edit-preview/${encodeURIComponent(vault.slug)}/${entryPath.split('/').map(encodeURIComponent).join('/')}`)};
-${COMPOSE_DOC_JS}${API_FN_JS}${RENDER_REPORT_JS}${autosaveJs('edit-form')}
+${COMPOSE_DOC_JS}${API_ALIAS_JS}${RENDER_REPORT_JS}${autosaveJs('edit-form')}
 // 自动保存页适配（D3）：内容=组装全文（frontmatter+正文，与手动保存同一形状）
 function autosaveContent() { return composeDoc(); }
 async function autosavePut(content) { await api('PUT', DRAFT_URL, { content: content, base_commit: BASE }); }
@@ -423,6 +422,7 @@ ${ro ? '' : `  <p class="form-foot"><small>保存=草稿（按作者私有、不
 `,
     script,
     viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    !ro, // S12-T3：写者形态引用共享脚本 /assets/app.js（只读态零脚本——行为不变）
   );
 }
 
@@ -440,15 +440,7 @@ const BASE = ${baseCommit === null ? "null" : js(baseCommit)};
 const DRAFT_URL = ${JSON.stringify(draftPutUrl(vault.slug, entryPath))};
 const SUBMIT_URL = ${JSON.stringify(`${apiBase}/submissions`)};
 const VIEW_URL = ${JSON.stringify(`/vaults/${encodeURIComponent(vault.slug)}/view/${entryPath.split('/').map(encodeURIComponent).join('/')}`)};
-async function api(method, url, body) {
-  const res = await fetch(url, { method, headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body) });
-  if (res.status === 204) return null;
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { const e = new Error((data.error && data.error.message) || res.status); e.status = res.status; e.data = data; throw e; }
-  return data;
-}
-${autosaveJs('readme-form')}
+${API_ALIAS_JS}${autosaveJs('readme-form')}
 // 自动保存页适配（D3）：README 豁免 frontmatter——内容=正文 textarea 全量
 function autosaveContent() { return document.getElementById('readme-body').value; }
 async function autosavePut(content) { await api('PUT', DRAFT_URL, { content: content, base_commit: BASE }); }
@@ -508,11 +500,20 @@ ${ro
 `,
     script,
     viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    !ro, // S12-T3：写者形态引用共享脚本 /assets/app.js（只读态零脚本——行为不变）
   );
 }
 
-/** 状态页（存储未挂接/超大文件——与 browse/view 状态页同风格如实标注） */
-export function editStatePage(vault: { slug: string; name: string }, note: string): string {
+/**
+ * 状态页（存储未挂接/超大文件——与 browse/view 状态页同风格如实标注）。
+ * S12-T3（T2 建议稿 A3-1 待办收口）：可选 viewer → 顶栏账户位（缺省兼容旧
+ * 调用形态——与 T2 已做的 cite/history/upload/rename 状态页同形）。
+ */
+export function editStatePage(
+  vault: { slug: string; name: string },
+  note: string,
+  viewer?: PageViewer,
+): string {
   return layout(
     `编辑 — ${vault.name}`,
     `<div class="page">
@@ -521,6 +522,8 @@ export function editStatePage(vault: { slug: string; name: string }, note: strin
   <p class="state-note">${escapeHtml(note)}</p>
 </div>
 `,
+    '',
+    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -589,7 +592,7 @@ function pathProblem(p) {
 }
 const encPath = (p) => p.split('/').map(encodeURIComponent).join('/');
 const viewUrlOf = (p) => VIEW_BASE + encPath(p);
-${COMPOSE_DOC_JS}${API_FN_JS}${RENDER_REPORT_JS}${autosaveJs('edit-form')}
+${COMPOSE_DOC_JS}${API_ALIAS_JS}${RENDER_REPORT_JS}${autosaveJs('edit-form')}
 // 自动保存页适配（D3）：键=路径+内容（路径输入变化也算脏——新路径下留草稿）；
 // 路径未定形（必填/.md/非法段）时 null——不落库，路径定形后随内容变化保存
 function autosaveContent() {
@@ -686,6 +689,7 @@ ${ro ? '' : `  <p class="form-foot"><small>创建=以新路径正式发布（走
 `,
     script,
     viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    !ro, // S12-T3：写者形态引用共享脚本 /assets/app.js（只读态零脚本——行为不变）
   );
 }
 

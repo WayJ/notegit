@@ -177,7 +177,8 @@ test('回填转义：frontmatter 值含标签脚本不外泄（escapeHtml 唯一
     assert.equal(res.statusCode, 200, res.body);
     assert.ok(!res.body.includes('<script>alert(1)'), 'title 原文不得构成标签');
     assert.ok(res.body.includes('&lt;script&gt;'), '转义后呈现');
-    assert.equal((res.body.match(/<script/g) ?? []).length, 1, '全页 <script> 仅外壳一处');
+    // S12-T3：写者形态编辑页 = 共享脚本 src 引用 + 内联块（恰两处，注入面不得多出）
+    assert.equal((res.body.match(/<script/g) ?? []).length, 2, '全页 <script> 恰两处（src 引用+内联块）');
   } finally {
     await h.close();
   }
@@ -204,8 +205,9 @@ test('脚本字面量插值防逃逸：路径含 </script> 不破出脚本块（
   try {
     const res = await get(h, '/vaults/alpha/edit/docs/x%3C/script%3E%3Cscript%3Ealert(1)%3C/script%3E.md', alice);
     assert.equal(res.statusCode, 200, res.body);
-    assert.equal((res.body.match(/<script/g) ?? []).length, 1, '不得破出外壳 script');
-    assert.equal((res.body.match(/<\/script>/g) ?? []).length, 1, '闭合标签唯一');
+    // S12-T3：恰两处（共享脚本 src 引用+内联块）——用户路径不得破出成第三处
+    assert.equal((res.body.match(/<script/g) ?? []).length, 2, '不得破出（src 引用+内联块恰两处）');
+    assert.equal((res.body.match(/<\/script>/g) ?? []).length, 2, '闭合标签恰两处');
     assert.ok(res.body.includes('\\u003c'), '路径以 \\u003c 转义嵌入脚本字面量');
     assert.ok(res.body.includes('&lt;script&gt;alert(1)'), '标题处仅以转义文本呈现（非可执行形态）');
   } finally {

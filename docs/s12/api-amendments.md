@@ -82,3 +82,38 @@
 | A1 | api.md | §13 表新增 /drafts 行 | 页面路由入册 | 已实现（S12-T2） |
 | A2 | api.md | §13 共享布局（layout 壳）补记一句 | 顶栏账户菜单入册 | 已实现（S12-T2） |
 | A3 | —（本文件记录） | — | 形状差异与待办（edit/ 域状态页、display_name 接线、restorePage、样式与移动端随 T3） | — |
+
+---
+
+## C. edit 域状态页 viewer 补记（S12-T3——T2 建议稿 A3-1 待办收口）
+
+- **状态**：S12-T3 起草（2026-10-14）；已实现（实现即收口记录，无需 master 裁决即可闭环——A2 的 layout 壳账户位语义已覆盖本形态）。
+- **现状**：`editStatePage`（`server/src/web/edit/pages.ts`）接入可选 `viewer` 参数（缺省兼容旧调用形态——不虚构登录态，与 T2 批准扩展同形）；`edit/routes.ts` 全部 6 处调用点（`edit/<路径>` 与 `edit/new` 两族：存储未挂接 ×2、仓库目录缺失 ×2、文件过大 ×1、正文读取失败 ×1）传入 viewer——**顶栏账户位覆盖缺口闭合**（T2 建议稿 A3-1 待办）。路由判定/门槛/重定向/状态码零变化（纯呈现层传参——禁止条款「不改 edit/routes.ts 行为」遵守；T2 在 upload/rename/history routes 的批准先例同形）。
+- **契约影响**：无需 §13 行变更——状态页是 `GET /vaults/{slug}/edit/{path}` 与 `edit/new` 既有行的呈现分支，账户位语义由 A2 的 layout 壳补记覆盖；本节为 A3-1 待办闭环记录。
+- **测试**：`server/test/web-topbar-account.test.ts`「edit 域状态页（存储未挂接形态）」用例**先红**（改造前无账户位）**后绿**；同测含无 viewer 兼容形态与普通成员无管理链接断言；状态页零交互脚本（唯一 `<script>`）断言保持。
+
+## D. 共享脚本注册面（S12-T3——D19-A 第一步 / G10 / DOD-E2-09）
+
+- **状态**：S12-T3 起草（2026-10-14）；待 master 裁决（裁点见下）。
+- **现状**：新增纯资产端点 **`GET /assets/app.js`**（`server/src/web/assets.ts`——与 styles.css 同构注册：模块加载期一次读入（无打包层）、公开访问（脚本不含实例数据）、GET 免 CSRF、`application/javascript; charset=utf-8`、短缓存 `public, max-age=3600`（文件名无内容哈希，部署重启即生效窗口））。内容=各页重复内联 api() fetch 封装的最小公共抽取，普通 script 全局命名空间 **`window.ngt`**（不引模块化/打包器——零构建链约束）：
+  - `ngt.api`（edit 族——原 `edit/pages.ts` 内联语义逐字：message 取向 `error.message || status`，`err.status`/`err.data` 携带（422 报告渲染与 409 冲突 tip 分支所依））；
+  - `ngt.apiEnvelope`（pages.ts 族——原 login/admin/credentials 内联 FETCH_HELPER 语义逐字：message 取向 `"code: message"` 可读信封）；
+  - `ngt.show`（`el.textContent = text`——无 innerHTML）。
+  - 共有请求语义：同源 fetch（浏览器对非安全方法自动带 Origin——**不显式设头**）、无 body 不带 content-type、204 短路 null、JSON 解析容错回落 `{}`、非 2xx 抛 Error。**不新增能力**：无 401 跳登录、无显式 Origin 头（原内联均无——形态断言锁定，`web-assets.test.ts`）。
+- **四页机械改造**（行为零变化）：login/admin/credentials（`web/pages.ts`）+ edit 域三页（六字段/README 豁免/`edit/new`——`web/edit/pages.ts`）写者形态在内联块前置恰一个 `<script src="/assets/app.js">` 引用（经典 script 按文档序执行保证 `ngt` 先就位），内联块顶部一行别名取用（`const api = ngt.apiEnvelope, show = ngt.show;` / `const api = ngt.api;`——页面特有逻辑调用面零改写）；每页仍恰一个内联 `<script>` 块。只读态 edit 页（无交互脚本）不引共享脚本（零脚本行为不变）。结构断言随新形态更新：改造页 `<script` 计数=2（src 引用+内联块），未改造页=1（`web-ui-style` / `web-topbar-account` / `web-edit-routes` 三处计数断言；XSS 防逃逸精神保持——用户内容不得多出第三处 script）。
+- **抽取效果量化**（六页面渲染内联 `<script>` 块字节，同输入对比）：login 935B→437B（-53.3%）、admin 9174B→8676B、credentials 3218B→2720B、edit 六字段 11845B→11386B、edit README 4498B→4051B、edit new 9432B→8973B；**合计 39102B→36243B（-2859B）**，共享面另由浏览器缓存复用（每会话一次取 `/assets/app.js`）。
+- **建议**：styles.css 先例=纯资产端点不入 §13 表（页面行）。但 D19-A 路线第一步值得一句锚点，建议 §13 尾注段（「S4-T2 起各任务在本表 append 各自页面行」句前或后）追加：
+
+```markdown
+共享静态资产（UI-RESTYLE / S12-T3）：`GET /assets/styles.css`（全站唯一共享 CSS——DESIGN.md token 契约落地）与 `GET /assets/app.js`（S12-T3 共享页脚本——各页重复内联 api() fetch 封装的最小公共抽取，普通 script 全局命名空间 `window.ngt`，行为零变化——形态断言锁定）均为纯资产端点（公开访问、GET 免 CSRF、短缓存 `public, max-age=3600`、部署重启生效窗口），不入本表页面行；引用页内联块前置恰一个 `<script src>` 引用，每页仍恰一个内联 `<script>` 块。
+```
+
+- **理由**：DOD-E2-09（A 路线第一步：共享脚本抽取+四页改造，行为零变化，测试锁定）需要契约锚点——避免后续任务把 `<script src>` 引用误判为 XSS 回归、或把共享脚本当新增能力面（如顺手加 401 跳登录）；缓存语义与 styles.css 同构可一并定夺。
+- **待裁决**：(a) 尾注一句（本建议）还是并入 A2 layout 壳补记句（双记漂移风险——若取后者，本条撤）；(b) 两族错误信封（`ngt.api`/`ngt.apiEnvelope`）保留双语义为**行为零变化所依**（两族错误 message 构造不同、消费方不同）——未来若统一须单列任务，不在抽取步顺手改；(c) edit 域特有共享块（composeDoc/renderReport/自动保存——`edit/pages.ts` 内 TS 常量单源、B2 契约锚定「页内可调常量」）本步未迁共享脚本（域内单源非跨页重复；迁移即行为面外溢），是否列为后续抽取候选由 master 定。
+
+### 落点汇总（S12-T3 追加）
+
+| id | 契约文件 | 落点 | 性质 | 实现状态 |
+|---|---|---|---|---|
+| C | —（A3-1 闭环记录） | — | edit 域状态页 viewer 收口（呈现层） | 已实现（S12-T3） |
+| D | api.md | §13 尾注一句（共享静态资产——styles.css + app.js） | 共享脚本注册面入册 | 已实现（S12-T3），文本待裁决 |

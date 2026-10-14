@@ -75,16 +75,18 @@ function sidCookie(sid: string): Record<string, string> {
   return { cookie: `ngt_sid=${sid}` };
 }
 
-test('页面壳：doctype 首位、唯一 script、共享样式链接、top-nav 与深色页脚落位', async () => {
+test('页面壳：doctype 首位、script 形态（唯一内联块；S12-T3 改造页另恰一个 src 引用）、共享样式链接、top-nav 与深色页脚落位', async () => {
   const h = await harness();
   try {
     addEmployee(h.db, { username: 'alice' });
-    for (const url of ['/login', '/', '/credentials']) {
+    // S12-T3：login/credentials 引用共享脚本 /assets/app.js（src 引用+内联块=2）；首页未改造（=1）
+    for (const [url, scripts] of [['/login', 2], ['/', 1], ['/credentials', 2]] as const) {
       const res = await h.app.inject({ method: 'GET', url, headers: url === '/login' ? {} : sidCookie(h.session(1)) });
       assert.equal(res.statusCode, 200, url);
       assert.ok(res.body.startsWith('<!doctype html>'), `${url} doctype 首位`);
-      assert.equal((res.body.match(/<script/g) ?? []).length, 1, `${url} 唯一 <script>`);
-      assert.equal((res.body.match(/<\/script>/g) ?? []).length, 1, `${url} 唯一 </script>`);
+      assert.equal((res.body.match(/<script/g) ?? []).length, scripts, `${url} script 形态（${scripts === 2 ? 'src 引用+内联块' : '唯一内联块'}）`);
+      assert.equal((res.body.match(/<\/script>/g) ?? []).length, scripts, `${url} 闭合标签与开标签同数`);
+      assert.equal((res.body.match(/<script>\n/g) ?? []).length, 1, `${url} 唯一内联 script 块`);
       assert.ok(res.body.includes('<link rel="stylesheet" href="/assets/styles.css">'), `${url} 共享样式链接`);
       assert.ok(res.body.includes('class="top-nav"'), `${url} 顶部导航`);
       assert.ok(res.body.includes('class="brand"'), `${url} 字标`);
