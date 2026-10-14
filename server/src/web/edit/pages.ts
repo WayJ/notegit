@@ -52,8 +52,9 @@ function parentDirOf(entryPath: string): string {
   return slash === -1 ? '' : entryPath.slice(0, slash);
 }
 
-/** 上传附件入口（编辑页头部：指向文档所在目录的上传页） */
-function uploadAttachmentLink(vault: { slug: string }, entryPath: string): string {
+/** 上传附件入口（编辑页头部：指向文档所在目录的上传页；S10-T2 reader 隐藏——写入口） */
+function uploadAttachmentLink(vault: { slug: string }, entryPath: string, canWrite: boolean): string {
+  if (!canWrite) return '';
   const dir = parentDirOf(entryPath);
   const href = `/vaults/${encodeURIComponent(vault.slug)}/upload${dir === '' ? '' : '/' + dir.split('/').map(encodeURIComponent).join('/')}`;
   return ` · <a href="${href}">上传附件</a>`;
@@ -69,9 +70,18 @@ export interface EditPageInput {
   readonly prefill: ParsedForForm;
   /** S4-T7 草稿预填信息（本人现行草稿回填时呈现；缺省 = 无草稿） */
   readonly draft?: { baseCommit: string | null; updatedAt: string; stale: boolean };
+  /** S10-T2 权限感知：当前会话员工对该库的写权（canWriteVault 实算；false=只读态
+   *  ——D4：门槛保持 read 成员（200），字段禁用 + 只读标注、不渲染保存草稿/提交
+   *  控件；正文可看不可改。本人草稿回填逻辑不动（草稿是 read 成员可用的既有
+   *  能力——回填照常，仅不可改）。缺省 = 写者形态：模板直调测试兼容；生产路由
+   *  恒传实算值（D17 呈现层，非安全边界）） */
+  readonly canWrite?: boolean;
   /** UI-RESTYLE：顶部导航登录态（可选——测试直调形态缺省） */
   readonly viewer?: PageViewer;
 }
+
+/** 只读徽章（S10-T2：DESIGN.md badge-pill 形态——`.badge` 既有类，token 语义） */
+const READONLY_BADGE = '<span class="badge">只读成员</span>';
 
 /** 回填标注（T6 移交：呈现草稿 base_commit 旧值；stale=分支已前进如实提示） */
 function draftNote(draft: { baseCommit: string | null; updatedAt: string; stale: boolean }): string {
@@ -96,31 +106,10 @@ function js(v: string): string {
   return JSON.stringify(v).replaceAll('<', '\\u003c');
 }
 
-export function editPage(input: EditPageInput): string {
-  const { vault, entryPath, mode, baseCommit, prefill, draft, viewer } = input;
-  const name = nameOf(entryPath);
-  const isNew = mode === 'new';
-  const statusEnum = ['active', 'draft', 'deprecated'];
-  const rawStatus = prefill.fields.status;
-  const statusOptions = [
-    `<option value=""${rawStatus === '' ? ' selected' : ''}>缺省（按 active 解释）</option>`,
-    ...statusEnum.map(
-      (s) => `<option value="${s}"${rawStatus === s ? ' selected' : ''}>${s}</option>`,
-    ),
-    // 非法值原样保留展示（防呆之外的诚实：下拉无该值，校验兜底拒——双保险）
-    ...(statusEnum.includes(rawStatus) || rawStatus === ''
-      ? []
-      : [`<option value="${attr(rawStatus)}" selected>${attr(rawStatus)}（非法值——提交将被校验拒绝）</option>`]),
-  ];
+// ── 页内脚本共享块（S10-T3 抽出：editPage 与 newNotePage 同一来源——editPage
+//    既有输出字节不变，既有编辑行为零变化） ───────────────────────────────────
 
-  const apiBase = `/api/v1/vaults/${encodeURIComponent(vault.slug)}`;
-  const script = `
-const PATH = ${js(entryPath)};
-const BASE = ${baseCommit === null ? "null" : js(baseCommit)};
-const VIEW_URL = ${JSON.stringify(`/vaults/${encodeURIComponent(vault.slug)}/view/${entryPath.split('/').map(encodeURIComponent).join('/')}`)};
-const DRAFT_URL = ${JSON.stringify(draftPutUrl(vault.slug, entryPath))};
-const SUBMIT_URL = ${JSON.stringify(`${apiBase}/submissions`)};
-
+const COMPOSE_DOC_JS = `
 // 组装（与 web/edit/form.ts composeDocument 同规则：JSON 流式标量——YAML 1.2 子集）
 function composeDoc() {
   const f = document.getElementById('edit-form');
@@ -136,7 +125,9 @@ function composeDoc() {
   if (extra !== '') lines.push(...extra.split('\\n'));
   return '---\\n' + (lines.length ? lines.join('\\n') + '\\n' : '') + '---\\n' + f.body.value;
 }
+`;
 
+const API_FN_JS = `
 async function api(method, url, body) {
   const res = await fetch(url, {
     method,
@@ -148,7 +139,9 @@ async function api(method, url, body) {
   if (!res.ok) { const e = new Error((data.error && data.error.message) || res.status); e.status = res.status; e.data = data; throw e; }
   return data;
 }
+`;
 
+const RENDER_REPORT_JS = `
 // 422 报告 → 字段定位渲染（服务端 errors.ts 映射规则的页内镜像：六字段→行内位，
 // extra 区解析层错误（无 field 或 field 非六字段且行落在 extra 区）→ extra 位，
 // W 级 → 温和提示区不阻断）
@@ -177,7 +170,37 @@ function renderReport(report) {
   warn.textContent = warns.length ? '温和提示（不影响提交）：' + warns.join('；') : '';
   return blocked;
 }
+`;
 
+export function editPage(input: EditPageInput): string {
+  const { vault, entryPath, mode, baseCommit, prefill, draft, viewer } = input;
+  const name = nameOf(entryPath);
+  const isNew = mode === 'new';
+  const ro = input.canWrite === false; // S10-T2 reader 只读态（D4）
+  const dis = ro ? ' disabled' : ''; // 字段禁用（正文可看不可改）
+  const statusEnum = ['active', 'draft', 'deprecated'];
+  const rawStatus = prefill.fields.status;
+  const statusOptions = [
+    `<option value=""${rawStatus === '' ? ' selected' : ''}>缺省（按 active 解释）</option>`,
+    ...statusEnum.map(
+      (s) => `<option value="${s}"${rawStatus === s ? ' selected' : ''}>${s}</option>`,
+    ),
+    // 非法值原样保留展示（防呆之外的诚实：下拉无该值，校验兜底拒——双保险）
+    ...(statusEnum.includes(rawStatus) || rawStatus === ''
+      ? []
+      : [`<option value="${attr(rawStatus)}" selected>${attr(rawStatus)}（非法值——提交将被校验拒绝）</option>`]),
+  ];
+
+  const apiBase = `/api/v1/vaults/${encodeURIComponent(vault.slug)}`;
+  // S10-T2 reader 只读态：不携带交互脚本（脚本绑定保存/提交控件——只读态不渲染）。
+  // S10-T3：组装/请求/报告渲染三块抽出为共享常量（newNotePage 同源复用）——本页输出不变
+  const script = ro ? '' : `
+const PATH = ${js(entryPath)};
+const BASE = ${baseCommit === null ? "null" : js(baseCommit)};
+const VIEW_URL = ${JSON.stringify(`/vaults/${encodeURIComponent(vault.slug)}/view/${entryPath.split('/').map(encodeURIComponent).join('/')}`)};
+const DRAFT_URL = ${JSON.stringify(draftPutUrl(vault.slug, entryPath))};
+const SUBMIT_URL = ${JSON.stringify(`${apiBase}/submissions`)};
+${COMPOSE_DOC_JS}${API_FN_JS}${RENDER_REPORT_JS}
 document.getElementById('save-draft').addEventListener('click', async () => {
   const msg = document.getElementById('form-msg');
   try {
@@ -221,27 +244,29 @@ document.getElementById('edit-form').addEventListener('submit', async (ev) => {
   <div class="page-head">
   <h1>${isNew ? '新建' : '编辑'}：${escapeHtml(name)}</h1>
   <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
-  <p class="page-meta">类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath)}${isNew ? (draft ? ' · <strong>新建</strong>' : ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）') : ''}</p>
-  </div>
+  <p class="page-meta">类型：Markdown 知识文档 · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath, !ro)}${isNew ? (draft ? ' · <strong>新建</strong>' : ' · <strong>新建</strong>（标题已从文件名生成，提交前可修改）') : ''}</p>
+${ro ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：正文可看不可改。</p>\n` : ''}  </div>
   ${draft ? draftNote(draft) : ''}
-  <form id="edit-form" class="form-card">
-${fieldRow('标题 <strong>（必填）</strong>', `<input name="title" required maxlength="200" value="${attr(prefill.fields.title)}">`, 'title')}
-${fieldRow('负责人（可选，知识负责人）', `<input name="owner" maxlength="100" value="${attr(prefill.fields.owner)}">`, 'owner')}
-${fieldRow('摘要（可选，简短摘要）', `<textarea name="description" rows="2" maxlength="500">${attr(prefill.fields.description)}</textarea>`, 'description')}
-${fieldRow('标签（可选，逗号分隔）', `<input name="tags" value="${attr(prefill.fields.tags)}">`, 'tags')}
-${fieldRow('状态（可选，下拉封闭集）', `<select name="status">${statusOptions.join('')}</select>`, 'status')}
-${fieldRow('来源（可选，原始资料或依据）', `<input name="source" maxlength="500" value="${attr(prefill.fields.source)}">`, 'source')}
-${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</code>；允许标量/列表/映射）', `<textarea name="extra" rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
-  <label>正文（Markdown，多行纯文本）<br><textarea name="body" rows="18">${attr(prefill.body)}</textarea></label>
-  <label>提交说明（可选）<br><input name="message" placeholder="缺省：Web 编辑：${attr(entryPath)}"></label>
+  <form id="edit-form" class="form-card"${ro ? ' aria-disabled="true"' : ''}>
+${fieldRow('标题 <strong>（必填）</strong>', `<input name="title"${dis} required maxlength="200" value="${attr(prefill.fields.title)}">`, 'title')}
+${fieldRow('负责人（可选，知识负责人）', `<input name="owner"${dis} maxlength="100" value="${attr(prefill.fields.owner)}">`, 'owner')}
+${fieldRow('摘要（可选，简短摘要）', `<textarea name="description"${dis} rows="2" maxlength="500">${attr(prefill.fields.description)}</textarea>`, 'description')}
+${fieldRow('标签（可选，逗号分隔）', `<input name="tags"${dis} value="${attr(prefill.fields.tags)}">`, 'tags')}
+${fieldRow('状态（可选，下拉封闭集）', `<select name="status"${dis}>${statusOptions.join('')}</select>`, 'status')}
+${fieldRow('来源（可选，原始资料或依据）', `<input name="source"${dis} maxlength="500" value="${attr(prefill.fields.source)}">`, 'source')}
+${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</code>；允许标量/列表/映射）', `<textarea name="extra"${dis} rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
+  <label>正文（Markdown，多行纯文本）<br><textarea name="body"${dis} rows="18">${attr(prefill.body)}</textarea></label>
+  <label>提交说明（可选）<br><input name="message"${dis} placeholder="缺省：Web 编辑：${attr(entryPath)}"></label>
   <p id="form-warn" class="form-warn"></p>
   <p id="form-msg" role="alert"></p>
-  <div class="form-actions">
+${ro
+  ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：仅可查看本页，不能保存草稿或提交发布。</p>`
+  : `  <div class="form-actions">
   <button type="button" id="save-draft">保存草稿</button>
   <button type="submit">提交</button>
-  </div>
+  </div>`}
   </form>
-  <p class="form-foot"><small>保存=草稿（按作者私有、不产生 Git 版本，可再保存覆盖）；提交=正式发布（走统一校验与发布组件）——提交成功后草稿标记为已提交。</small></p>
+${ro ? '' : `  <p class="form-foot"><small>保存=草稿（按作者私有、不产生 Git 版本，可再保存覆盖）；提交=正式发布（走统一校验与发布组件）——提交成功后草稿标记为已提交。</small></p>`}
 </div>
 `,
     script,
@@ -253,8 +278,11 @@ ${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</c
 export function readmeEditPage(input: Omit<EditPageInput, 'prefill'> & { body: string }): string {
   const { vault, entryPath, mode, baseCommit, body, draft, viewer } = input;
   const name = nameOf(entryPath);
+  const ro = input.canWrite === false; // S10-T2 reader 只读态（D4）
+  const dis = ro ? ' disabled' : '';
   const apiBase = `/api/v1/vaults/${encodeURIComponent(vault.slug)}`;
-  const script = `
+  // S10-T2 reader 只读态：不携带交互脚本（同六字段页）
+  const script = ro ? '' : `
 const PATH = ${js(entryPath)};
 const BASE = ${baseCommit === null ? "null" : js(baseCommit)};
 const DRAFT_URL = ${JSON.stringify(draftPutUrl(vault.slug, entryPath))};
@@ -303,16 +331,18 @@ document.getElementById('readme-form').addEventListener('submit', async (ev) => 
   <div class="page-head">
   <h1>编辑：${escapeHtml(name)}</h1>
   <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
-  <p class="page-meta">类型：README 导航文档 · <strong>frontmatter 豁免</strong>（架构 §5.2——不套用六字段表单，正文直接编辑） · base commit：<code>${baseCommit === null ? '（空库）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath)}${mode === 'new' ? ' · 新建' : ''}</p>
-  </div>
+  <p class="page-meta">类型：README 导航文档 · <strong>frontmatter 豁免</strong>（架构 §5.2——不套用六字段表单，正文直接编辑） · base commit：<code>${baseCommit === null ? '（空库）' : escapeHtml(baseCommit)}</code>${uploadAttachmentLink(vault, entryPath, !ro)}${mode === 'new' ? ' · 新建' : ''}</p>
+${ro ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：正文可看不可改。</p>\n` : ''}  </div>
   ${draft ? draftNote(draft) : ''}
-  <form id="readme-form" class="form-card">
-  <label>正文（Markdown，多行纯文本）<br><textarea id="readme-body" name="body" rows="18">${escapeHtml(body)}</textarea></label>
+  <form id="readme-form" class="form-card"${ro ? ' aria-disabled="true"' : ''}>
+  <label>正文（Markdown，多行纯文本）<br><textarea id="readme-body" name="body"${dis} rows="18">${escapeHtml(body)}</textarea></label>
   <p id="form-msg" role="alert"></p>
-  <div class="form-actions">
+${ro
+  ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：仅可查看本页，不能保存草稿或提交发布。</p>`
+  : `  <div class="form-actions">
   <button type="button" id="save-draft">保存草稿</button>
   <button type="submit">提交</button>
-  </div>
+  </div>`}
   </form>
 </div>
 `,
@@ -329,6 +359,187 @@ export function editStatePage(vault: { slug: string; name: string }, note: strin
   <h1>编辑</h1>
   <nav aria-label="面包屑"><a href="/vaults">知识库</a> <span aria-hidden="true">›</span> <a href="/vaults/${encodeURIComponent(vault.slug)}/browse">${escapeHtml(vault.name)}</a></nav>
   <p class="state-note">${escapeHtml(note)}</p>
+</div>
+`,
+  );
+}
+
+/** 站内新建表单入参（S10-T3，sprint D5） */
+export interface NewNotePageInput {
+  readonly vault: { slug: string; name: string };
+  /** 目标目录（''=库根）：面包屑上下文与路径输入前缀来源 */
+  readonly dir: string;
+  /** 路径输入预填：缺省=目录前缀（dir/）；?path= 确认态=完整候选路径（已核不存在） */
+  readonly pathPrefill?: string;
+  /** 打开时默认分支 HEAD（编辑页既有嵌入逻辑——提交 CAS 旧值；空库 null） */
+  readonly baseCommit: string | null;
+  /** 六字段+正文预填（空表单=parseDocForForm('')；?path= 确认态可回填本人草稿） */
+  readonly prefill: ParsedForForm;
+  /** 本人现行草稿回填信息（?path= 确认态有草稿时呈现；缺省=无草稿） */
+  readonly draft?: { baseCommit: string | null; updatedAt: string; stale: boolean };
+  /** S10-T2 同形：canWriteVault 实算；false=只读态（门槛保持 read 成员，D4/D17） */
+  readonly canWrite?: boolean;
+  /** UI-RESTYLE：顶部导航登录态（可选——测试直调形态缺省） */
+  readonly viewer?: PageViewer;
+}
+
+/**
+ * 站内新建笔记页（S10-T3，D5：browse「新建笔记」落点）：复用编辑表单模板族
+ * （六字段 + 额外字段 + 正文——editPage 同构），差别=路径可输入（预填目录
+ * 前缀）+「新建笔记」标注 +「将创建新文件」契约文案。提交走既有 §8.2
+ * submissions 端点（不新建端点）；成功后跳转新文档 view 页（编辑页既有
+ * location.href 约定复用）。
+ *
+ * 防误覆盖（submissions 对 upsert 语义是覆盖同名——D17：呈现层防护，POST
+ * 端点行为不变）：提交前对路径输入做存在性探测（HEAD view URL——200 即
+ * 已存在，阻断并提示换路径/走编辑页），表单侧保证新建不覆盖既有文件。
+ */
+export function newNotePage(input: NewNotePageInput): string {
+  const { vault, dir, baseCommit, prefill, draft, viewer } = input;
+  const ro = input.canWrite === false; // S10-T2 reader 只读态同形（D4）
+  const dis = ro ? ' disabled' : '';
+  const apiBase = `/api/v1/vaults/${encodeURIComponent(vault.slug)}`;
+  const dirPrefix = dir === '' ? '' : `${dir}/`;
+  const pathValue = input.pathPrefill !== undefined ? input.pathPrefill : dirPrefix;
+  const confirmed = input.pathPrefill !== undefined; // ?path= 确认态（服务端已核不存在）
+  const statusOptions = [
+    `<option value="" selected>缺省（按 active 解释）</option>`,
+    ...['active', 'draft', 'deprecated'].map((s) => `<option value="${s}">${s}</option>`),
+  ];
+  const uploadHref = `/vaults/${encodeURIComponent(vault.slug)}/upload${dir === '' ? '' : '/' + dir.split('/').map(encodeURIComponent).join('/')}`;
+  // S10-T2 reader 只读态同形：不携带交互脚本
+  const script = ro ? '' : `
+const BASE = ${baseCommit === null ? "null" : js(baseCommit)};
+const VIEW_BASE = ${JSON.stringify(`/vaults/${encodeURIComponent(vault.slug)}/view/`)};
+const DRAFT_BASE = ${JSON.stringify(`${apiBase}/drafts/`)};
+const SUBMIT_URL = ${JSON.stringify(`${apiBase}/submissions`)};
+
+// 路径输入 → 候选库内路径（S10-T3 新建特有：先校验形态，再探测存在性——防误覆盖）
+function normPath(v) {
+  return v.trim().replace(/^\\/+/, '').replace(/\\/+$/, '');
+}
+function currentPath() {
+  return normPath(document.getElementById('edit-form').path.value);
+}
+function pathProblem(p) {
+  if (p === '') return '路径必填（库内路径，如 docs/my-note.md）';
+  if (!p.toLowerCase().endsWith('.md')) return '路径须以 .md 结尾（附件请用上传入口）';
+  if (p.includes('\\\\') || p.split('/').some((s) => s === '' || s === '.' || s === '..')) return '路径含非法段（不允许空段、. 、.. 或反斜杠）';
+  return null;
+}
+const encPath = (p) => p.split('/').map(encodeURIComponent).join('/');
+const viewUrlOf = (p) => VIEW_BASE + encPath(p);
+${COMPOSE_DOC_JS}${API_FN_JS}${RENDER_REPORT_JS}
+document.getElementById('save-draft').addEventListener('click', async () => {
+  const msg = document.getElementById('form-msg');
+  const p = currentPath();
+  const bad = pathProblem(p);
+  if (bad !== null) { document.getElementById('err-path').textContent = bad; return; }
+  document.getElementById('err-path').textContent = '';
+  try {
+    const r = await api('PUT', DRAFT_BASE + encPath(p), { content: composeDoc(), base_commit: BASE });
+    msg.textContent = '草稿已保存（路径 ' + p + (r && r.updated_at ? '，' + r.updated_at : '') + '）——重新打开本页（带 path=' + p + '）可回填。';
+  } catch (err) {
+    msg.textContent = '保存草稿失败：' + err.message;
+  }
+});
+
+document.getElementById('edit-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const f = ev.target;
+  const msg = document.getElementById('form-msg');
+  const p = currentPath();
+  const bad = pathProblem(p);
+  if (bad !== null) { document.getElementById('err-path').textContent = bad; return; }
+  document.getElementById('err-path').textContent = '';
+  try {
+    // 防误覆盖：提交前探测候选路径（HEAD view URL）——200=已存在，阻断（submissions
+    // 对 upsert 语义是覆盖同名；新建直提既有路径属破坏——D17 呈现层防护）
+    const probe = await fetch(viewUrlOf(p), { method: 'HEAD' });
+    if (probe.status === 200) {
+      document.getElementById('err-path').textContent = '该路径已存在——提交将覆盖既有文件（已阻止）。请更换路径，或打开既有文件的编辑页修改。';
+      return;
+    }
+    const r = await api('POST', SUBMIT_URL, {
+      base_commit: BASE,
+      message: f.message.value.trim() || ('Web 新建：' + p),
+      changes: [{ path: p, content: composeDoc() }],
+    });
+    msg.textContent = '已创建并发布（commit ' + (r.commit || '?') + '）——即将打开新文档。';
+    setTimeout(() => { location.href = viewUrlOf(p); }, 600);
+  } catch (err) {
+    if (err.status === 422 && err.data && err.data.files) {
+      renderReport(err.data); // T2 报告——字段定位 + 行（err-title 等既有映射复用）
+      document.getElementById('form-msg').textContent = '提交被校验阻止（表单内容保留——不发布）。';
+    } else if (err.status === 409) {
+      // S4-T7 冲突保护同形：409 信封 details.current_head（打开页面后他人已提交）
+      const tip = err.data && err.data.error && err.data.error.details ? err.data.error.details.current_head : null;
+      document.getElementById('form-msg').textContent = '提交冲突：分支已前进' + (tip ? '（当前 ' + String(tip).slice(0, 10) + '…）' : '') + '——他人先提交，内容仍在表单、草稿已保留；请先核对最新内容，刷新本页取最新基线后重提。';
+    } else {
+      document.getElementById('form-msg').textContent = '提交失败：' + err.message;
+    }
+  }
+});
+`;
+  return layout(
+    `新建笔记 — ${vault.name}`,
+    `<div class="page page-narrow">
+  <div class="page-head">
+  <h1>新建笔记</h1>
+  <nav aria-label="面包屑">${breadcrumb(vault, dir)} <span aria-hidden="true">›</span> 新建笔记</nav>
+  <p class="page-meta">类型：Markdown 知识文档 · 目标目录：${dir === '' ? '库根' : escapeHtml(dir)} · base commit：<code>${baseCommit === null ? '（空库——首次提交）' : escapeHtml(baseCommit)}</code> · <strong>将创建新文件${confirmed ? `：${escapeHtml(pathValue)}` : ''}</strong>（已存在路径将被阻止——不覆盖既有文件） · <a href="${uploadHref}">上传附件</a></p>
+${ro ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：正文可看不可改。</p>\n` : ''}  </div>
+  ${draft ? draftNote(draft) : ''}
+  <form id="edit-form" class="form-card"${ro ? ' aria-disabled="true"' : ''}>
+${fieldRow('路径 <strong>（必填，库内路径，以 .md 结尾）</strong>', `<input name="path"${dis} value="${attr(pathValue)}" placeholder="${attr(dirPrefix)}my-note.md">`, 'path')}
+${fieldRow('标题 <strong>（必填）</strong>', `<input name="title"${dis} required maxlength="200" value="${attr(prefill.fields.title)}">`, 'title')}
+${fieldRow('负责人（可选，知识负责人）', `<input name="owner"${dis} maxlength="100" value="${attr(prefill.fields.owner)}">`, 'owner')}
+${fieldRow('摘要（可选，简短摘要）', `<textarea name="description"${dis} rows="2" maxlength="500">${attr(prefill.fields.description)}</textarea>`, 'description')}
+${fieldRow('标签（可选，逗号分隔）', `<input name="tags"${dis} value="${attr(prefill.fields.tags)}">`, 'tags')}
+${fieldRow('状态（可选，下拉封闭集）', `<select name="status"${dis}>${statusOptions.join('')}</select>`, 'status')}
+${fieldRow('来源（可选，原始资料或依据）', `<input name="source"${dis} maxlength="500" value="${attr(prefill.fields.source)}">`, 'source')}
+${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</code>；允许标量/列表/映射）', `<textarea name="extra"${dis} rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
+  <label>正文（Markdown，多行纯文本）<br><textarea name="body"${dis} rows="18">${attr(prefill.body)}</textarea></label>
+  <label>提交说明（可选）<br><input name="message"${dis} placeholder="缺省：Web 新建：&lt;路径&gt;"></label>
+  <p id="form-warn" class="form-warn"></p>
+  <p id="form-msg" role="alert"></p>
+${ro
+  ? `  <p class="page-meta">${READONLY_BADGE} 无写权限：仅可查看本页，不能保存草稿或提交发布。</p>`
+  : `  <div class="form-actions">
+  <button type="button" id="save-draft">保存草稿</button>
+  <button type="submit">创建</button>
+  </div>`}
+  </form>
+${ro ? '' : `  <p class="form-foot"><small>创建=以新路径正式发布（走统一校验与发布组件，提交既有 submissions 端点）——路径已存在将被阻止，不覆盖既有文件；保存草稿按路径私有留存，重开本页（带 path）可回填。</small></p>`}
+</div>
+`,
+    script,
+    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+  );
+}
+
+/**
+ * 已存在路径提示态（S10-T3 防误覆盖：?path= 指向既有条目——submissions 对
+ * upsert 语义是覆盖同名，创建表单不得呈现；引导到既有文件编辑页或换路径）。
+ */
+export function newNoteExistsPage(vault: { slug: string; name: string }, existingPath: string, kind: 'blob' | 'tree'): string {
+  const enc = (p: string) => p.split('/').map(encodeURIComponent).join('/');
+  const slash = existingPath.lastIndexOf('/');
+  const parentDir = slash === -1 ? '' : existingPath.slice(0, slash);
+  const existingOps =
+    kind === 'tree'
+      ? `<a href="/vaults/${encodeURIComponent(vault.slug)}/browse/${enc(existingPath)}">浏览该目录</a>`
+      : `<a href="/vaults/${encodeURIComponent(vault.slug)}/view/${enc(existingPath)}">查看</a> · <a href="/vaults/${encodeURIComponent(vault.slug)}/edit/${enc(existingPath)}">编辑既有文件</a>`;
+  const retryHref = `/vaults/${encodeURIComponent(vault.slug)}/edit/new${parentDir === '' ? '' : `?dir=${parentDir.split('/').map(encodeURIComponent).join('/')}`}`;
+  return layout(
+    `新建笔记 — ${vault.name}`,
+    `<div class="page">
+  <div class="page-head">
+  <h1>新建笔记</h1>
+  <nav aria-label="面包屑"><a href="/vaults">知识库</a> <span aria-hidden="true">›</span> <a href="/vaults/${encodeURIComponent(vault.slug)}/browse">${escapeHtml(vault.name)}</a></nav>
+  </div>
+  <p class="state-note">路径 <code>${escapeHtml(existingPath)}</code> 已存在——站内新建不覆盖既有文件。请更换路径重新新建，或直接${kind === 'tree' ? '浏览该目录' : '编辑既有文档'}。</p>
+  <p>${existingOps} · <a href="${retryHref}">换个路径新建</a></p>
 </div>
 `,
   );

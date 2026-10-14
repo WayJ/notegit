@@ -12,6 +12,7 @@ import { publishWebSubmit, type PublishResult, type RejectedResult } from '../..
 import { execGit } from '../../publish/git-exec.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
 import { sendPageNotFound, html } from '../page-kit.ts';
+import { canWriteVault } from '../role-gate.ts';
 import { hintFor } from '../hints.ts';
 import { uploadPage, uploadStatePage } from './pages.ts';
 import { ATTACHMENT_OID_PATTERN, attachmentUrl } from '../view/attachments.ts';
@@ -215,6 +216,9 @@ export function registerUploadRoutes(app: FastifyInstance, opts: UploadRoutesOpt
       uploadPage({
         vault,
         dirPath,
+        // S10-T2 权限感知：reader 直开 URL 呈只读态（D4：门槛 read 成员不变；
+        // canWriteVault 唯一判定面，D17 呈现层——POST 侧鉴权原样）
+        canWrite: canWriteVault(membershipSource, who.subject.employee_id, vault.slug),
         viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
       }),
     );

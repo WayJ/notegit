@@ -10,11 +10,12 @@ import { VaultService } from '../../vaults/service.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
 import { html, sendPageNotFound } from '../page-kit.ts';
 import { hintFor } from '../hints.ts';
+import { canWriteVault } from '../role-gate.ts';
 import { viewUrl } from '../browse/pages.ts';
 import { readBlobText, README_RENDER_MAX_BYTES } from '../browse/tree.ts';
 import { renderMarkdown } from '../view/render.ts';
 import { attachmentUrl, repoPathOfRef, type AttachmentImageUrlResolver } from '../view/attachments.ts';
-import { readCommitLog, readCommitDiff } from './log.ts';
+import { readCommitLog, readCommitDiff, readCommitFiles, type CommitEntry } from './log.ts';
 import { readEntryAtCommit, readBlobBytes, bodyAfterFrontmatter } from './version.ts';
 import { restoreFileAtCommit } from './restore.ts';
 import { parseCitation } from './cite.ts';
@@ -156,6 +157,22 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
     if (read.kind === 'no-commits') return html(reply, historyStatePage(vault, '尚无提交内容（新库空初始化）。'));
     if (read.kind === 'unavailable') return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
     if (read.kind === 'not-found') return sendPageNotFound(reply); // 畸形路径形态（反存在性）
+    // S10-T1 D3：库级查询逐提交补读「涉及文件」——行内逐文件 diff 入口（与
+    // readCommitDiff 同一基线语义，链接必可达）；读取失败整体空态（不渲染半页死链）
+    let commits: readonly CommitEntry[] = read.commits;
+    if (treePath === '') {
+      const enriched: CommitEntry[] = [];
+      for (const c of read.commits) {
+        const files = await readCommitFiles(opts.dataDir, vault.id, c.oid);
+        if (files.kind === 'unavailable') {
+          return html(reply, historyStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
+        }
+        enriched.push(files.kind === 'ok' ? { ...c, files: files.files } : { ...c, files: [] });
+      }
+      commits = enriched;
+    }
+    // S10-T1 编辑入口（呈现层 canWriteVault——D17 薄委托；路径级 .md 由模板门控）
+    const canWrite = canWriteVault(membershipSource, who.subject.employee_id, slug);
     return html(
       reply,
       historyPage({
@@ -165,9 +182,10 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
           is_instance_admin: who.subject.is_instance_admin,
         },
         treePath,
-        commits: read.commits,
+        commits,
         page,
         hasMore: read.hasMore,
+        canWrite,
       }),
     );
   };
@@ -260,6 +278,8 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
     } catch {
       return html(reply, historyStatePage(vault, '内容暂不可用（正文读取失败）。'));
     }
+    // S10-T1 编辑入口（呈现层 canWriteVault——D17；仅 .md 渲染形态，模板门控）
+    const canWrite = canWriteVault(membershipSource, guard.who.subject.employee_id, slug);
     const body = bodyAfterFrontmatter(text);
     // 两遍法（view/routes.ts 同构）：第一遍收集仓库相对图片引用，按该提交树
     // 解析（历史 blob 仍在库内——附件通道按 blob 寻址可达）；第二遍正式渲染。
@@ -271,7 +291,10 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
       },
     });
     if (refs.size === 0) {
-      return html(reply, versionPage({ ...shared, body: { kind: 'rendered', html: pass1.html, strippedHtml: pass1.strippedHtml } }));
+      return html(
+        reply,
+        versionPage({ ...shared, body: { kind: 'rendered', html: pass1.html, strippedHtml: pass1.strippedHtml }, canWrite }),
+      );
     }
     const resolved = new Map<string, string>();
     for (const ref of refs) {
@@ -287,7 +310,10 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
       return repoPath !== null ? (resolved.get(repoPath) ?? null) : null;
     };
     const pass2 = renderMarkdown(body, { attachmentImageUrl: lookup });
-    return html(reply, versionPage({ ...shared, body: { kind: 'rendered', html: pass2.html, strippedHtml: pass2.strippedHtml } }));
+    return html(
+      reply,
+      versionPage({ ...shared, body: { kind: 'rendered', html: pass2.html, strippedHtml: pass2.strippedHtml }, canWrite }),
+    );
   });
 
   // 还原确认页（GET，门槛=read 成员；写权限由 POST 时发布组件判定）
