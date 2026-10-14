@@ -71,6 +71,12 @@ export function editUrl(slug: string, treePath: string): string {
   return `/vaults/${encodeURIComponent(slug)}/edit/${treePath.split('/').map(encodeURIComponent).join('/')}`;
 }
 
+/** 站内新建入口 URL（S10-T3，D5）：目录上下文=当前 browse 目录（库根不带 dir） */
+export function newNoteUrl(slug: string, dirPath: string): string {
+  const base = `/vaults/${encodeURIComponent(slug)}/edit/new`;
+  return dirPath === '' ? base : `${base}?dir=${dirPath.split('/').map(encodeURIComponent).join('/')}`;
+}
+
 /** 整理操作入口（S4-T5：目录页最小可用——重命名表单页 / 删除确认页；GET 无写操作） */
 export function renameUrl(slug: string, treePath: string): string {
   return `/vaults/${encodeURIComponent(slug)}/rename/${treePath.split('/').map(encodeURIComponent).join('/')}`;
@@ -145,10 +151,11 @@ export function browsePage(input: BrowsePageInput): string {
         ? ''
         : `<section class="readme-card">\n<h2>README.md <small>（导航文档 · 豁免 frontmatter）</small></h2>\n<pre>${escapeHtml(readme)}</pre>\n</section>`;
   // S4-T8（T4 遗留收口）：目录级上传入口（写者）。S10-T2：reader 同位呈现只读徽章
-  // （写入口隐藏，读者明确知态——F-2 满屏死按钮修复）
+  // （写入口隐藏，读者明确知态——F-2 满屏死按钮修复）。S10-T3：「新建笔记」主
+  // 操作位（DESIGN.md button-primary——coral 仅主 CTA；目录上下文=当前目录）
   const uploadUrl = `/vaults/${encodeURIComponent(vault.slug)}/upload${dirPath === '' ? '' : '/' + dirPath.split('/').map(encodeURIComponent).join('/')}`;
   const headOps = canWrite
-    ? ` <span class="entry-ops">(<a href="${uploadUrl}">上传</a>)</span>`
+    ? ` <a class="btn btn-primary" href="${newNoteUrl(vault.slug, dirPath)}">新建笔记</a> <span class="entry-ops">(<a href="${uploadUrl}">上传</a>)</span>`
     : ` ${READONLY_BADGE}`;
   return layout(
     `${vault.name} 目录`,
