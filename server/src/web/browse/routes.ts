@@ -6,8 +6,8 @@ import { createDbMembershipSource } from '../../vaults/membership.ts';
 import { VaultService } from '../../vaults/service.ts';
 import { html, sendPageNotFound } from '../page-kit.ts';
 import { canWriteVault } from '../role-gate.ts';
-import { vaultListPage, browsePage, browseStatePage, browseUrl } from './pages.ts';
-import { readDirTree, findReadmeEntry, readBlobText, README_RENDER_MAX_BYTES } from './tree.ts';
+import { vaultListPage, browsePage, browseStatePage, browseUrl, type BrowsePageInput } from './pages.ts';
+import { readDirTree, findReadmeEntry, readBlobText, readLastCommits, README_RENDER_MAX_BYTES, type LastCommitInfo } from './tree.ts';
 
 /**
  * S4-T1 浏览族路由（有权库列表 + 目录浏览）：
@@ -91,19 +91,27 @@ export function registerBrowseRoutes(app: FastifyInstance, opts: BrowseRoutesOpt
     if (read.kind === 'unavailable') return html(reply, browseStatePage(vault, '内容暂不可用（仓库目录缺失或读取失败）。'));
     if (read.kind === 'not-found') return sendPageNotFound(reply);
 
-    // README.md（大小写不敏感，架构 §5.2）：目录导航渲染 + 豁免标注；无 frontmatter 不报错（零校验）
-    let readme: string | null | 'too-large' = null;
+    // README.md（大小写不敏感，架构 §5.2）：目录导航渲染 + 豁免标注；无 frontmatter
+    // 不报错（零校验——呈现层剥离不外露，见 pages.ts readmeCard）。S11-T3：超限
+    // 同样读取正文（回退 <pre> 原文形态所需）；读取失败不阻断目录列表。
+    let readme: BrowsePageInput['readme'] = null;
     const readmeEntry = findReadmeEntry(read.entries);
     if (readmeEntry !== undefined) {
-      if ((readmeEntry.size ?? 0) > README_RENDER_MAX_BYTES) {
-        readme = 'too-large';
-      } else {
-        try {
-          readme = await readBlobText(opts.dataDir, vault.id, readmeEntry.oid);
-        } catch {
-          readme = null; // 读取失败不阻断目录列表（导航文本为增益非依赖）
-        }
+      try {
+        const text = await readBlobText(opts.dataDir, vault.id, readmeEntry.oid);
+        readme = (readmeEntry.size ?? 0) > README_RENDER_MAX_BYTES ? { kind: 'oversize', text } : { kind: 'markdown', text };
+      } catch {
+        readme = null; // 读取失败不阻断目录列表（导航文本为增益非依赖）
       }
+    }
+
+    // S11-T3 目录行最后提交元数据：单次批量 git log 派生（readLastCommits——
+    // 逐条目 spawn 禁止）；派生失败降级为不呈现该列，不阻断目录列表
+    let lastCommits: ReadonlyMap<string, LastCommitInfo> | undefined;
+    try {
+      lastCommits = await readLastCommits(opts.dataDir, vault.id, vault.defaultBranch, dirPath, read.entries);
+    } catch {
+      lastCommits = undefined;
     }
     return html(
       reply,
@@ -112,6 +120,7 @@ export function registerBrowseRoutes(app: FastifyInstance, opts: BrowseRoutesOpt
         dirPath,
         entries: read.entries,
         readme,
+        lastCommits,
         // S10-T2 权限感知：写入口按当前会话员工对该库的写权渲染（canWriteVault
         // 唯一判定面；reader 只读态——D17 呈现层，POST 侧鉴权原样）
         canWrite: canWriteVault(membershipSource, who.subject.employee_id, vault.slug),
