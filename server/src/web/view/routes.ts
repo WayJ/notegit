@@ -6,6 +6,7 @@ import { createDbMembershipSource } from '../../vaults/membership.ts';
 import { VaultService } from '../../vaults/service.ts';
 import { extractFrontmatter } from 'notegit-validation';
 import { html, sendPageNotFound } from '../page-kit.ts';
+import { canWriteVault } from '../role-gate.ts';
 import { browseStatePage, browseUrl } from '../browse/pages.ts';
 import { readEntryAt, readBlobText, README_RENDER_MAX_BYTES } from '../browse/tree.ts';
 import { renderMarkdown } from './render.ts';
@@ -168,6 +169,8 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
     }
     const body = bodyAfterFrontmatter(text);
     const rendered = await renderBody(vault, entryPath, body);
+    // S10-T1 编辑入口（呈现层 canWriteVault——D17 薄委托；edit 表单仅 .md，本分支恰为 .md）
+    const canWrite = canWriteVault(membershipSource, who.subject.employee_id, slug);
     return html(
       reply,
       viewPage({
@@ -177,6 +180,7 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
         bodyHtml: rendered.html,
         strippedHtml: rendered.strippedHtml,
         viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+        canWrite,
       }),
     );
   });
