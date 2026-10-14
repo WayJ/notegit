@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notegit — Git 为唯一真源的企业知识库</title>
+  <meta name="description" content="Notegit 是企业自部署、人与 AI 共用的知识库：Git 为唯一真源，Web / Git / CLI 三入口一致授权，服务端统一校验，全文检索与一致备份；无需另外准备 Git 平台。">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="wordmark" href="index.html">Notegit</a>
+      <p class="tagline">人与 AI 共用的企业知识库</p>
+      <div class="header-cta">
+        <a class="button-secondary" href="https://github.com/WayJ/notegit">GitHub</a>
+        <a class="button-primary" href="docs/user/quickstart.html">文档</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="band hero" aria-labelledby="hero-title">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">企业自部署 · 无需另外准备 Git 平台</p>
+          <h1 id="hero-title">Git 为唯一真源的企业知识库</h1>
+          <p class="lead">Notegit 供企业里的人和 AI 共同使用、共同维护：Markdown 与附件是知识内容，Git 是版本记录；已发布知识以库默认分支为准，管理数据不维护第二份权威副本。</p>
+          <div class="button-row">
+            <a class="button-primary" href="docs/user/quickstart.html">快速开始</a>
+            <a class="button-secondary" href="https://github.com/WayJ/notegit">GitHub 仓库</a>
+          </div>
+        </div>
+        <div class="code-window" aria-label="原生 Git 工作流示例">
+          <p class="code-title">员工本地 · 原生 Git</p>
+          <pre><code>$ git clone https://notegit.example.internal/vaults/handbook.git
+$ cd handbook
+$ vim notes/onboarding.md
+$ git commit -am "更新入职手册"
+$ git push
+<span class="cmt"># 服务端 pre-receive 统一校验</span>
+<span class="status-ok">→ 校验通过，发布到默认分支 main</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="capabilities" class="band band-soft" aria-labelledby="capabilities-title">
+      <div class="container">
+        <h2 id="capabilities-title">核心能力</h2>
+        <p class="section-intro">安全内核自 v0.1 起成形，v0.2 收口内容生产与发现的表层。以下均为当前版本的实际能力，能力边界见「已知限制」文档。</p>
+        <div class="card-grid">
+          <article class="feature-card">
+            <svg class="card-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1v14M1 8h14M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            <h3>Git 唯一真源</h3>
+            <p>知识正文、附件与目录结构都活在 Git 仓库里，提交历史即版本记录；管理数据不维护第二份权威副本，标题、标签、搜索索引等派生数据均可从 Git 重建。</p>
+          </article>
+          <article class="feature-card">
+            <svg class="card-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1v14M1 8h14M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            <h3>三入口一致授权</h3>
+            <p>Web、Git HTTPS 与 ngt 命令行共用同一套库权限（阅读 / 编辑 / 管理）与员工身份；Agent 不另设权限体系，凭据只能收窄、不能扩大权限。</p>
+          </article>
+          <article class="feature-card">
+            <svg class="card-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1v14M1 8h14M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            <h3>统一校验</h3>
+            <p>提交前校验控制知识格式质量：服务端 pre-receive 对所有入口的推送统一执行（frontmatter、文档与附件大小、类型与库容量限制）；格式合规不等于事实正确。</p>
+          </article>
+          <article class="feature-card">
+            <svg class="card-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1v14M1 8h14M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            <h3>历史与还原</h3>
+            <p>每库保留完整提交历史，误删误改可从历史找回；第一版没有回收站与收藏，恢复即走 Git 历史。</p>
+          </article>
+          <article class="feature-card">
+            <svg class="card-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1v14M1 8h14M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            <h3>全文检索</h3>
+            <p>v0.2 起命中面覆盖标题、标签、摘要、文件名与正文，中文两字即可查询；检索结果按库权限逐请求过滤。</p>
+          </article>
+          <article class="feature-card">
+            <svg class="card-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1v14M1 8h14M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            <h3>备份恢复演练</h3>
+            <p>维护模式排空、数据库快照与 Git 复制抽样校验打包为一致备份（数据与密钥分置两件）；恢复流程经真实容器演练验证并留档。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="entrances" class="band" aria-labelledby="entrances-title">
+      <div class="container">
+        <h2 id="entrances-title">三入口，同一套权限</h2>
+        <p class="section-intro">浏览器、原生 Git 与命令行都落在同一套库成员权限（阅读 / 编辑 / 管理）上：撤权对三个入口同时生效，Agent 以员工身份操作。已下载到本地的克隆副本不自动收回，由企业设备管理承担。</p>
+        <div class="entrance-grid">
+          <div class="entrance-item">
+            <h3>Web</h3>
+            <p>浏览器整理与查阅：目录浏览（README 渲染）、双栏预览编辑与草稿自动保存、站内新建笔记、最近变更流（v0.2）。</p>
+          </div>
+          <div class="entrance-item">
+            <h3>Git</h3>
+            <p>原生 Git HTTPS 读写：clone / pull / push 零适配，Agent 与既有工具链直接可用；服务端 pre-receive 始终校验。</p>
+          </div>
+          <div class="entrance-item">
+            <h3>CLI（ngt）</h3>
+            <p>本地工作副本管理：sync / ls 展示版本与同步时间，离线可读；断网时明示「可能过期」。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="deploy" class="band band-dark" aria-labelledby="deploy-title">
+      <div class="container">
+        <h2 id="deploy-title">快速部署</h2>
+        <p class="section-intro">单容器部署：Node 24 + Fastify + node:sqlite + git http-backend，数据落在一个持久卷。以下三条命令如实摘自 deploy/README.md：</p>
+        <div class="deploy-grid">
+          <div class="code-window">
+            <p class="code-title">deploy/README.md · 快速开始</p>
+            <pre><code><span class="cmt"># 构建（上下文 = 仓库根）</span>
+docker build -f deploy/Dockerfile -t notegit:0.1.0 .
+<span class="cmt"># 运行（单实例 + 命名持久卷）</span>
+docker run -d --name notegit -p 127.0.0.1:3000:3000 -v notegit-data:/data notegit:0.1.0
+<span class="cmt"># 或使用最小编排示例</span>
+docker compose -f deploy/docker-compose.yml up -d --build</code></pre>
+          </div>
+          <div class="deploy-notes">
+            <ul>
+              <li>最低规格：1 vCPU / 768 MB 内存 / 2 GB 数据卷（推荐 2 vCPU / 1 GB / 20 GB）。</li>
+              <li>对外建议保持回环发布 + 反向代理终结 TLS。</li>
+              <li>首次初始化：起容器后用一次性管理员令牌完成 bootstrap。</li>
+            </ul>
+            <a class="button-secondary" href="docs/deploy/README.html">完整部署文档</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="docs" class="band band-soft" aria-labelledby="docs-title">
+      <div class="container">
+        <h2 id="docs-title">文档</h2>
+        <div class="doc-grid">
+          <div class="doc-group">
+            <h3>使用</h3>
+            <ul>
+              <li><a href="docs/user/quickstart.html">快速开始</a></li>
+              <li><a href="docs/user/README.html">用户指南</a></li>
+              <li><a href="docs/user/contributing.html">贡献知识</a></li>
+              <li><a href="docs/user/permissions.html">权限说明</a></li>
+              <li><a href="docs/user/history-boundary.html">历史边界</a></li>
+            </ul>
+          </div>
+          <div class="doc-group">
+            <h3>运维</h3>
+            <ul>
+              <li><a href="docs/admin/README.html">管理员指南</a></li>
+              <li><a href="docs/deploy/README.html">容器部署</a></li>
+            </ul>
+          </div>
+          <div class="doc-group">
+            <h3>参考</h3>
+            <ul>
+              <li><a href="docs/known-limitations.html">已知限制</a></li>
+              <li><a href="docs/release-notes-v0.2.0.html">v0.2.0 发布说明</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p class="footer-brand">Notegit</p>
+      <nav class="footer-nav" aria-label="页脚导航">
+        <a href="https://github.com/WayJ/notegit">GitHub</a>
+        <a href="docs/user/quickstart.html">快速开始</a>
+        <a href="docs/known-limitations.html">已知限制</a>
+        <a href="docs/release-notes-v0.2.0.html">发布说明</a>
+      </nav>
+      <p class="footer-meta">版本 v0.2.0 · 许可证：未声明（仓库未附 LICENSE 文件） · <a href="https://github.com/WayJ/notegit">github.com/WayJ/notegit</a></p>
+    </div>
+  </footer>
+</body>
+</html>

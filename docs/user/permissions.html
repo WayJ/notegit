@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>权限与撤权边界 · Notegit 文档</title>
+<link rel="stylesheet" href="../../docs.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="../../index.html">Notegit</a>
+    <a class="back-home" href="../../index.html">返回首页</a>
+  </div>
+</header>
+<div class="docs-layout">
+  <details class="docs-nav" open>
+    <summary class="docs-nav-toggle">文档导航</summary>
+      <nav class="docs-nav-tree" aria-label="文档导航">
+      <section class="nav-group">
+        <h2>用户文档</h2>
+        <ul>
+        <li><a href="README.html">Notegit 用户文档（员工视角）</a></li>
+        <li><a href="quickstart.html">安装与快速上手（员工视角）</a></li>
+        <li><a href="contributing.html">贡献流程：网页与 Git 双通道</a></li>
+        <li><a aria-current="page" class="current" href="permissions.html">权限与撤权边界</a></li>
+        <li><a href="history-boundary.html">历史边界：重命名与跨库移动</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>管理员</h2>
+        <ul>
+        <li><a href="../admin/README.html">Notegit 管理员手册</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>部署</h2>
+        <ul>
+        <li><a href="../deploy/README.html">Notegit 容器部署（S8-T1 发行包）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>已知限制</h2>
+        <ul>
+        <li><a href="../known-limitations.html">已知限制（v0.1 · 2026-10-14）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>发布说明</h2>
+        <ul>
+        <li><a href="../release-notes-v0.2.0.html">Notegit v0.2.0 发布说明</a></li>
+        </ul>
+      </section>
+      </nav>
+  </details>
+  <main class="docs-main">
+    <article class="doc-article">
+<h1>权限与撤权边界</h1>
+<p>Notegit 的权限模型一句话：<strong>库（Vault）是内容访问权限的最小单位</strong>，像 Git 项目一样按成员授权；网页、API、Git 三类入口共用同一判定，改一处三处同变。</p>
+<h2>库角色</h2>
+<table>
+  <thead>
+    <tr><th>角色</th><th>读取 / clone / fetch</th><th>push</th><th>管理成员与设置</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>reader（阅读者）</td><td>允许</td><td>禁止</td><td>禁止</td></tr>
+    <tr><td>editor（编辑者）</td><td>允许</td><td>允许，受分支规则约束</td><td>禁止</td></tr>
+    <tr><td>admin（库管理员）</td><td>允许</td><td>允许，受分支规则约束</td><td>允许</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><strong>实例管理员</strong>是另一层：管部署、账号与全实例运维，不因此自动拥有业务库内容（新库默认私有，创建者为库管理员，不按库名推断权限）。</li>
+  <li>库管理员经成员端点授权：<code>PUT /api/v1/vaults/{slug}/members/{username}</code>（角色 reader/editor/admin）；移除成员 = <code>DELETE</code> 同路径。</li>
+  <li>需要隔离的内容<strong>拆库</strong>——库内没有文档级权限，<code>status</code>、<code>owner</code>、标签都不构成访问控制。</li>
+</ul>
+<h2>「无权」长什么样</h2>
+<p>对无权库，网页列表、搜索结果、Git 通道一律<strong>当作不存在</strong>（404），与「库不存在」同一表现——不泄露库的存在性。附件、历史、refs、对象同样不可访问。只读成员的任何写操作（网页提交、push）被 403 拒绝。</p>
+<p>权限变更<strong>对后续服务端请求即时生效</strong>：移除成员后的下一次请求就不可见。</p>
+<h2>访问凭据（ngt_ 令牌）</h2>
+<p>Git 通道与 CLI 不用网页会话，用你名下的<strong>访问凭据</strong>：<code>ngt_</code> 前缀令牌，在网页「我的凭据」页（<code>/credentials</code>，<code>POST /api/v1/credentials</code>）自助创建——<code>name</code> 与 <code>expires_at</code> 必填（有效期上限 90 天），明文<strong>仅创建时显示一次</strong>，此后界面只显示 <code>ngt_ab…wxyz</code> 形态掩码。</p>
+<ul>
+  <li>令牌按 HMAC 摘要存储，服务端谁也拿不回明文；忘了就撤销旧的（<code>DELETE /api/v1/credentials/{id}</code>）再建新的。</li>
+  <li>可选 <code>scope</code> 只能<strong>收窄</strong>权限（只读 / 限定部分库），不能扩大——给不同设备/Agent 发不同令牌是推荐做法，出问题时精确吊销。</li>
+  <li>网页退出登录<strong>不撤销</strong>令牌（会话与令牌是两回事）；修改口令会使全部网页会话失效，令牌不自动撤销——需一并处理时页端有提示。</li>
+</ul>
+<h2>撤权后会发生什么</h2>
+<table>
+  <thead>
+    <tr><th>触发</th><th>后续请求</th><th>你本地已有的东西</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>成员被移除（撤权）</td><td>该库网页/API/Git 一律 404；搜索结果下一查询消失</td><td>本地克隆<strong>保留</strong>（见下）</td></tr>
+    <tr><td>令牌到期</td><td>401（<code>E-AUTH-002</code>）</td><td>换新令牌即可</td></tr>
+    <tr><td>令牌被撤销（自助或管理员代管）</td><td>401（<code>E-AUTH-003</code>），即时生效</td><td>同上</td></tr>
+    <tr><td>账号被停用</td><td>全部会话与令牌 401（<code>E-AUTH-004</code>）</td><td>联系实例管理员</td></tr>
+  </tbody>
+</table>
+<p>两条硬边界：</p>
+<ol>
+  <li><strong>已下载内容不能收回</strong>。撤权拦住的是后续请求；此前克隆到本地/托管工作副本、以及任何人已经读走的内容，由企业设备管理与保密制度承担。撤权后想收回终端副本，走设备管理渠道。</li>
+  <li><strong>本地克隆不被自动删除</strong>。<code>notegit sync</code> 发现某库 fetch 收 404 时按撤权处理：跳过、在状态里标记 <code>revoked</code>、逐库报告，副本原样保留；确认不再需要时用 <code>notegit sync clean</code> 显式清理（遇未提交修改/未推送提交会先拒绝并给导出指引）。管理员重新授权后，下次 sync 自动恢复更新。</li>
+</ol>
+<h2>审计以认证主体为准</h2>
+<p>每次推送与网页提交，服务端记录的是<strong>认证身份</strong>（账号 + 凭据）、库、时间、旧新 commit 与结果。Git commit 的 author/committer 字段客户端可随意填写，<strong>不作为身份凭证</strong>——用谁的令牌推的，审计里就是谁。</p>
+<h2>给 Agent 使用者的推论</h2>
+<p>Agent 以你的员工身份工作：权限与你完全一致（凭据只能更窄），审计也记在你名下——发凭据给 Agent/Harness 时按最小范围收窄。详见 <a href="https://github.com/WayJ/notegit/blob/main/docs/harness/agent-guide.md">Agent 使用指南</a>与<a href="../known-limitations.html">已知限制</a>。</p>
+    </article>
+  </main>
+</div>
+</body>
+</html>

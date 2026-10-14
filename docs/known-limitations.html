@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>已知限制（v0.1 · 2026-10-14） · Notegit 文档</title>
+<link rel="stylesheet" href="../docs.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="../index.html">Notegit</a>
+    <a class="back-home" href="../index.html">返回首页</a>
+  </div>
+</header>
+<div class="docs-layout">
+  <details class="docs-nav" open>
+    <summary class="docs-nav-toggle">文档导航</summary>
+      <nav class="docs-nav-tree" aria-label="文档导航">
+      <section class="nav-group">
+        <h2>用户文档</h2>
+        <ul>
+        <li><a href="user/README.html">Notegit 用户文档（员工视角）</a></li>
+        <li><a href="user/quickstart.html">安装与快速上手（员工视角）</a></li>
+        <li><a href="user/contributing.html">贡献流程：网页与 Git 双通道</a></li>
+        <li><a href="user/permissions.html">权限与撤权边界</a></li>
+        <li><a href="user/history-boundary.html">历史边界：重命名与跨库移动</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>管理员</h2>
+        <ul>
+        <li><a href="admin/README.html">Notegit 管理员手册</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>部署</h2>
+        <ul>
+        <li><a href="deploy/README.html">Notegit 容器部署（S8-T1 发行包）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>已知限制</h2>
+        <ul>
+        <li><a aria-current="page" class="current" href="known-limitations.html">已知限制（v0.1 · 2026-10-14）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>发布说明</h2>
+        <ul>
+        <li><a href="release-notes-v0.2.0.html">Notegit v0.2.0 发布说明</a></li>
+        </ul>
+      </section>
+      </nav>
+  </details>
+  <main class="docs-main">
+    <article class="doc-article">
+<h1>已知限制（v0.1 · 2026-10-14）</h1>
+<p>Notegit 第一版（E1 范围）能力边界的集中声明，DOD-15 交付材料之一。三条来源逐条对齐：<strong>架构 §12 边界</strong>（设计决定，非缺陷）、<strong>第一版明确排除</strong>（roadmap 声明的范围外项）、<strong>本周期遗留</strong>（实现现状中尚未收口的具体项，附依据）。本文只声明现状，不承诺时间表；与架构 §12 的一致性由 <code>cli/test/delivery-docs-consistency.test.ts</code> 自动看守。</p>
+<p>规则版本基线：<code>1.0.0-draft.2</code>（draft；<a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/rules-version.json">rules-version.json</a>）。</p>
+<h2>1. 架构边界（架构 §12，逐条）</h2>
+<p>这些是第一版的<strong>设计边界</strong>，按 §12 的处理方式运行：</p>
+<table>
+  <thead>
+    <tr><th>边界</th><th>现状说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>已下载内容不能收回</td><td>撤权只拦后续请求（网页/API/Git 一致）；终端上的克隆副本与已读走内容由企业设备管理承担。本地副本不自动删除，<code>notegit sync clean</code> 显式清理且遇未导出数据先拒绝</td></tr>
+    <tr><td>库内没有文档级权限</td><td>权限最小单位是库；需要隔离的内容拆库。<code>status</code>、<code>owner</code>、标签不构成访问控制</td></tr>
+    <tr><td>Agent 使用员工身份</td><td>无独立 Agent 权限体系：操作权限与员工一致，凭据只能收窄；工具自报身份仅作线索，服务端审计记录真实认证主体</td></tr>
+    <tr><td>原生 Git 可跳过本地 hook</td><td>服务端 pre-receive 始终校验（先写后删、合并提交、多 ref 推送同样拦）；格式合规不等于事实正确</td></tr>
+    <tr><td>本地副本可能不是最新</td><td><code>ls</code>/<code>sync</code> 展示版本与同步时间、断网明示「可能过期」；保留离线能力，不做强一致承诺</td></tr>
+    <tr><td>默认不强制审核</td><td>不强制所有提交走 PR；需要约束时用 <code>main_admin_only</code> 限制默认分支写入。完整审核工作流属第二阶段</td></tr>
+    <tr><td>复杂文档与大附件</td><td>第一版限制支持范围与容量（文档/附件大小、类型清单、单次 push、库容量、校验内存等限制键可配置），复杂格式按真实需求再扩展</td></tr>
+    <tr><td>Git 和数据库状态分离</td><td>写入结果核对（审计 old→new 成链）、恢复对账 CLI、一致备份（维护模式 + 分置两件）覆盖；极端中断态经对账任务处置</td></tr>
+  </tbody>
+</table>
+<h2>2. 第一版明确排除（范围外，不是缺陷）</h2>
+<p>以下能力按 roadmap「第一版明确排除」声明不在 v0.1（详见 <a href="https://github.com/WayJ/notegit/blob/main/docs/superpowers/roadmaps/2026-10-12-notegit-v01.md">roadmap</a> 与架构 §1.3/§12）：</p>
+<ul>
+  <li><strong>流程与身份</strong>：强制所有提交走 PR / 完整审核工作流（第二阶段）；SSO 与企业目录对接；文档级权限；独立 Agent 权限体系。</li>
+  <li><strong>内容与格式</strong>：富文本编辑器；Word/PDF/TXT 等复杂格式转换；正文全文/语义搜索（查找=标题/标签/摘要元数据检索）；AI 自动补全元数据；收藏、回收站（删除恢复靠 Git 历史）。</li>
+  <li><strong>Git 侧</strong>：SSH 传输（第一版仅 HTTPS）；客户端写入 tag 及其他 ref 命名空间；Git LFS；跨库永久文档 ID（文档标识=库+路径，跨库移动历史不拼接，见<a href="user/history-boundary.html">历史边界</a>）。</li>
+  <li><strong>平台与规模</strong>：通用 Git 项目平台功能（issue/CI/看板）；多实例/对象存储/高可用承诺（见「单实例假设」）；自动提交守护进程；MCP 与在线内容查询接口；Windows CLI（首发仅 macOS/Linux）。</li>
+  <li><strong>网页编辑</strong>：仅默认分支（候选修改经 Git 非默认分支）；拖拽目录排序（目录结构由 Git 路径表达）。</li>
+</ul>
+<h2>3. 本周期遗留（实现现状尚未收口）</h2>
+<table>
+  <thead>
+    <tr><th>项</th><th>现状与影响</th><th>依据</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>小屏导航折叠后置</td><td>&lt;768px 视口隐藏菜单簇（保留字标+CTA），折叠按钮按任务约定后置——移动端导航不完整</td><td><a href="https://github.com/WayJ/notegit/blob/main/.agents/notes/2026-10-13-ui-restyle.txt">UI-RESTYLE 遗留</a></td></tr>
+    <tr><td>web font 未自托管</td><td>Inter/Cormorant Garamond 未随实例分发，多数客户端落到系统兜底字体（Garamond/Times + 系统 sans），品牌观感不一致；未引外部字体服务是安全决定</td><td>同上</td></tr>
+    <tr><td>共享只读对象缓存后续</td><td>托管 Harness 跨员工共享 git 对象/浅克隆缓存本版不提供；未来引入须独立评估缓存读取权限（对象可达性是权限数据）</td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/harness/hosted-runbook.md">hosted-runbook §5</a></td></tr>
+    <tr><td>单实例假设</td><td>初版为单实例、单应用进程：无高可用承诺，进程生命周期靠容器 restart policy；多实例/水平扩展未评估</td><td>架构 §9/§10、<a href="deploy/README.html">deploy/README</a></td></tr>
+    <tr><td>Q9 未定</td><td>可用性/备份频率/可接受恢复损失（RPO/RTO）三要素的数值目标尚未与试用方确认——当前备份频率与恢复时限无量化承诺</td><td><a href="https://github.com/WayJ/notegit/blob/main/.agents/notes/2026-10-14-S8-T8-capacity.md">S8-T8 容量档案</a>、roadmap Q9</td></tr>
+    <tr><td>规则版本未定稿</td><td>rulesVersion 仍为 <code>1.0.0-draft.2</code>（draft），<code>1.0.0</code> 定稿升版未发生；不影响三端一致性（同一版本号全链一致）</td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/rules-version.json">rules-version.json</a></td></tr>
+    <tr><td>配置 HTTP 端点未挂接</td><td><code>GET/PUT /api/v1/admin/config</code> 契约已定稿、HTTP 挂接未实现——运行时改限制键走 <code>app_settings</code> 行（SQL）或环境变量（均热生效）</td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/api.md">api.md §3.4</a></td></tr>
+    <tr><td>管理员锁死恢复未实现</td><td>规划的主机侧命令 <code>notegit admin recover</code> 尚未实现，且无「最后管理员」保护——实例管理员全员锁死当前无自助恢复路径；<strong>保持至少两名实例管理员</strong></td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/dev/architecture-notes.md">architecture-notes</a> §6.3/§6.6</td></tr>
+    <tr><td>搜索索引边界</td><td>重建期间查询降级为部分结果（鉴权过滤不降级）；frontmatter 折叠多行标量（<code>&gt;</code>/`</td><td>` 罕见形态）在索引中退化为 title=NULL/tags=[]（行仍入索引）</td></tr>
+    <tr><td>指标口径边界</td><td><code>auth_failures</code> 为进程内计数、重启归零；校验耗时分布只覆盖 web-submit scope（pre-receive 运行于 hook 子进程）</td><td><a href="https://github.com/WayJ/notegit/blob/main/docs/contracts/api.md">api.md §3.8</a></td></tr>
+    <tr><td>部署内存地板 768MB</td><td>全功能服务进程 RSS 基线 232–240MB + 每并发 clone 子进程链 ~17MB ⇒ 内存地板 768MB、推荐 1GB；512MB 档降并发（<code>git.maxConcurrentChildren</code>=4）可勉强运行但不承诺。修订已由 ADR D14 正式落契（selection §5、roadmap Q2，2026-10-14），deploy/README 与发布说明一致——无挂账</td><td><a href="deploy/README.html">deploy/README</a>、<a href="https://github.com/WayJ/notegit/blob/main/docs/s1/selection.md">selection.md §5</a>、<a href="https://github.com/WayJ/notegit/blob/main/docs/superpowers/roadmaps/2026-10-12-notegit-v01.md">ADR D14</a></td></tr>
+  </tbody>
+</table>
+<h2>4. 后续范围声明</h2>
+<p>以上任何一项都<strong>没有被静默移出</strong>第一版承诺：排除项是 roadmap 声明的范围决定，遗留项在 <a href="https://github.com/WayJ/notegit/blob/main/docs/s9/dod-evidence.md">S9-T1 DoD 证据汇总</a> 的缺口清单中留有勾销义务。后续演进方向（企业治理/知识整理增强/接入查找增强/运维规模增强）按 epic 规则 7 另行立项，不塞入 E1。</p>
+    </article>
+  </main>
+</div>
+</body>
+</html>
