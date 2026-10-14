@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>历史边界：重命名与跨库移动 · Notegit 文档</title>
+<link rel="stylesheet" href="../../docs.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="../../index.html">Notegit</a>
+    <a class="back-home" href="../../index.html">返回首页</a>
+  </div>
+</header>
+<div class="docs-layout">
+  <details class="docs-nav" open>
+    <summary class="docs-nav-toggle">文档导航</summary>
+      <nav class="docs-nav-tree" aria-label="文档导航">
+      <section class="nav-group">
+        <h2>用户文档</h2>
+        <ul>
+        <li><a href="README.html">Notegit 用户文档（员工视角）</a></li>
+        <li><a href="quickstart.html">安装与快速上手（员工视角）</a></li>
+        <li><a href="contributing.html">贡献流程：网页与 Git 双通道</a></li>
+        <li><a href="permissions.html">权限与撤权边界</a></li>
+        <li><a aria-current="page" class="current" href="history-boundary.html">历史边界：重命名与跨库移动</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>管理员</h2>
+        <ul>
+        <li><a href="../admin/README.html">Notegit 管理员手册</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>部署</h2>
+        <ul>
+        <li><a href="../deploy/README.html">Notegit 容器部署（S8-T1 发行包）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>已知限制</h2>
+        <ul>
+        <li><a href="../known-limitations.html">已知限制（v0.1 · 2026-10-14）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>发布说明</h2>
+        <ul>
+        <li><a href="../release-notes-v0.2.0.html">Notegit v0.2.0 发布说明</a></li>
+        </ul>
+      </section>
+      </nav>
+  </details>
+  <main class="docs-main">
+    <article class="doc-article">
+<h1>历史边界：重命名与跨库移动</h1>
+<p>面向知识库使用者（员工与 Agent）的历史边界说明。依据：架构 §9（「文档标识第一版采用库 ID + 路径；重命名历史依据 Git 跟踪，不承诺跨库永久 ID」）；行为由 S5-T7 场景测试固化（<code>server/test/web-history-rename-boundary.test.ts</code>，2026-10-13）。</p>
+<h2>重命名：历史可追</h2>
+<p>在同一个库内重命名（Web 端「重命名」或原生 Git 改名）后：</p>
+<ul>
+  <li>文档的<strong>路径历史页会跟随重命名</strong>（Git <code>--follow</code> 语义）：在新路径的历史页可以看到改名前的提交，改名前后连续可追。</li>
+  <li><strong>旧路径的历史不丢失</strong>：旧路径的历史页依然完整（含「改名移走」那一笔提交），随时可回看与还原。</li>
+  <li>Web 重命名以「新路径写入 + 旧路径删除」合为<strong>一笔提交</strong>、内容逐字节保留，因此 Git 能把它识别为改名（R100），跟随得以生效。</li>
+  <li>逐提交寻址按<strong>该提交当时的实际路径</strong>：改名前的提交在「版本预览 / diff」里须用旧路径寻址——用新路径访问改名前的提交会得到 404（该版本处尚无此路径），这不是历史丢失，换旧路径即可解析。</li>
+</ul>
+<h2>跨库移动：历史不跟随</h2>
+<p>把文档移动到另一个库 = 在旧库删除 + 在新库新建（两笔独立操作，两个库各自提交）：</p>
+<ul>
+  <li><strong>旧库历史完整保留</strong>：旧库中该路径的历史（含最后一笔删除提交）原样可查，历史版本仍可预览与还原。</li>
+  <li><strong>新库从新提交起</strong>：新库中该文档的历史只包含新库自己的提交——即使两库内容逐字节相同、即使改名跟随已启用，历史也不会跨库拼接。Notegit 不承诺跨库永久 ID（架构 §9），各库历史相互独立。</li>
+  <li>移动后如在新库再次重命名，跟随同样只回溯到该库自己的第一笔提交。</li>
+</ul>
+<h2>引用含 commit：旧引用仍可解析</h2>
+<p>Notegit 的文档引用是<strong>三要素</strong>：<code>库 + 路径 + commit</code>（与 S5-T6 文档引用规范同一格式）。因此：</p>
+<ul>
+  <li>指向移动/删除/改名前版本的引用，凭其中的 commit 仍能解析到旧库对应历史版本页——内容不会因移动而失联。</li>
+  <li>三要素中的路径按该 commit 当时的实际路径理解（见上文「逐提交寻址」）；commit 是解析的锚点。</li>
+</ul>
+<h2>运维与实现说明（选型记录）</h2>
+<ul>
+  <li>边界说明落在 <code>docs/user/</code>（本文件）而非 Web 内帮助页：用户文档按 DOD-15 归口集中成文，避免与并行任务（S5-T6 引用解析面）在 Web 代码上相交；后续 Web 帮助页如落地，应链接回本文件。</li>
+  <li>历史面实现：<code>server/src/web/history/log.ts</code> 路径级 <code>git log --follow</code>（每请求实时读，无独立历史存储）。</li>
+</ul>
+    </article>
+  </main>
+</div>
+</body>
+</html>

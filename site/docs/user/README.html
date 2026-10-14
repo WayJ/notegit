@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notegit 用户文档（员工视角） · Notegit 文档</title>
+<link rel="stylesheet" href="../../docs.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="../../index.html">Notegit</a>
+    <a class="back-home" href="../../index.html">返回首页</a>
+  </div>
+</header>
+<div class="docs-layout">
+  <details class="docs-nav" open>
+    <summary class="docs-nav-toggle">文档导航</summary>
+      <nav class="docs-nav-tree" aria-label="文档导航">
+      <section class="nav-group">
+        <h2>用户文档</h2>
+        <ul>
+        <li><a aria-current="page" class="current" href="README.html">Notegit 用户文档（员工视角）</a></li>
+        <li><a href="quickstart.html">安装与快速上手（员工视角）</a></li>
+        <li><a href="contributing.html">贡献流程：网页与 Git 双通道</a></li>
+        <li><a href="permissions.html">权限与撤权边界</a></li>
+        <li><a href="history-boundary.html">历史边界：重命名与跨库移动</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>管理员</h2>
+        <ul>
+        <li><a href="../admin/README.html">Notegit 管理员手册</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>部署</h2>
+        <ul>
+        <li><a href="../deploy/README.html">Notegit 容器部署（S8-T1 发行包）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>已知限制</h2>
+        <ul>
+        <li><a href="../known-limitations.html">已知限制（v0.1 · 2026-10-14）</a></li>
+        </ul>
+      </section>
+      <section class="nav-group">
+        <h2>发布说明</h2>
+        <ul>
+        <li><a href="../release-notes-v0.2.0.html">Notegit v0.2.0 发布说明</a></li>
+        </ul>
+      </section>
+      </nav>
+  </details>
+  <main class="docs-main">
+    <article class="doc-article">
+<h1>Notegit 用户文档（员工视角）</h1>
+<blockquote>
+<p>面向使用 Notegit 的员工：在网页上整理知识，或用 Git/CLI 在本地工作。部署与管理请看<a href="../admin/README.html">管理员手册</a>；部署本身见 <a href="../deploy/README.html">deploy/README.md</a>。</p>
+<p>文档只描述<strong>已实现行为</strong>（breakdown S9-T6 / DOD-15）；与实现的一致性由 <code>cli/test/delivery-docs-consistency.test.ts</code> 自动抽检。</p>
+</blockquote>
+<table>
+  <thead>
+    <tr><th>文档</th><th>内容</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><a href="quickstart.html">安装与快速上手</a></td><td>首次登录 → 浏览 → 编辑 → 上传 → 历史 → 搜索；CLI 安装</td></tr>
+    <tr><td><a href="contributing.html">贡献流程</a></td><td>网页与 Git 双通道、冲突处理、校验错误修正</td></tr>
+    <tr><td><a href="permissions.html">权限与撤权边界</a></td><td>库角色、访问凭据、撤权后会发生什么</td></tr>
+    <tr><td><a href="history-boundary.html">历史边界：重命名与跨库移动</a></td><td>重命名历史跟随、跨库移动不跟随、旧引用仍可解析</td></tr>
+  </tbody>
+</table>
+<p>第一版的能力边界与已知限制集中声明在 <a href="../known-limitations.html">known-limitations.md</a>。</p>
+    </article>
+  </main>
+</div>
+</body>
+</html>
