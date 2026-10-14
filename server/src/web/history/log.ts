@@ -28,6 +28,9 @@ export interface CommitEntry {
   readonly authorDate: string;
   /** 提交主题（subject——首行；内嵌分隔符并回） */
   readonly subject: string;
+  /** 该提交涉及文件（S10-T1 库级历史行逐文件 diff 入口；readCommitLog 本体不填
+   *  ——库级查询由历史路由逐提交补读 readCommitFiles，路径级查询不适用） */
+  readonly files?: readonly string[];
 }
 
 export type LogRead =
@@ -42,6 +45,12 @@ export type LogRead =
 export type DiffRead =
   | { kind: 'ok'; commitOid: string; diff: string }
   /** OID 形态非法/未知/非提交对象，或路径形态非法 */
+  | { kind: 'not-found' }
+  | { kind: 'unavailable' };
+
+/** 库级历史行「涉及文件」读取结果（S10-T1 D3：逐文件 diff 入口数据源） */
+export type FilesRead =
+  | { kind: 'ok'; files: readonly string[] }
   | { kind: 'not-found' }
   | { kind: 'unavailable' };
 
@@ -111,20 +120,12 @@ export async function readCommitLog(
 /** 页面寻址 OID 形态：hex 缩写或全 SHA（rev 形如 HEAD/~ 不收——寻址面收 OID） */
 const OID_SHAPE = /^[0-9a-f]{4,64}$/;
 
-/**
- * 读取单提交↔其父提交的逐文件 diff（`git diff --no-color <父> <目标> -- <路径>`，
- * 一致性断言所依）。根提交无父：以空树为基线（等价 `git diff <空树> <根提交>`，
- * 呈现为整文件新增）；合并提交取第一父（^1——与「父提交↔目标」的常规读法一致）。
- * 目标提交未触及该路径时 git diff 输出为空串——页面据此如实标注空 diff。
- */
-export async function readCommitDiff(
-  dataDir: string,
-  vaultId: number,
+/** 解析提交与其 diff 基线（父提交；根提交=空树——「父提交↔目标」的常规读法，
+ *  合并提交取第一父 ^1）：diff 页与涉及文件列表共用的同一基线语义。 */
+async function commitDiffBase(
+  repo: string,
   commitOid: string,
-  filePath: string,
-): Promise<DiffRead> {
-  if (filePath === '' || !OID_SHAPE.test(commitOid) || !treePathOk(filePath)) return { kind: 'not-found' };
-  const repo = vaultRepoPath(dataDir, vaultId);
+): Promise<{ kind: 'ok'; full: string; base: string } | { kind: 'not-found' } | { kind: 'unavailable' }> {
   let full: string;
   try {
     full = (await execGit(['rev-parse', '--verify', `${commitOid}^{commit}`], { cwd: repo })).trim();
@@ -144,12 +145,52 @@ export async function readCommitDiff(
       return { kind: 'unavailable' };
     }
   }
+  return { kind: 'ok', full, base };
+}
+
+/**
+ * 读取单提交↔其父提交的逐文件 diff（`git diff --no-color <父> <目标> -- <路径>`，
+ * 一致性断言所依）。根提交无父：以空树为基线（等价 `git diff <空树> <根提交>`，
+ * 呈现为整文件新增）；合并提交取第一父（^1——与「父提交↔目标」的常规读法一致）。
+ * 目标提交未触及该路径时 git diff 输出为空串——页面据此如实标注空 diff。
+ */
+export async function readCommitDiff(
+  dataDir: string,
+  vaultId: number,
+  commitOid: string,
+  filePath: string,
+): Promise<DiffRead> {
+  if (filePath === '' || !OID_SHAPE.test(commitOid) || !treePathOk(filePath)) return { kind: 'not-found' };
+  const repo = vaultRepoPath(dataDir, vaultId);
+  const at = await commitDiffBase(repo, commitOid);
+  if (at.kind !== 'ok') return at;
   let diff: string;
   try {
-    diff = await execGit(['diff', '--no-color', base, full, '--', filePath], { cwd: repo });
+    diff = await execGit(['diff', '--no-color', at.base, at.full, '--', filePath], { cwd: repo });
   } catch (err) {
     if (!isGitExitFailure(err)) return { kind: 'unavailable' };
     return { kind: 'not-found' };
   }
-  return { kind: 'ok', commitOid: full, diff };
+  return { kind: 'ok', commitOid: at.full, diff };
+}
+
+/**
+ * 读取单提交涉及文件（`git diff --name-only -z <父> <目标>`——与 readCommitDiff
+ * 经 commitDiffBase 同一基线解析，故「涉及文件列表 ↔ 逐文件 diff 页」同源同语义：
+ * 列表内文件的 diff 链接落地必非空 diff、必可达（S10-T1 D3 修复面：库级行不再
+ * 以空 treePath 生成必然 404 的死链）。-z 原始名 NUL 分隔（名字不经引号转义）。
+ */
+export async function readCommitFiles(dataDir: string, vaultId: number, commitOid: string): Promise<FilesRead> {
+  if (!OID_SHAPE.test(commitOid)) return { kind: 'not-found' };
+  const repo = vaultRepoPath(dataDir, vaultId);
+  const at = await commitDiffBase(repo, commitOid);
+  if (at.kind !== 'ok') return at;
+  let out: string;
+  try {
+    out = await execGit(['diff', '--name-only', '-z', at.base, at.full], { cwd: repo });
+  } catch (err) {
+    if (!isGitExitFailure(err)) return { kind: 'unavailable' };
+    return { kind: 'not-found' };
+  }
+  return { kind: 'ok', files: out.split('\0').filter((f) => f !== '') };
 }

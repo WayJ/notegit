@@ -1,4 +1,5 @@
 import { escapeHtml, layout } from '../pages.ts';
+import { editUrl } from '../view/pages.ts';
 import type { CommitEntry } from './log.ts';
 import { formatCitation } from './cite.ts';
 
@@ -61,7 +62,8 @@ const AUTHOR_NOTE =
 /** 历史页（库级 treePath='' / 路径级 treePath=树路径）：提交行 data 属性与
  *  `git log --format` 对照（一致性断言所依）；分页跨页导航 rel=prev/next。
  *  路径级行附版本预览与「还原到此版本」入口（S5-T2——还原=路径域操作，
- *  库级行无路径上下文不提供）。 */
+ *  库级行无路径上下文不提供）。库级行 diff 入口 = 该提交涉及文件的逐文件
+ *  diff 链接（S10-T1 D3——空 treePath 直链 diff 必然 404，死链形态不再生成）。 */
 export function historyPage(input: {
   vault: { slug: string; name: string };
   /** 当前认证员工（主体视角呈现——与作者元数据区分） */
@@ -70,16 +72,37 @@ export function historyPage(input: {
   commits: readonly CommitEntry[];
   page: number;
   hasMore: boolean;
+  /** S10-T1：写权判定（canWriteVault——路径级 .md 行渲染「编辑此页」/reader 只读
+   *  徽章；缺省不判定（测试直调形态））。edit 表单仅 .md——非 .md 路径不渲染
+   *  （edit GET 对非 .md 一律 404，不得生成死链）。 */
+  canWrite?: boolean;
 }): string {
-  const { vault, viewer, treePath, commits, page, hasMore } = input;
+  const { vault, viewer, treePath, commits, page, hasMore, canWrite } = input;
   const scope = treePath === '' ? '（全库）' : `—— ${escapeHtml(treePath)}`;
+  const isMd = treePath.toLowerCase().endsWith('.md');
+  const editEntry =
+    canWrite === undefined || !isMd
+      ? ''
+      : canWrite
+        ? ` · <a href="${editUrl(vault.slug, treePath)}">编辑此页</a>`
+        : ' · <span class="badge">只读</span>';
+  // 返回目录 = 该路径的所在目录（browse 只列目录——文件路径 browse 一律 404，
+  // 不得作为链接生成；S10-T1 链接健康所依）
+  const parentDir = treePath.includes('/') ? treePath.slice(0, treePath.lastIndexOf('/')) : '';
+  const backToBrowse = `/vaults/${encodeURIComponent(vault.slug)}/browse${
+    parentDir === '' ? '' : '/' + parentDir.split('/').map(encodeURIComponent).join('/')
+  }`;
+  const diffLinks = (c: CommitEntry): string =>
+    treePath === ''
+      ? (c.files ?? []).map((f) => ` <a href="${diffUrl(vault.slug, c.oid, f)}">diff ${escapeHtml(f)}</a>`).join('')
+      : ` <a href="${diffUrl(vault.slug, c.oid, treePath)}">diff</a>`;
   const rowLinks = (oid: string): string =>
     treePath === ''
       ? ''
       : ` <a href="${versionUrl(vault.slug, oid, treePath)}">预览</a> <a href="${restoreUrl(vault.slug, oid, treePath)}">还原到此版本</a> <code class="citation">${escapeHtml(formatCitation(vault.slug, treePath, oid))}</code>`;
   const rows = commits
     .map(
-      (c) => `  <li class="commit" data-short="${escapeHtml(c.shortOid)}" data-author="${escapeHtml(c.authorName)}" data-date="${escapeHtml(c.authorDate)}" data-oid="${escapeHtml(c.oid)}" data-email="${escapeHtml(c.authorEmail)}" data-subject="${escapeHtml(c.subject)}">${escapeHtml(c.shortOid)} ${escapeHtml(c.subject)} — ${escapeHtml(c.authorName)}（Git 元数据） ${escapeHtml(c.authorDate)} <a href="${diffUrl(vault.slug, c.oid, treePath)}">diff</a>${rowLinks(c.oid)}</li>`,
+      (c) => `  <li class="commit" data-short="${escapeHtml(c.shortOid)}" data-author="${escapeHtml(c.authorName)}" data-date="${escapeHtml(c.authorDate)}" data-oid="${escapeHtml(c.oid)}" data-email="${escapeHtml(c.authorEmail)}" data-subject="${escapeHtml(c.subject)}">${escapeHtml(c.shortOid)} ${escapeHtml(c.subject)} — ${escapeHtml(c.authorName)}（Git 元数据） ${escapeHtml(c.authorDate)}${diffLinks(c)}${rowLinks(c.oid)}</li>`,
     )
     .join('\n');
   const listing =
@@ -97,7 +120,7 @@ export function historyPage(input: {
   <div class="page-head">
   <h1>${escapeHtml(vault.name)} 提交历史${scope}</h1>
   <nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
-  <p class="page-meta">当前登录：${escapeHtml(viewer.username)} · 默认分支实时读 Git · <a href="/vaults/${encodeURIComponent(vault.slug)}/browse${treePath === '' ? '' : '/' + treePath.split('/').map(encodeURIComponent).join('/')}">返回目录</a></p>
+  <p class="page-meta">当前登录：${escapeHtml(viewer.username)} · 默认分支实时读 Git · <a href="${backToBrowse}">返回目录</a>${editEntry}</p>
   </div>
   ${listing}
   ${pager}
@@ -188,7 +211,8 @@ export type VersionBody =
  * 参数化）：正文 HTML 仅两个来源——渲染管输出（render.ts 安全管唯一通道，
  * 与 view 页同一不变量）或本模板生成的附件通道 `<img>`（URL 经 escapeHtml）；
  * 其余文本一律 escapeHtml。页面标注所依 commit 并链接该路径历史/diff/还原
- * 入口（还原入口=确认页，写权限由其提交时的发布组件判定）。
+ * 入口（还原入口=确认页，写权限由其提交时的发布组件判定）；S10-T1 增编辑
+ * 入口（canWriteVault 门控——如实标注编辑对象=当前 HEAD 内容，非此历史快照）。
  */
 export function versionPage(input: {
   vault: { slug: string; name: string };
@@ -196,9 +220,20 @@ export function versionPage(input: {
   treePath: string;
   sizeBytes: number | undefined;
   body: VersionBody;
+  /** S10-T1：写权判定（canWriteVault——.md 渲染形态渲染编辑入口 / reader 只读
+   *  徽章；缺省不判定（测试直调形态））。仅 rendered 形态提供：edit 表单仅
+   *  知识 Markdown——其余形态不生成（edit GET 对非 .md 一律 404）。 */
+  canWrite?: boolean;
 }): string {
-  const { vault, commitOid, treePath, sizeBytes, body } = input;
+  const { vault, commitOid, treePath, sizeBytes, body, canWrite } = input;
   const name = treePath.includes('/') ? treePath.slice(treePath.lastIndexOf('/') + 1) : treePath;
+  // 编辑入口如实标注：edit 路由编辑的始终是该文件当前分支内容（HEAD）——非此历史快照
+  const editEntry =
+    body.kind !== 'rendered' || canWrite === undefined
+      ? ''
+      : canWrite
+        ? ` · <a href="${editUrl(vault.slug, treePath)}">编辑当前版本</a>（编辑器打开该文件当前最新内容，非此历史版本）`
+        : ' · <span class="badge">只读</span>';
   const notice =
     body.kind === 'rendered' && body.strippedHtml
       ? '\n<p class="notice">注：原文含 HTML 标签，已按安全子集剥离（预览不解释 HTML；脚本/事件属性不执行）。</p>'
@@ -218,7 +253,7 @@ export function versionPage(input: {
   <h1>${escapeHtml(name)}（历史版本）</h1>
   <nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
   <p class="page-meta">类型：文件 · 大小：${sizeBytes ?? '?'} 字节 · 历史版本 @ ${escapeHtml(commitOid)}（只读预览——以新提交还原入口见下）${notice}</p>
-  <p class="page-meta"><a href="${historyUrl(vault.slug, treePath)}">该路径历史</a> · <a href="${diffUrl(vault.slug, commitOid, treePath)}">diff</a> · <a href="${restoreUrl(vault.slug, commitOid, treePath)}">还原到此版本</a></p>
+  <p class="page-meta"><a href="${historyUrl(vault.slug, treePath)}">该路径历史</a> · <a href="${diffUrl(vault.slug, commitOid, treePath)}">diff</a> · <a href="${restoreUrl(vault.slug, commitOid, treePath)}">还原到此版本</a>${editEntry}</p>
   </div>
   <p class="cite-line">复制引用（库 / 路径 @ commit 三要素——与 Agent 报告引用格式一致，经 <a href="/cite">引用解析</a> 可回放本页）：<code class="citation">${escapeHtml(formatCitation(vault.slug, treePath, commitOid))}</code></p>
   ${article}
