@@ -60,7 +60,9 @@ test('排空原语：无在途写 → 立即 drained（单进程传播上界 0�
     const r = await waitForDrain(db);
     assert.equal(r.outcome, 'drained');
     assert.equal(r.pending, 0);
-    assert.equal(r.waitedMs, 0, '首个检查点即排空（首轮不等待）');
+    // 首个检查点即排空（首轮不等待）：负载下 start→首查间事件循环延迟可 >0ms，
+    // 断言语义=未进入轮询等待（< 首个轮询间隔），非严格 0——2026-10-14 三次负载闪断后修正
+    assert.ok(r.waitedMs < 50, `首轮即排空（不应进入轮询等待），实际 waitedMs=${r.waitedMs}`);
   } finally {
     db.close();
   }
