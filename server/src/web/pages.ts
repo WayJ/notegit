@@ -149,12 +149,18 @@ function topNav(nav?: PageNav): string {
       : '';
   // 主 CTA：知识库（产品主入口；登录页由登录按钮承担 CTA，不重复呈现）
   const cta = nav?.active === 'home' ? '' : '\n      <a class="btn btn-primary" href="/vaults">知识库</a>';
+  // S14 master 裁决（B 方案）：横向主菜单仅**匿名/无导航壳**渲染（登录页、403/404、
+  // 写闸门兜底——基线链接集不变）；登录态桌面导航唯一承担者=侧栏（sideNav 五区），
+  // 不重复两处。登录态顶栏保留品牌＋账户菜单＋主 CTA（S12 资产不回归）。
+  const menu =
+    nav?.user === undefined
+      ? `\n    <ul class="nav-menu">
+      ${items.join('\n      ')}${adminItem}
+    </ul>`
+      : '';
   return `<header class="top-nav">
   <div class="top-nav-inner">
-    <a class="brand" href="/">${SPIKE_MARK}Notegit</a>
-    <ul class="nav-menu">
-      ${items.join('\n      ')}${adminItem}
-    </ul>
+    <a class="brand" href="/">${SPIKE_MARK}Notegit</a>${menu}
     <div class="nav-side">${account}${cta}
     </div>
   </div>

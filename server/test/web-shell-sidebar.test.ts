@@ -141,7 +141,8 @@ test('当前区高亮：aria-current 逐区正确（查找/草稿/引用解析/�
     for (const [url, href] of cases) {
       const res = await h.app.inject({ method: 'GET', url, headers: sidCookie(h.session(1)) });
       assert.equal(res.statusCode, 200, url);
-      const marked = [...res.body.matchAll(/<a href="([^"]+)" aria-current="page"/g)].map((m) => m[1]);
+      // B 方案后登录态无横向菜单——匹配须属性序无关（侧栏链接 class 在 href 前）
+      const marked = [...res.body.matchAll(/<a[^>]*href="([^"]+)" aria-current="page"/g)].map((m) => m[1]);
       assert.ok(marked.includes(href), `${url} 当前区高亮 ${href}（实得 ${JSON.stringify(marked)}）`);
       const sideStart = res.body.indexOf('class="side-nav"');
       const sideEnd = res.body.indexOf('</nav>', sideStart);
@@ -291,6 +292,31 @@ test('侧栏与两档断点样式零内联 hex、零第四表面色（只引用�
     }
     // coral 只用于主 CTA——侧栏当前区高亮不得用主色底（用米色卡承载）
     assert.ok(!sideBlock.includes('var(--primary)'), '侧栏不用 coral（DESIGN.md 稀缺使用条款）');
+  } finally {
+    await h.close();
+  }
+});
+
+// ── master 裁决（B 方案，2026-10-15）：登录态唯一桌面导航=侧栏，匿名壳保留顶栏菜单 ──
+
+test('B 方案：登录态壳不渲染顶栏横向主菜单（侧栏为唯一桌面导航），匿名壳保留原菜单', async () => {
+  const h = await harness();
+  try {
+    addEmployee(h.db, { username: 'alice' });
+    // 登录态页：侧栏在位、横向 nav-menu 不再渲染（桌面导航不重复两处）
+    for (const url of ['/', '/credentials', '/search'] as const) {
+      const res = await h.app.inject({ method: 'GET', url, headers: sidCookie(h.session(1)) });
+      assert.equal(res.statusCode, 200, url);
+      assert.ok(res.body.includes('class="side-nav"'), `${url} 侧栏在位`);
+      assert.ok(!res.body.includes('class="nav-menu"'), `${url} 登录态不渲染顶栏横向菜单`);
+      // 顶栏品牌与账户菜单仍在（S12 资产不回归）
+      assert.ok(res.body.includes('class="brand"'), `${url} 品牌在位`);
+      assert.ok(res.body.includes('class="nav-account"'), `${url} 账户菜单在位`);
+    }
+    // 匿名壳（登录页）：横向菜单保留（基线 /login 链接集 6 条不变）
+    const login = await h.app.inject({ method: 'GET', url: '/login' });
+    assert.ok(login.body.includes('class="nav-menu"'), '/login 匿名壳保留顶栏菜单');
+    assert.ok(!login.body.includes('class="side-nav"'), '/login 无侧栏');
   } finally {
     await h.close();
   }

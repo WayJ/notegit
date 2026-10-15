@@ -90,7 +90,15 @@ test('页面壳：doctype 首位、script 形态（唯一内联块；S12-T3 改�
       assert.ok(res.body.includes('<link rel="stylesheet" href="/assets/styles.css">'), `${url} 共享样式链接`);
       assert.ok(res.body.includes('class="top-nav"'), `${url} 顶部导航`);
       assert.ok(res.body.includes('class="brand"'), `${url} 字标`);
-      assert.ok(res.body.includes('class="nav-menu"'), `${url} 主菜单`);
+      // S14 master 裁决（B 方案）修订：横向主菜单仅匿名壳渲染；登录态唯一桌面
+      // 导航=侧栏（side-nav）——原「三页均断言 nav-menu」改为分形态断言
+      if (url === '/login') {
+        assert.ok(res.body.includes('class="nav-menu"'), `${url} 匿名壳保留顶栏主菜单`);
+        assert.ok(!res.body.includes('class="side-nav"'), `${url} 匿名壳无侧栏`);
+      } else {
+        assert.ok(res.body.includes('class="side-nav"'), `${url} 登录态侧栏在位`);
+        assert.ok(!res.body.includes('class="nav-menu"'), `${url} 登录态不渲染横向菜单`);
+      }
       assert.ok(res.body.includes('class="site-footer"'), `${url} 深色页脚`);
     }
   } finally {
