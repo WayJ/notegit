@@ -33,12 +33,16 @@ E4 roadmap §终态方向已论证：Notegit 内核（Git 唯一真源 ＋ commi
   （ref=OID 与 version 页同一树）、截断与分页语义如实标注。
 - [x] **DOD-E6-02 凭据委托** — S19 收口：五语义全绿（四项 S1/S3 已实现＋读侧可见 S19-T1；验证记录 .agents/notes/2026-10-16-D29-verification.md）：委托凭据签发（作用域=员工权限子集）/ 撤销 / 越权拒绝
   （作用域外 404 同形态）；审计行携带凭据来源标注；员工撤权 → 委托即失效（不缓存）。
-- [ ] **DOD-E6-03 容量验证**：三场景（并发读 / 突发写 / 跨库扇出）实测数字与底线结论
+- [x] **DOD-E6-03 容量验证** — S20：三场景数字与底线入档（docs/e6/capacity.md）；瓶颈四条如实未粉饰
   入档；发现的瓶颈如实记录（不粉饰、不过度优化）。
 - [x] **DOD-E6-04 契约与指南** — S18 份额（api.md §6 三行+§1 E-RES-009+§5 增量；agent-guide 骨架）：api.md 新端点行落契（draft-first → master D 批）；
   agent-guide.md（认证/锚定引用/变更感知/礼貌轮询建议——索引状态端点即为此设计）。
-- [x] **DOD-E6-05 安全回归** — S18 份额（S3 侧信道逐字节同体+四 gates）；epic 级随 S19/S20 复验：四 gates 全绿；§2.2 交叉验证表 + e2e-final-regression 保持；
+- [x] **DOD-E6-05 安全回归** — S18/S19/S20 三轮四 gates 全绿；侧信道逐端点测试锁定（读面/审计面/工作台面同判定面）
   新读面不得成为侧信道（无权库零出现——与检索/工作台同一判定面，独立测试锁定）。
+
+## 终态（2026-10-16 关闭）
+
+**E6 closed：DOD-E6-01~05 全部达标**（01/04/05=S18、02=S19 收口〔已实现＋验证〕、03=S20）。agent 知识底座三缺口收口：读协议四端点（Bearer 全链+commit 锚定）、凭据委托（S1/S3 已建+审计读侧补齐——人/agent 行动审计可区分）、容量底线（三场景实测入档）。遗留候选：树缓存优化（ETag 语义已备）、CLI 只读命令（Q-E6-2）、多实例横向扩容（架构议题）。
 
 ## Sprint Breakdown
 
@@ -46,7 +50,7 @@ E4 roadmap §终态方向已论证：Notegit 内核（Git 唯一真源 ＋ commi
 |---|---|---|
 | S18 | merged | 读协议 v1；2026-10-16 验收 pass（agent Bearer 全链实景跑通、锚定差异实证、四 gates 1070/106/369）——DOD-E6-01/04/05 份额达标；Q-E6-1 定案（全量+截断）；契约 D 批四笔（[acceptance](../acceptances/2026-10-16-S18-acceptance.md)） | [2026-10-16-S18-plan.md](../sprints/2026-10-16-S18-plan.md) |
 | S19 | planned→执行中 | **范围重定**：凭据委托经核实为 S1/S3 已实现（D29 验证记录 .agents/notes/2026-10-16-D29-verification.md——四语义实景通过）；S19-T1 补读侧+D29 第五项闭环；2026-10-16 验收 pass（credential:5/session:4 实景区分）——**DOD-E6-02 收口**（[acceptance](../acceptances/2026-10-16-S19-acceptance.md)） | [2026-10-16-S19-plan.md](../sprints/2026-10-16-S19-plan.md) |
-| S20 | planned | 容量验证（R03）：三场景实测+结论入档+瓶颈清单 |
+| S20 | merged | 容量验证（master 执行，S13-T3 先例）；2026-10-16 三场景实测（读饱和 ~210rps 零错误/顺序写 6wps/冲突写精确 1×201+7×409/扇出爬取 1s）——[capacity.md](../../e6/capacity.md)＋瓶颈清单如实 | [2026-10-16-S20-plan.md](../sprints/2026-10-16-S20-plan.md) |
 
 ```mermaid
 flowchart LR
@@ -87,3 +91,4 @@ flowchart LR
 | 2026-10-16 | E6 立项：R01–R04、DOD-E6-01~05、S18–S20、D35–D38 | 用户终态方向（2026-10-15）+「继续推进后续工作」指令（2026-10-16）；本文件 |
 | 2026-10-16 | S18 merged（DOD-E6-01/04/05 份额）；Q-E6-1 closed；契约 D 批四笔 | acceptance/2026-10-16-S18 |
 | 2026-10-16 | S19 merged（范围重定：D29 已实现验证收口）；**DOD-E6-02 收口** | acceptance/2026-10-16-S19 |
+| 2026-10-16 | S20 merged（容量三场景）；**E6 关闭——5/5 DoD** | capacity.md；acceptance/2026-10-16-S20 |
