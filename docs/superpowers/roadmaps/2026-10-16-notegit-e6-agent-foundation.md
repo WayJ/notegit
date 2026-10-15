@@ -45,7 +45,7 @@ E4 roadmap §终态方向已论证：Notegit 内核（Git 唯一真源 ＋ commi
 | sprint | state | note |
 |---|---|---|
 | S18 | merged | 读协议 v1；2026-10-16 验收 pass（agent Bearer 全链实景跑通、锚定差异实证、四 gates 1070/106/369）——DOD-E6-01/04/05 份额达标；Q-E6-1 定案（全量+截断）；契约 D 批四笔（[acceptance](../acceptances/2026-10-16-S18-acceptance.md)） | [2026-10-16-S18-plan.md](../sprints/2026-10-16-S18-plan.md) |
-| S19 | planned | 凭据委托（R02）：作用域列+签发撤销面+审计标注+越权测试 |
+| S19 | planned→执行中 | **范围重定**：凭据委托经核实为 S1/S3 已实现（D29 验证记录 .agents/notes/2026-10-16-D29-verification.md——四语义实景通过）；真实缺口=api.md §9 审计查询端点契约在册无实现——S19-T1 补读侧+D29 第五项闭环 | [2026-10-16-S19-plan.md](../sprints/2026-10-16-S19-plan.md) |
 | S20 | planned | 容量验证（R03）：三场景实测+结论入档+瓶颈清单 |
 
 ```mermaid
