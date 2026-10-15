@@ -7,6 +7,10 @@ basis: 用户裁决（2026-10-15）：「不好看，样式也按照你发给的
 predecessor: [E4](2026-10-15-notegit-e4-workbench.md)（S14/S15 merged，10/10 DoD，功能与壳结构在位）
 ---
 
+## 终态（2026-10-15 关闭）
+
+**E5 closed：DOD-E5-01~05 全部达标**（单 sprint S16 单任务；DESIGN.md v2 先行→styles.css 988 行换轨→断言修订红→绿；全量测试计数零变化）。v1 视觉体系退役（git history 保存）；marketing 站是否跟随待用户裁决（D33）；⌘K 角标/MD 图标片为披露留待的打磨项（非缺陷）。
+
 ## 背景与定位
 
 E4 交付了参照稿的全部**功能设计**但保留 v1 视觉（米色/珊瑚/衬线）。用户实测 demo 后
@@ -28,22 +32,22 @@ E4 交付了参照稿的全部**功能设计**但保留 v1 视觉（米色/珊�
 
 ## Definition of Done
 
-- [ ] **DOD-E5-01 token 换轨**：styles.css `:root` 全量 v2 token（DESIGN.md §1 逐值）；
+- [x] **DOD-E5-01 token 换轨** — S16（S1：15 token 抽样逐字+v1 grep 零残留）：styles.css `:root` 全量 v2 token（DESIGN.md §1 逐值）；
   v1 token（--primary/--surface-card/--hairline 族/Cormorant 等）零残留。
-- [ ] **DOD-E5-02 壳与排版**：顶栏 56px/侧栏 224px/浅色页脚/Inter 全站/h1 21px 等按
+- [x] **DOD-E5-02 壳与排版** — S16（S2：56/224/浅页脚/Inter 全站）：顶栏 56px/侧栏 224px/浅色页脚/Inter 全站/h1 21px 等按
   DESIGN.md §2/§4 落位；登录页 canvas 底白卡。
-- [ ] **DOD-E5-03 组件族**：§5 组件表逐行落位（主按钮胶囊 accent、统计卡图标片、
+- [x] **DOD-E5-03 组件族** — S16（§5 逐行；统计卡图标片 CSS ::before——D2 合规解法）：§5 组件表逐行落位（主按钮胶囊 accent、统计卡图标片、
   库卡四色图标片、表头 inset、chips、状态点、diff 深色面中性化）。
-- [ ] **DOD-E5-04 行为零变化**：全部既有测试绿（结构/行为/安全断言零豁免——只许改
+- [x] **DOD-E5-04 行为零变化** — S16（S3：1032+106+369 计数零变化；断言修订逐处注释）：全部既有测试绿（结构/行为/安全断言零豁免——只许改
   锁定 v1 token 字面值的断言为 v2 值，且该类改动逐处注释「DESIGN v2 修订」）。
-- [ ] **DOD-E5-05 回归与基线**：四 gates 全绿；22 路由 × 3 角色链接基线零缺失零漂移；
+- [x] **DOD-E5-05 回归与基线** — S16（四 gates+S4 零缺失零漂移+断点三档保持）：四 gates 全绿；22 路由 × 3 角色链接基线零缺失零漂移；
   断点 1020/680/767 行为保持。
 
 ## Sprint Breakdown
 
 | sprint | state | note |
 |---|---|---|
-| S16 | planned | 单 sprint 收口：styles.css 单文件写面——单任务串行（并行必冲突） |
+| S16 | merged | 单 sprint 单任务收口；2026-10-15 验收 pass（S1–S5 全绿、四 gates、基线零漂移、v1 零残留）——**E5 关闭 5/5 DoD**（[acceptance](../acceptances/2026-10-15-S16-acceptance.md)） | [2026-10-15-S16-plan.md](../sprints/2026-10-15-S16-plan.md) |
 
 ## Decisions (ADR)
 
@@ -67,3 +71,4 @@ E4 交付了参照稿的全部**功能设计**但保留 v1 视觉（米色/珊�
 | date | change | evidence |
 |---|---|---|
 | 2026-10-15 | E5 立项：DESIGN.md v2 先行重写 + V01–V04 + D31–D34 | 用户裁决 2026-10-15；本文件 |
+| 2026-10-15 | S16 merged；**E5 关闭——5/5 DoD** | acceptance/2026-10-15-S16 |
