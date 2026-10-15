@@ -43,6 +43,17 @@
  * 纯 <a href> querystring 记忆，默认 list；grid 复用 vault-card/vault-grid
  * 既有 token 卡类）＋ 表尾可见性语义声明固定位。零新增脚本——每页仍恰一
  * 内联 <script> 块。
+ *
+ * S17-T1 原型对齐收口（静态原型九处差距——v2 换轨时按「换皮不换骨」跳过的
+ * 结构件补齐，D1–D5）：topNav 品牌后分隔线＋工作区名（静态产品域标签）；
+ * sideNav 底部用户卡（28px 圆章＋display_name＋身份行——PageNav.user 数据面）；
+ * indexPage 页头分排（左 h1＋静态产品副标、右 head-meta 承载索引状态位——
+ * S15-T2 资产零语义变化只挪位）＋首页搜索工具条（GET form /search，q+vault
+ * 与 S15-T1 同参数面；vault 选项=vaultCards 同源；⌘K 聚焦并入唯一内联块——
+ * D3「凡带搜索框的页面」修订）＋统计卡图标片 DOM 直加（::before 退役）＋
+ * 区块头动作链接＋文档表 MD 片/维护者头像圆章/已发布状态点＋表尾条。
+ * 面包屑按 D2 裁决跳过（首页单层级纯噪音——披露项）。行为零变化红线：
+ * 每页仍恰一内联 <script> 块；旧链接零删除；数据零虚构。
  */
 
 import { ACTIVITY_LIMIT, type ActivityEntry } from './activity/query.ts';
@@ -111,11 +122,27 @@ function sideNav(nav: PageNav): string {
     nav.user?.isAdmin === true
       ? `\n      <li><a class="side-nav-item" href="/admin"${nav.active === 'admin' ? ' aria-current="page"' : ''}><span class="side-nav-mark">${SIDE_ICONS.admin}</span><span class="side-nav-text">管理</span></a></li>`
       : '';
+  // S17-T1 差距2（静态原型对齐）：侧栏底部用户卡——28px 圆章（displayName 首字，
+  // 缺省回落用户名——与顶栏账户徽章同一数据面 PageNav.user）＋姓名（11.5px/550）
+  // ＋身份行（isAdmin 实例管理员/成员——纯呈现文案，判定面仍在 API 授权层）；
+  // 分隔线隔开导航区（styles.css .side-foot border-top）。本函数仅登录态壳被调
+  // 用（layout 判 nav.user），foot 的缺省守卫为形态完备性而设。
+  const u = nav.user;
+  const foot =
+    u === undefined
+      ? ''
+      : `\n  <div class="side-foot">
+    <span class="side-foot-avatar" aria-hidden="true">${escapeHtml([...(u.displayName ?? u.username)][0] ?? '')}</span>
+    <span class="side-foot-id">
+      <span class="side-foot-name">${escapeHtml(u.displayName ?? u.username)}</span>
+      <span class="side-foot-role">${u.isAdmin ? '实例管理员' : '成员'}</span>
+    </span>
+  </div>`;
   return `<nav class="side-nav" aria-label="分区导航">
     <p class="side-nav-title">分区</p>
     <ul class="side-nav-list">
       ${items.join('\n')}${adminItem}
-    </ul>
+    </ul>${foot}
   </nav>`;
 }
 
@@ -167,9 +194,11 @@ function topNav(nav?: PageNav): string {
       ${items.join('\n      ')}${adminItem}
     </ul>`
       : '';
+  // S17-T1 差距1（DESIGN v2 §4 顶栏）：品牌后 1px line-strong 竖线分隔＋工作区名
+  // 「知识工作台」——静态产品域标签（D1：不虚构多工作区概念），匿名/登录壳同款
   return `<header class="top-nav">
   <div class="top-nav-inner">
-    <a class="brand" href="/"><span class="brand-mark">${SPIKE_MARK}</span>Notegit</a>${menu}
+    <a class="brand" href="/"><span class="brand-mark">${SPIKE_MARK}</span>Notegit</a><span class="top-nav-divider" aria-hidden="true"></span><span class="top-nav-workspace">知识工作台</span>${menu}
     <div class="nav-side">${account}${cta}
     </div>
   </div>
@@ -329,10 +358,21 @@ const WORKBENCH_ROLE_LABELS: Readonly<Record<string, string>> = { admin: '管理
  */
 const CHIP_VARIANTS: readonly string[] = ['v-tint', 'v-sand', 'v-lilac', 'v-teal'];
 
-/** 概览卡（统计卡：值为查询面原样，绝对时间 title 可选；图标片由 CSS ::before 承载） */
-function statCardHtml(value: string, label: string, title?: string): string {
+/**
+ * 统计卡图标片三变奏（S17-T1 差距5：DOM 直加——DESIGN v2 §5 统计卡 34px 圆角
+ * 10px 方片＋字形，tint/green-tint/orange-tint 仅图标底）。原 CSS ::before 伪元素
+ * 承载退役：真实节点可被结构断言锁定（web-prototype-align），不再依赖 nth-child。
+ */
+const STAT_ICONS: Readonly<Record<'vault' | 'doc' | 'update', string>> = {
+  vault: '<span class="stat-icon v-tint" aria-hidden="true">▦</span>',
+  doc: '<span class="stat-icon v-green" aria-hidden="true">▤</span>',
+  update: '<span class="stat-icon v-orange" aria-hidden="true">↻</span>',
+};
+
+/** 概览卡（统计卡：值为查询面原样，绝对时间 title 可选；图标片=STAT_ICONS 真实节点） */
+function statCardHtml(icon: string, value: string, label: string, title?: string): string {
   const t = title === undefined ? '' : ` title="${escapeHtml(title)}"`;
-  return `<div class="stat-card"><span class="stat-value"${t}>${escapeHtml(value)}</span><span class="stat-label">${escapeHtml(label)}</span></div>`;
+  return `<div class="stat-card">${icon}<span class="stat-value"${t}>${escapeHtml(value)}</span><span class="stat-label">${escapeHtml(label)}</span></div>`;
 }
 
 /** 我的文库卡（最后更新=相对时间＋绝对 title；无提交库如实「暂无发布」，D30 时钟源=审计 occurred_at） */
@@ -365,11 +405,17 @@ function workbenchDocRowHtml(d: RecentDocumentRow): string {
       : `<span class="tag-chips">${d.tags.map((t) => `<span class="badge">${escapeHtml(t)}</span>`).join('')}</span>`;
   const titleLink = `<a href="${view}">${escapeHtml(d.title ?? d.path)}</a>`;
   const pathPart = d.title === null ? '' : `<span class="doc-row-path">${escapeHtml(d.path)}</span>`;
+  // S17-T1 差距7（静态原型对齐；S17 D4）：MD 文件图标片（29×32 surface 底 line
+  // 描边 accent-ink 'MD'——v2 §5 文档表）＋维护者头像圆章（git 作者名首字，20px
+  // 中性圆章——与认证用户的蓝圆章视觉区分；元数据展示，列的如实标注 title 不变）
+  // ＋状态点（6px 绿点＋「已发布」——本表行全为成功发布事件，如实单态；草稿不
+  // 混入 Q-E4-2 裁决不变）。作者名按 Unicode 码点取首字（代理对安全）。
+  const authorInitial = [...d.author][0] ?? '';
   return `<tr data-vault="${escapeHtml(d.vaultSlug)}" data-path="${escapeHtml(d.path)}" data-commit="${escapeHtml(d.commitOid)}">
-      <td>${titleLink}${pathPart}${chips}</td>
+      <td><div class="doc-title-cell"><span class="doc-file-chip" aria-hidden="true">MD</span><span class="doc-title-main">${titleLink}${pathPart}${chips}</span></div></td>
       <td class="col-tertiary"><a href="/vaults/${encodeURIComponent(d.vaultSlug)}">${escapeHtml(d.vaultName)}</a></td>
-      <td class="col-secondary" title="Git 提交者元数据，非认证身份（操作主体以服务端审计记录为准）">${escapeHtml(d.author)}</td>
-      <td class="col-tertiary" title="${escapeHtml(d.occurredAt)}">${escapeHtml(formatRelativeTime(d.occurredAt))}</td>
+      <td class="col-secondary" title="Git 提交者元数据，非认证身份（操作主体以服务端审计记录为准）"><span class="doc-author-avatar" aria-hidden="true">${escapeHtml(authorInitial)}</span><span class="doc-author-name">${escapeHtml(d.author)}</span></td>
+      <td class="col-tertiary" title="${escapeHtml(d.occurredAt)}"><span class="doc-status"><span class="status-dot" aria-hidden="true"></span>已发布</span> ${escapeHtml(formatRelativeTime(d.occurredAt))}</td>
     </tr>`;
 }
 
@@ -416,6 +462,49 @@ function viewToggleHtml(view: 'list' | 'grid'): string {
 }
 
 /**
+ * 首页搜索工具条（S17-T1 差距4；S17 D3 真功能增量）：GET form action=/search，
+ * q+vault 与 /search（S15-T1）同参数同判定面；vault 选项=vaults（vaultCards 同源
+ * ——D1 数据零虚构：无权库不入选项，撤权下一渲染即消失）；⌕ 图标＋⌘K 角标小片
+ * （§5 输入/搜索框）。GET 免 CSRF、零 JS 可提交；⌘K 聚焦并入唯一内联 script 块
+ * （HOME_KBD_SCRIPT——顺延 D3 修订「凡带搜索框的页面」）。
+ */
+function workbenchToolbarHtml(vaults: readonly VaultCard[]): string {
+  const options = [
+    '<option value="all" selected>全部</option>',
+    ...vaults.map((v) => `<option value="${escapeHtml(v.slug)}">${escapeHtml(v.name)}</option>`),
+  ].join('\n      ');
+  return `<form class="toolbar home-toolbar" method="get" action="/search">
+    <div class="toolbar-search">
+      <span class="search-glyph" aria-hidden="true">⌕</span>
+      <input type="search" id="q" name="q" placeholder="搜索标题、标签或摘要…" maxlength="200" aria-label="搜索关键词">
+      <span class="kbd-hint" aria-hidden="true">⌘K</span>
+    </div>
+    <select name="vault" aria-label="库范围">
+      ${options}
+    </select>
+    <button type="submit" class="btn-primary">搜索</button>
+  </form>`;
+}
+
+/**
+ * ⌘K/Ctrl-K 聚焦首页工具条搜索框（S17 D3：S15-D1「仅 /search」修订为「凡带
+ * 搜索框的页面挂该增强」——与 search/pages.ts SEARCH_KBD_SCRIPT 同语义同形态，
+ * 顺延本页并入唯一内联 script 块；无 JS 时 GET 表单仍可提交，渐进增强）。
+ */
+const HOME_KBD_SCRIPT = `
+(function () {
+  var q = document.getElementById('q');
+  if (q === null) return; // 无搜索框页面零行为
+  document.addEventListener('keydown', function (ev) {
+    if ((ev.metaKey || ev.ctrlKey) && ev.key === 'k') {
+      ev.preventDefault();
+      q.focus();
+    }
+  });
+})();
+`;
+
+/**
  * 工作台首页（S14-T3 `/` 原地升级）：页头（索引状态位，S15-T2 接线）＋ 概览三卡
  * ＋ 我的文库卡片网格（首张「全部文库」聚合卡跳 /vaults，Q-E4-1——原「知识库」
  * 入口卡的等价承接）＋ 跨库最近文档表（S15-T2 起视图开关 list|grid ＋ 表尾可见性
@@ -433,19 +522,23 @@ export function indexPage(
   const { summary, vaults, docs } = workbench;
   const updateStat =
     summary.lastContentUpdateAt === null
-      ? statCardHtml('暂无', '最近一次内容更新')
-      : statCardHtml(formatRelativeTime(summary.lastContentUpdateAt), '最近一次内容更新', summary.lastContentUpdateAt);
+      ? statCardHtml(STAT_ICONS.update, '暂无', '最近一次内容更新')
+      : statCardHtml(STAT_ICONS.update, formatRelativeTime(summary.lastContentUpdateAt), '最近一次内容更新', summary.lastContentUpdateAt);
   const statGrid = `<div class="stat-grid">
-    ${statCardHtml(String(summary.vaultCount), '可访问文库')}
-    ${statCardHtml(`${summary.publishedDocCount} 篇`, '已发布文档')}
+    ${statCardHtml(STAT_ICONS.vault, String(summary.vaultCount), '可访问文库')}
+    ${statCardHtml(STAT_ICONS.doc, `${summary.publishedDocCount} 篇`, '已发布文档')}
     ${updateStat}
   </div>`;
 
   const vaultCardRows = vaults.map(workbenchVaultCardHtml).join('\n  ');
+  // S17-T1 差距6：区块头=标题＋副题（左列）＋右侧动作链接（我的文库→/vaults）
   const vaultSection = `<section aria-label="我的文库">
   <div class="section-head">
-    <h2>我的文库</h2>
-    <p class="page-meta">按你的成员关系实时呈现 · 一个文库对应一个知识仓库。</p>
+    <div class="section-head-main">
+      <h2>我的文库</h2>
+      <p class="page-meta">按你的成员关系实时呈现 · 一个文库对应一个知识仓库。</p>
+    </div>
+    <a class="section-action" href="/vaults">查看全部 →</a>
   </div>
   <div class="vault-grid">
   <a class="vault-card vault-card-all" href="/vaults">
@@ -475,12 +568,18 @@ export function indexPage(
   </div>`;
   const docSection = `<section aria-label="跨库最近文档">
   <div class="section-head">
-    <h2>跨库最近文档</h2>
-    <p class="page-meta">按服务端审计时间排序的成功发布事件（触及文档路径，最近 ${escapeHtml(String(docs.length))} 条；路径与维护者从该次提交的 Git 记录派生）。维护者=Git 提交者元数据，非认证身份——操作主体以服务端审计记录为准。</p>
-    ${viewToggleHtml(view)}
+    <div class="section-head-main">
+      <h2>跨库最近文档</h2>
+      <p class="page-meta">按服务端审计时间排序的成功发布事件（触及文档路径，最近 ${escapeHtml(String(docs.length))} 条；路径与维护者从该次提交的 Git 记录派生）。维护者=Git 提交者元数据，非认证身份——操作主体以服务端审计记录为准。</p>
+      ${viewToggleHtml(view)}
+    </div>
+    <a class="section-action" href="/search">查看全部文档 →</a>
   </div>
   ${docBody}
-  <p class="page-meta visibility-note">呈现已发布知识；草稿仅创建者可见。搜索与列表遵循文库成员权限。</p>
+  <div class="table-foot">
+    <p class="page-meta visibility-note">呈现已发布知识；草稿仅创建者可见。搜索与列表遵循文库成员权限。</p>
+    <a class="section-action" href="/search">查看全部文档 →</a>
+  </div>
   </section>`;
 
   const entries = recent ?? [];
@@ -497,19 +596,24 @@ export function indexPage(
   return layout(
     '工作台',
     `<div class="page">
-  <div class="page-head">
-    <h1>工作台</h1>
-    <p class="page-meta">跨库知识工作台 · 数据按你的文库成员关系实时呈现</p>
-    <!-- 索引状态位：S15-T2 已接线（search_index_state 实时面，三态如实零示意值——成员过滤在查询面锁定） -->
+  <div class="page-head page-head-split">
+    <div class="page-head-main">
+      <h1>工作台</h1>
+      <p class="page-sub">企业知识，按库组织、共同维护；快速搜索并定位到可追溯的原文。</p>
+    </div>
+    <!-- 索引状态位：S15-T2 已接线（search_index_state 实时面，三态如实零示意值——成员过滤在查询面锁定）；S17-T1 差距3 迁入右位 head-meta（零语义变化，只挪位） -->
+    <div class="head-meta">
     ${indexStatusHtml(workbench.indexStatus)}
+    </div>
   </div>
+  ${workbenchToolbarHtml(vaults)}
   ${statGrid}
   ${vaultSection}
   ${docSection}
   ${activitySection}
 </div>
 `,
-    '',
+    HOME_KBD_SCRIPT, // S17-T1 差距4：⌘K 聚焦并入本页唯一内联 script 块（与 ACCOUNT_SCRIPT 同块）
     {
       user: { username: user.username, isAdmin: user.is_instance_admin, displayName: user.display_name },
       active: 'home',
