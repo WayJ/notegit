@@ -27,6 +27,14 @@
  * 与原内联逐字一致，行为零变化）。用共享脚本的页面（login/admin/credentials）
  * 调 layout(..., sharedScript=true)：内联块前置 <script src> 引用，页面内联块
  * 顶部一行别名取用（SHARED_ALIAS——页面特有逻辑的调用面零改写）。
+ *
+ * S14-T2 应用壳升级：layout() 由「顶栏＋main＋页脚」升为**三段壳**——顶栏
+ * ＋ `<div class="app-shell">`（左侧分区导航 sideNav() ＋ 内容区 main）＋ 深色
+ * 页脚。侧栏承载 D3 五区（查找/我的草稿/引用解析/我的凭据/管理），当前区由
+ * 服务端落 aria-current（D4：零 JS，不新增任何内联脚本——每页仍恰好一个
+ * 内联 <script> 块，共享脚本引用规则不变）。侧栏仅登录态壳渲染（nav.user 存在
+ * 时）；匿名/无导航壳（登录页 nav=undefined、403/404 兜底页）保持无侧栏形态。
+ * 顶栏品牌/账户菜单/主 CTA 形态不变（S12 已验收资产不得回归）。
  */
 
 import { ACTIVITY_LIMIT, type ActivityEntry } from './activity/query.ts';
@@ -62,9 +70,45 @@ const SPIKE_MARK =
 const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string; readonly key: NonNullable<PageNav['active']> }> = [
   { href: '/search', label: '查找', key: 'search' },
   { href: '/cite', label: '引用解析', key: 'cite' },
-  { href: '/drafts', label: '我的草稿', key: 'drafts' }, // 认证全员可见（topNav 渲染过滤——匿名壳不呈现）
+  { href: '/drafts', label: '我的草稿', key: 'drafts' }, // 认证全员可见（顶栏渲染过滤——匿名壳不呈现）
   { href: '/credentials', label: '我的凭据', key: 'credentials' },
 ];
+
+/**
+ * S14-T2 侧栏分区（D3 五区；D4 零 JS——当前区靠服务端落 aria-current，不用脚本切换）。
+ * 图标为内联 SVG 线条标记（随色继承 currentColor，与 spike-mark 同一处理方式——
+ * DESIGN.md 未覆盖侧栏组件，按其 Iteration Guide 原则推导：先结构与米色卡承载
+ * 当前区，不引入第四种表面色、coral 不入侧栏）。
+ */
+const SIDE_ICONS: Readonly<Record<string, string>> = {
+  search: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 19 19"/></g></svg>',
+  drafts: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M6 3.5h7.5L18 8v12.5H6z"/><path d="M13.5 3.5V8H18"/><path d="M9 12.5h6M9 16h4"/></g></svg>',
+  cite: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M4.5 5v13"/><path d="M8.5 7.5h11M8.5 12h11M8.5 16.5h6"/></g></svg>',
+  credentials: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"><circle cx="8" cy="12" r="3.6"/><path d="M11.6 12H20M16.5 12v3.2M18.8 12v2.2"/></g></svg>',
+  admin: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"><path d="M3.5 8h13M3.5 16h13"/><circle cx="8.5" cy="8" r="2.2"/><circle cx="14" cy="16" r="2.2"/></g></svg>',
+};
+
+/**
+ * 左侧分区导航（S14-T2 应用壳中段；仅登录态壳渲染——匿名/无导航壳不落侧栏，D3）。
+ * 管理项仍仅实例管理员可见（S2-T8 验收断言「普通成员页面任何位置不得出现
+ * /admin」——本函数是 /admin 的第二个来源，仍只读 nav.user.isAdmin）。
+ */
+function sideNav(nav: PageNav): string {
+  const items = NAV_ITEMS.map(
+    (it) =>
+      `      <li><a class="side-nav-item" href="${it.href}"${nav.active === it.key ? ' aria-current="page"' : ''}><span class="side-nav-mark">${SIDE_ICONS[it.key]}</span><span class="side-nav-text">${it.label}</span></a></li>`,
+  );
+  const adminItem =
+    nav.user?.isAdmin === true
+      ? `\n      <li><a class="side-nav-item" href="/admin"${nav.active === 'admin' ? ' aria-current="page"' : ''}><span class="side-nav-mark">${SIDE_ICONS.admin}</span><span class="side-nav-text">管理</span></a></li>`
+      : '';
+  return `<nav class="side-nav" aria-label="分区导航">
+    <p class="side-nav-title">分区</p>
+    <ul class="side-nav-list">
+      ${items.join('\n')}${adminItem}
+    </ul>
+  </nav>`;
+}
 
 /** S12-T2 顶栏账户菜单登出脚本（layout 并入页面唯一 script 块；菜单开合零 JS） */
 const ACCOUNT_SCRIPT = `
@@ -135,6 +179,10 @@ export function layout(title: string, body: string, script = '', nav?: PageNav, 
   // S12-T3：共享脚本页（sharedScript=true）在内联块前置 <script src> 引用——
   // 经典 script 按文档序执行，保证内联块的 ngt 别名取用时 window.ngt 已就位
   const sharedRef = sharedScript ? '<script src="/assets/app.js"></script>\n' : '';
+  // S14-T2 三段壳：顶栏 ＋ app-shell（左侧分区导航 ＋ 内容区）＋ 深色页脚。
+  // 侧栏仅登录态壳渲染（nav.user 存在——匿名/无导航壳如登录页、403/404 兜底页
+  // 保持无侧栏形态，D3）；侧栏零 JS（D4：当前区服务端落 aria-current）。
+  const side = nav?.user !== undefined ? `${sideNav(nav)}\n` : '';
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -145,9 +193,11 @@ export function layout(title: string, body: string, script = '', nav?: PageNav, 
 </head>
 <body>
 ${topNav(nav)}
-<main>
+<div class="app-shell">
+${side}<main>
 ${body}
 </main>
+</div>
 ${SITE_FOOTER}
 ${sharedRef}<script>
 ${inline}
