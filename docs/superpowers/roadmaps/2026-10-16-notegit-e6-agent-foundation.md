@@ -28,23 +28,23 @@ E4 roadmap §终态方向已论证：Notegit 内核（Git 唯一真源 ＋ commi
 
 ## Definition of Done
 
-- [ ] **DOD-E6-01 读协议**：四端点（vaults 清单 / tree / docs / index-status）稳定 JSON；
+- [x] **DOD-E6-01 读协议** — S18（四端点稳定 JSON；Bearer 全链+锚定差异实证；scope 收窄实景生效）：四端点（vaults 清单 / tree / docs / index-status）稳定 JSON；
   实测 agent 场景——匿名 401、bob 无权库 404 与不存在同形态、commit 锚定读取
   （ref=OID 与 version 页同一树）、截断与分页语义如实标注。
 - [ ] **DOD-E6-02 凭据委托**：委托凭据签发（作用域=员工权限子集）/ 撤销 / 越权拒绝
   （作用域外 404 同形态）；审计行携带凭据来源标注；员工撤权 → 委托即失效（不缓存）。
 - [ ] **DOD-E6-03 容量验证**：三场景（并发读 / 突发写 / 跨库扇出）实测数字与底线结论
   入档；发现的瓶颈如实记录（不粉饰、不过度优化）。
-- [ ] **DOD-E6-04 契约与指南**：api.md 新端点行落契（draft-first → master D 批）；
+- [x] **DOD-E6-04 契约与指南** — S18 份额（api.md §6 三行+§1 E-RES-009+§5 增量；agent-guide 骨架）：api.md 新端点行落契（draft-first → master D 批）；
   agent-guide.md（认证/锚定引用/变更感知/礼貌轮询建议——索引状态端点即为此设计）。
-- [ ] **DOD-E6-05 安全回归**：四 gates 全绿；§2.2 交叉验证表 + e2e-final-regression 保持；
+- [x] **DOD-E6-05 安全回归** — S18 份额（S3 侧信道逐字节同体+四 gates）；epic 级随 S19/S20 复验：四 gates 全绿；§2.2 交叉验证表 + e2e-final-regression 保持；
   新读面不得成为侧信道（无权库零出现——与检索/工作台同一判定面，独立测试锁定）。
 
 ## Sprint Breakdown
 
 | sprint | state | note |
 |---|---|---|
-| S18 | planned | 读协议 v1（R01/R04 份额）：vaults 清单+tree ∥ docs+index-status → 契约 D 批 |
+| S18 | merged | 读协议 v1；2026-10-16 验收 pass（agent Bearer 全链实景跑通、锚定差异实证、四 gates 1070/106/369）——DOD-E6-01/04/05 份额达标；Q-E6-1 定案（全量+截断）；契约 D 批四笔（[acceptance](../acceptances/2026-10-16-S18-acceptance.md)） | [2026-10-16-S18-plan.md](../sprints/2026-10-16-S18-plan.md) |
 | S19 | planned | 凭据委托（R02）：作用域列+签发撤销面+审计标注+越权测试 |
 | S20 | planned | 容量验证（R03）：三场景实测+结论入档+瓶颈清单 |
 
@@ -69,7 +69,7 @@ flowchart LR
 
 | id | question | status | resolution | date / evidence |
 |---|---|---|---|---|
-| Q-E6-1 | tree 端点分页/截断上限（单库大目录）？ | proposed | v1 = 全量树 + 上限告警字段（truncated: true——与 search 100 截断同哲学）；实测超限库再议分页 | 待 S18 验收定 |
+| Q-E6-1 | tree 端点分页/截断上限（单库大目录）？ | closed | v1 = 全量树 + 上限告警字段（truncated: true——与 search 100 截断同哲学）；实测超限库再议分页 | **S18 定案：全量+1000 截断 truncated 如实（不预设分页）** | 2026-10-16；S18 acceptance |
 | Q-E6-2 | CLI 是否同步加只读命令（clone 已有）？ | proposed | 不加——agent 走 HTTP；CLI 人用形态不变（保持最小） | 待 S19 后重估 |
 
 ## Cross-cutting
@@ -85,3 +85,4 @@ flowchart LR
 | date | change | evidence |
 |---|---|---|
 | 2026-10-16 | E6 立项：R01–R04、DOD-E6-01~05、S18–S20、D35–D38 | 用户终态方向（2026-10-15）+「继续推进后续工作」指令（2026-10-16）；本文件 |
+| 2026-10-16 | S18 merged（DOD-E6-01/04/05 份额）；Q-E6-1 closed；契约 D 批四笔 | acceptance/2026-10-16-S18 |
