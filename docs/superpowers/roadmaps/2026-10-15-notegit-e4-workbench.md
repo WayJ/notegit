@@ -161,6 +161,7 @@ ADR 编号接续 E3（D1–D23）。
 | D27 | 延续 D19（纯 SSR ＋ 共享脚本）：侧栏壳与工作台全部服务端渲染，⌘K 等增强行为进 `/assets/app.js` 共享命名空间，零构建链、零外部 JS 依赖不变 | D19 已在册且回看条件（实时协作/离线立项）未触发；工作台壳本质是服务端渲染问题，引入前端框架成本不划算且冲击安全不变量的实现形态 | 2026-10-15；D19 |
 | D28 | **终态方向裁决：Notegit = 面向大量 agent 的底层知识库框架，形态对标「GitLab 式的平台」**（多能力共存于同一平台，共用身份/权限/审计），人负责策展治理、agent 负责消费生产。既有内核（Git 唯一真源 ＋ commit 锚定引用 ＋ 统一鉴权审计 ＋ 派生索引延迟可观测）判定为天然契合底座要件，**三个缺口另立 epic**：agent 可消费的读协议、机器主体身份模型、并发容量验证。E4 边界：只交付平台容器壳 ＋ 人的工作台面，不新增 agent 端点、不动身份模型、不做压测 | 用户裁决 2026-10-15「按照最终变成一个像 GitLab 这样的项目的方向去做」；GitLab 的价值在平台化而非单一能力；既有内核自评契合度高（见 §终态方向表）——缺口如实列明而非承诺在本 epic 一并解决；「大量 agent」是方向不是当前交付物，避免功能蔓延 | 2026-10-15；用户裁决、本文件 §终态方向 |
 | D29 | **agent 身份模型裁决：员工能力延伸（凭据委托）**——agent 无独立主体，持「委托凭据」，授权范围为某个员工权限的子集（可读/可写哪些库由委托界定）；审计主体仍是**真实员工**，另标注凭据来源（哪张委托凭据发起）；成员表不因 agent 膨胀。回看条件：需要按 agent 维度统计用量/产出责任，或委托凭据的管理复杂度压过 service account 时，重开独立机器主体模型 | 用户裁决 2026-10-15（E4 立项后即刻拍板）。选此模型的理由：它零改动既有 identity/审计/成员三域（DOD-03「审计主体=认证员工」不变量保持），改动面收敛为凭据作用域列 ＋ 审计标注列；独立 service account 需要改 identity + storage + 契约三域，且成员表按 agent 膨胀问题需另设策略——在读协议尚未落地、agent 规模未验证前不值得付这个代价 | 2026-10-15；用户裁决 2026-10-15；**归属未来「agent 知识底座」epic 落契，本 epic 仅留档不改契约** |
+| D30 | **工作台「最后更新」时钟源 = 服务端审计 occurred_at（成功发布事件 MAX），非 git 提交时间**。库卡片 lastCommitAt、汇总 lastContentUpdateAt、路径级文档表 occurredAt 三面同一时钟。docCount 口径 = search_index 行数（与 /search 同源，索引延迟如实呈现——S15 W05）。修订：本表 Asset Disposition 原「web/browse/tree.ts LastCommitInfo reuse」行废止（browse 目录行的作者/时间派生**不受影响**，那是目录浏览场景、逐条目语义） | git %an/%aI 是客户端可填元数据（DOD-03/identity §8）——把它当「最后更新」权威时间等于客户端元数据升格为服务端事实；审计时钟与 D25「排序键只能是服务端审计时间」同源一致；零逐库 spawn。S14-T1 worker 自主选择（两轮 ask 未获回复后按任务书披露不阻塞），master 追认 | 2026-10-15；S14-T1 报告（66f9f33）、master 追认；browse/tree.ts 目录行派生不受影响 |
 
 ## Asset Disposition
 
@@ -170,7 +171,7 @@ ADR 编号接续 E3（D1–D23）。
 | docs/e4-workbench/reference-analysis.md | new | E4 全程基线；差距结论逐项附源码依据，不凭印象 | 2026-10-15 | 本文件 |
 | DESIGN.md token 体系 | reuse（强制） | 新样式零内联 hex；参照稿调色板丢弃 | 2026-10-15 | DESIGN.md、AGENTS.md |
 | web/pages.ts `layout()` | **单点改造核心** | 全站壳的唯一改动点——一次改动全站继承，避免逐页模板分叉 | 2026-10-15 | web/pages.ts:132 |
-| web/browse/tree.ts LastCommitInfo | reuse | 库/目录最后提交元数据的既有派生面（维护者/时间列同源） | 2026-10-15 | web/browse/tree.ts:117 |
+| web/browse/tree.ts LastCommitInfo | reuse（**仅目录浏览场景**；D30 修订：工作台三面不再走此派生——时钟源改服务端审计 occurred_at） | browse 目录行最后提交作者/时间派生面不变 | 2026-10-15；D30 |
 | web/activity/query.ts | reuse（扩） | 审计事件排序面已在位；路径派生为新增只读查询面 | 2026-10-15 | web/activity/query.ts |
 | search_index / search_index_state | reuse | 索引新鲜度与标签 chips 的数据源；派生可重建原则不变 | 2026-10-15 | 迁移 0009/0010 |
 | 契约演进通道 | reuse | draft-first ＋ master D 批（D12–D14/D21–D23 先例）；新页面参数/端点走 api.md §13 建议稿渠道 | 2026-10-15 | E1 D12–D14 |
