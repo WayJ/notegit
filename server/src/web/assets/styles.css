@@ -727,6 +727,8 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(198
   color: var(--body-strong);
 }
 .search-form input { flex: 1 1 auto; }
+/* S15-T1 库筛选下拉（visual token 全承既有 select 控件——只补 flex 行内尺寸） */
+.search-form select { flex: 0 1 auto; width: auto; min-width: 180px; }
 
 /* ── 页脚（深色面收束全页——产品 chrome） ─────────────────────────────────── */
 .site-footer {
