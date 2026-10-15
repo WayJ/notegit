@@ -38,6 +38,7 @@
  */
 
 import { ACTIVITY_LIMIT, type ActivityEntry } from './activity/query.ts';
+import type { WorkbenchSummary, VaultCard, RecentDocumentRow } from './workbench/query.ts';
 
 
 /** HTML 文本转义：服务端渲染的唯一插值通道 */
@@ -297,43 +298,144 @@ export function activityEntryRow(e: ActivityEntry): string {
   return `<li class="commit activity-item" data-vault="${escapeHtml(e.vaultSlug)}" data-actor="${escapeHtml(e.actorUsername)}" data-when="${escapeHtml(e.occurredAt)}" data-commit="${escapeHtml(newCommit)}" data-entry="${escapeHtml(e.entry)}"><a href="${vaultHref}">${escapeHtml(e.vaultSlug)}</a> · ${escapeHtml(e.actorDisplay)}（${escapeHtml(e.actorUsername)}）· ${escapeHtml(formatRelativeTime(e.occurredAt))}${branchText} · ${action}${commitLink}${pathLinks}</li>`;
 }
 
+// ── S14-T3 工作台首页（`/` 原地升级——DOD-E4-02/04/07） ──────────────────────
+
+/** 工作台首页数据（三能力全部来自 web/workbench/query.ts——页面零自算，D26：
+ *  成员过滤与统计口径已在该层锁定，indexPage 只渲染） */
+export interface WorkbenchHomeData {
+  readonly summary: WorkbenchSummary;
+  readonly vaults: readonly VaultCard[];
+  readonly docs: readonly RecentDocumentRow[];
+}
+
+/** 角色徽章文案（与 browse/pages.ts 同映射；本文件不 import browse——防环） */
+const WORKBENCH_ROLE_LABELS: Readonly<Record<string, string>> = { admin: '管理员', editor: '编辑者', reader: '读者' };
+
+/** 概览卡（画布＋发丝描边形态；值为查询面原样，绝对时间 title 可选） */
+function statCardHtml(value: string, label: string, title?: string): string {
+  const t = title === undefined ? '' : ` title="${escapeHtml(title)}"`;
+  return `<div class="stat-card"><span class="stat-value"${t}>${escapeHtml(value)}</span><span class="stat-label">${escapeHtml(label)}</span></div>`;
+}
+
+/** 我的文库卡（最后更新=相对时间＋绝对 title；无提交库如实「暂无发布」，D30 时钟源=审计 occurred_at） */
+function workbenchVaultCardHtml(v: VaultCard): string {
+  const role = WORKBENCH_ROLE_LABELS[v.role] ?? escapeHtml(v.role);
+  const meta =
+    v.lastCommitAt === null
+      ? `<span class="vault-card-meta">${escapeHtml(String(v.docCount))} 篇 · 暂无发布</span>`
+      : `<span class="vault-card-meta" title="${escapeHtml(v.lastCommitAt)}">${escapeHtml(String(v.docCount))} 篇 · ${escapeHtml(formatRelativeTime(v.lastCommitAt))}</span>`;
+  return `<a class="vault-card" href="/vaults/${encodeURIComponent(v.slug)}/browse">
+    <span class="vault-name">${escapeHtml(v.name)}</span>
+    <span class="vault-slug">${escapeHtml(v.slug)}</span>
+    <span class="badge">${role}</span>
+    ${meta}
+  </a>`;
+}
+
 /**
- * 入口页：服务端渲染当前员工与入口清单——管理入口仅实例管理员可见（S2-T8 验收断言）。
- * UI-RESTYLE：入口清单落位 feature-card 网格（DESIGN.md 卡片族；整卡可点）。
- * S11-T2：追加「最近变更」区块（recent=跨库最近发布，按当前员工成员关系过滤
- * ——数据面 web/activity/query.ts 实时 JOIN；区块纯服务端渲染，无新增脚本）。
- * S12-T2：原独立退出按钮移除（登出随顶栏账户菜单全域可用——id="logout" 由
- * topNav 承担；页面自有脚本退役，唯一 script=外壳账户脚本）。
+ * 跨库最近文档表行（data 属性为一致性断言所依）。
+ * view 链接与 browse viewUrl 同构（逐段 encodeURIComponent；本文件不 import
+ * browse——防环，同 activityViewHref 手法）；维护者=Git 提交者元数据（DOD-03/
+ * D25）——单元格 title 与区块脚注双通道如实标注；更新时间=服务端审计时间。
+ */
+function workbenchDocRowHtml(d: RecentDocumentRow): string {
+  const view = activityViewHref(d.vaultSlug, d.path);
+  const chips =
+    d.tags.length === 0
+      ? ''
+      : `<span class="tag-chips">${d.tags.map((t) => `<span class="badge">${escapeHtml(t)}</span>`).join('')}</span>`;
+  const titleLink = `<a href="${view}">${escapeHtml(d.title ?? d.path)}</a>`;
+  const pathPart = d.title === null ? '' : `<span class="doc-row-path">${escapeHtml(d.path)}</span>`;
+  return `<tr data-vault="${escapeHtml(d.vaultSlug)}" data-path="${escapeHtml(d.path)}" data-commit="${escapeHtml(d.commitOid)}">
+      <td>${titleLink}${pathPart}${chips}</td>
+      <td class="col-tertiary"><a href="/vaults/${encodeURIComponent(d.vaultSlug)}">${escapeHtml(d.vaultName)}</a></td>
+      <td class="col-secondary" title="Git 提交者元数据，非认证身份（操作主体以服务端审计记录为准）">${escapeHtml(d.author)}</td>
+      <td class="col-tertiary" title="${escapeHtml(d.occurredAt)}">${escapeHtml(formatRelativeTime(d.occurredAt))}</td>
+    </tr>`;
+}
+
+/**
+ * 工作台首页（S14-T3 `/` 原地升级）：页头（索引状态位留待 S15 W05）＋ 概览三卡
+ * ＋ 我的文库卡片网格（首张「全部文库」聚合卡跳 /vaults，Q-E4-1——原「知识库」
+ * 入口卡的等价承接）＋ 跨库最近文档表 ＋ 最近变更事件流（次级区块，activity
+ * 数据面保留）。原三张 feature-card 入口卡移除：/credentials 与 /admin 由侧栏
+ * 承接（S14-T2 壳），/vaults 由聚合卡承接——导航可达性零回归。
+ * 一切数字来自 WorkbenchHomeData（workbench/query.ts 三能力，D26 同源同过滤
+ * 已在该层锁定）；插值唯一通道 escapeHtml。
  */
 export function indexPage(
   user: { username: string; display_name: string; is_instance_admin: boolean },
+  workbench: WorkbenchHomeData,
   recent?: readonly ActivityEntry[],
 ): string {
-  const adminCard = user.is_instance_admin
-    ? `
-  <a class="feature-card" href="/admin"><h3>管理</h3><p>员工、邀请、库、成员角色、维护模式</p></a>`
-    : '';
+  const { summary, vaults, docs } = workbench;
+  const updateStat =
+    summary.lastContentUpdateAt === null
+      ? statCardHtml('暂无', '最近一次内容更新')
+      : statCardHtml(formatRelativeTime(summary.lastContentUpdateAt), '最近一次内容更新', summary.lastContentUpdateAt);
+  const statGrid = `<div class="stat-grid">
+    ${statCardHtml(String(summary.vaultCount), '可访问文库')}
+    ${statCardHtml(`${summary.publishedDocCount} 篇`, '已发布文档')}
+    ${updateStat}
+  </div>`;
+
+  const vaultCardRows = vaults.map(workbenchVaultCardHtml).join('\n  ');
+  const vaultSection = `<section aria-label="我的文库">
+  <div class="section-head">
+    <h2>我的文库</h2>
+    <p class="page-meta">按你的成员关系实时呈现 · 一个文库对应一个知识仓库。</p>
+  </div>
+  <div class="vault-grid">
+  <a class="vault-card vault-card-all" href="/vaults">
+    <span class="vault-name">全部文库</span>
+    <span class="vault-slug">${escapeHtml(String(summary.vaultCount))} 个文库 · 你有权访问</span>
+  </a>${vaults.length === 0 ? '' : `\n  ${vaultCardRows}`}
+  </div>
+  ${vaults.length === 0 ? '<p class="state-note">尚无可访问文库（被授权后在此呈现）。</p>' : ''}
+  </section>`;
+
+  const docBody =
+    docs.length === 0
+      ? '<p class="state-note">尚无最近发布的文档（各库发布动作产生后在此呈现）。</p>'
+      : `<div class="table-wrap">
+  <table>
+  <thead><tr><th>文档</th><th class="col-tertiary">所属库</th><th class="col-secondary">维护者</th><th class="col-tertiary">更新时间</th></tr></thead>
+  <tbody>
+  ${docs.map(workbenchDocRowHtml).join('\n')}
+  </tbody>
+  </table>
+  </div>`;
+  const docSection = `<section aria-label="跨库最近文档">
+  <div class="section-head">
+    <h2>跨库最近文档</h2>
+    <p class="page-meta">按服务端审计时间排序的成功发布事件（触及文档路径，最近 ${escapeHtml(String(docs.length))} 条；路径与维护者从该次提交的 Git 记录派生）。维护者=Git 提交者元数据，非认证身份——操作主体以服务端审计记录为准。</p>
+  </div>
+  ${docBody}
+  </section>`;
+
   const entries = recent ?? [];
   const activityBody =
     entries.length === 0
       ? '<p class="state-note">尚无最近变更（各库发布动作产生后在此呈现）。</p>'
       : `<ul class="commits">\n  ${entries.map(activityEntryRow).join('\n  ')}\n  </ul>`;
-  return layout(
-    '首页',
-    `<div class="page">
-  <div class="page-head">
-    <h1>Notegit</h1>
-    <p class="page-meta">当前登录：<strong>${escapeHtml(user.display_name)}</strong>（${escapeHtml(user.username)}）</p>
-  </div>
-  <div class="card-grid">
-  <a class="feature-card" href="/vaults"><h3>知识库</h3><p>有权库列表与目录浏览</p></a>
-  <a class="feature-card" href="/credentials"><h3>我的访问凭据</h3><p>创建 / 撤销 / 查看，脱敏显示</p></a>${adminCard}
-  </div>
-  <section class="card" aria-label="最近变更">
+  const activitySection = `<section class="card" aria-label="最近变更">
   <h2>最近变更</h2>
   ${activityBody}
   <p class="page-meta">按你的成员关系呈现各库最近发布（成功发布事件，最近 ${ACTIVITY_LIMIT} 条；主体=服务端审计记录的认证员工）。</p>
-  </section>
+  </section>`;
+
+  return layout(
+    '工作台',
+    `<div class="page">
+  <div class="page-head">
+    <h1>工作台</h1>
+    <p class="page-meta">跨库知识工作台 · 数据按你的文库成员关系实时呈现</p>
+    <!-- 索引状态位：S15 W05 接线（消费 search_index_state，如实呈现新鲜度）——本任务占位不实现 -->
+  </div>
+  ${statGrid}
+  ${vaultSection}
+  ${docSection}
+  ${activitySection}
 </div>
 `,
     '',

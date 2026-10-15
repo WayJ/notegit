@@ -118,14 +118,14 @@ test('登录页：居中卡 + 珊瑚主按钮；导航无登录态用户名', as
   }
 });
 
-test('入口页：卡片网格 + 登录态导航；普通成员全页无 /admin，管理员导航含管理项', async () => {
+test('入口页（S14-T3 工作台）：概览三卡 + 登录态导航；普通成员全页无 /admin，管理员导航含管理项', async () => {
   const h = await harness();
   try {
     addEmployee(h.db, { username: 'boss', is_instance_admin: 1 });
     addEmployee(h.db, { username: 'pleb' });
     const plebRes = await h.app.inject({ method: 'GET', url: '/', headers: sidCookie(h.session(2)) });
-    assert.ok(plebRes.body.includes('class="card-grid"'), '入口卡片网格');
-    assert.ok(plebRes.body.includes('class="feature-card"'), 'feature-card 形态');
+    assert.ok(plebRes.body.includes('class="stat-grid"'), '概览三卡网格');
+    assert.ok(plebRes.body.includes('class="stat-card"'), '概览卡形态');
     assert.ok(plebRes.body.includes('class="nav-user"'), '导航登录态');
     assert.ok(!plebRes.body.includes('/admin'), '普通成员导航与页面均无管理入口');
     const bossRes = await h.app.inject({ method: 'GET', url: '/', headers: sidCookie(h.session(1)) });

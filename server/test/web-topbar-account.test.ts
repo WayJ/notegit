@@ -134,7 +134,7 @@ test('顶栏登出链：POST /api/v1/auth/logout 204 → 旧会话访问 /drafts
 
 // ── 首页微调：原退出按钮移除（顶栏取代），布局其余保留 ──────────────────────
 
-test('首页：原独立退出按钮移除（登出控件唯一=顶栏）；身份卡与入口卡布局保留', async () => {
+test('首页：原独立退出按钮移除（登出控件唯一=顶栏）；工作台概览布局在位', async () => {
   const h = await harness();
   try {
     addEmployee(h.db, { username: 'alice' });
@@ -142,8 +142,8 @@ test('首页：原独立退出按钮移除（登出控件唯一=顶栏）；身�
     assert.equal(res.statusCode, 200);
     assert.equal((res.body.match(/id="logout"/g) ?? []).length, 1, '登出控件唯一（顶栏一处）');
     assert.ok(!res.body.includes('logout-msg'), '原首页登出提示位移除');
-    assert.ok(res.body.includes('class="card-grid"'), '入口卡片网格保留');
-    assert.ok(res.body.includes('class="feature-card"'), 'feature-card 形态保留');
+    // S14-T3 起首页=工作台（原入口卡退役）：布局承接由概览三卡承担
+    assert.ok(res.body.includes('class="stat-grid"'), '概览三卡布局在位');
     assert.ok(res.body.includes('class="nav-side"'), '右侧簇（账户菜单 + 主 CTA）');
   } finally {
     await h.close();
