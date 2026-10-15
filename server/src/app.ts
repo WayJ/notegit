@@ -23,6 +23,8 @@ import { registerRulesVersionRoutes } from './rulesversion/routes.ts';
 import { registerSearchRoutes } from './search/routes.ts';
 import { registerApiReadVaultRoutes } from './api-read/vaults.ts';
 import { SearchIndexer } from './search/indexer.ts';
+import { registerTreeReadRoutes } from './api-read/tree.ts';
+import { registerDocsReadRoutes } from './api-read/docs.ts';
 import { metricsCollector } from './metrics/collector.ts';
 import { registerMetricsRoutes } from './metrics/routes.ts';
 import { registerWebRoutes } from './web/routes.ts';
@@ -213,6 +215,21 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       db: wired.db,
       authenticateRequest: wired.authenticateRequest,
       ...(searchIndexer !== undefined ? { indexer: searchIndexer } : {}),
+    });
+    // S18-T2 agent 读协议 v1（E6 机器面，读 JSON）：GET /api/v1/vaults/{slug}/tree
+    // 与 /docs/{path}（D1 文件所有权 api-read/{tree,docs}.ts——T2 持两行；
+    // T1 的 api-read/vaults.ts 注册行自持，互不改他人行）。认证走统一缝
+    // （匿名 401），授权 authorize read + token scope 收窄（无权=不存在 404
+    // D-IC-06）；GET 免 CSRF；只读无审计行；写通道零变更。
+    registerTreeReadRoutes(app, {
+      db: wired.db,
+      authenticateRequest: wired.authenticateRequest,
+      dataDir: deps.dataDir,
+    });
+    registerDocsReadRoutes(app, {
+      db: wired.db,
+      authenticateRequest: wired.authenticateRequest,
+      dataDir: deps.dataDir,
     });
     // S2-T8 最小页面 + S4 浏览族（/login、/、/admin、/credentials、/vaults…——GET
     // 外壳/数据页；页面无写操作，安全判定全部在 API 侧复用 authorize/管理员门槛）。
