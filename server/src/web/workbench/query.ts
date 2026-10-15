@@ -6,14 +6,16 @@ import type { RunGit } from '../browse/tree.ts';
 /**
  * 工作台聚合查询面（S14-T1；DOD-E4-03 工作台查询面 / DOD-E4-04 路径级文档流）。
  *
- * 三个能力（纯查询、只读）：`workbenchSummary` 概览三卡数据、`vaultCards`
- * 库卡片、`recentDocuments` 路径级最近文档。本模块不产出 HTML、不写任何表
+ * 四个能力（纯查询、只读）：`workbenchSummary` 概览三卡数据、`vaultCards`
+ * 库卡片、`recentDocuments` 路径级最近文档、`indexStatus` 索引状态聚合
+ * （S15-T2 增补，消费 search_index_state——只读，写面归索引器）。本模块不产出
+ * HTML、不写任何表
  * （延续 D7/D18 派生纪律：一切数据可从 Git 与审计全量重建，零新表、零 schema
  * 变更、零写操作）。
  *
  * ## 成员过滤（D26——聚合面安全不变量，D-IC-06 的延伸）
  *
- * 三个能力**全部**实时 JOIN `vault_members`，与 `search/query.ts`、
+ * 各能力**全部**实时 JOIN `vault_members`，与 `search/query.ts`、
  * `activity/query.ts` 同一张表、同一判定面、无任何缓存：撤权 = DELETE 成员行，
  * 下一次查询立即消失（无缓存原则 D7/D-IC-05）。
  *
@@ -344,3 +346,50 @@ export async function recentDocuments(
 
 /** 供测试与呈现层判定「git 执行失败 vs 空结果」的导出（语义说明面） */
 export { isGitExitFailure };
+
+/**
+ * 索引状态聚合（S15-T2，D4——工作台页头状态位的数据面）：
+ *
+ * - `lastIndexedAt` = 有权库 `search_index_state` 行的 MAX(indexed_at)；
+ *   无任何状态行如实为 null（呈现层落「尚未建立索引」，零示意值）。
+ * - `failing` = 任一有权库 `consecutive_failures > 0`（索引失败不阻断发布，
+ *   只在此如实可见——架构 §9）。
+ * - `lastError` = 失败行的错误摘要，取最近一次失败（COALESCE(last_error_at,
+ *   indexed_at) DESC）；无失败行为 null。
+ *
+ * 成员过滤与既有三能力同面：实时 JOIN `vault_members`（无缓存，撤权下一次
+ * 查询即消失，D26/D-IC-05）——无权库的行不进入聚合，其 indexed_at 抬不高
+ * lastIndexedAt、失败行不触发 failing、错误摘要不泄露（聚合面侧信道零出现）。
+ * 只读消费：本能力不写 search_index_state（写面归索引器）。
+ */
+export interface IndexStatus {
+  readonly lastIndexedAt: string | null;
+  readonly failing: boolean;
+  readonly lastError: string | null;
+}
+
+export function indexStatus(db: DatabaseSync, employeeId: number): IndexStatus {
+  const row = db
+    .prepare(
+      `SELECT MAX(s.indexed_at) AS last_indexed_at,
+              COALESCE(MAX(CASE WHEN s.consecutive_failures > 0 THEN 1 ELSE 0 END), 0) AS failing,
+              (SELECT s2.last_error
+                 FROM search_index_state s2
+                 JOIN vaults v2 ON v2.id = s2.vault_id
+                 ${MEMBER_JOIN('v2')}
+                WHERE s2.consecutive_failures > 0
+                ORDER BY COALESCE(s2.last_error_at, s2.indexed_at) DESC, s2.vault_id ASC
+                LIMIT 1) AS last_error
+       FROM search_index_state s
+       JOIN vaults v ON v.id = s.vault_id
+       ${MEMBER_JOIN('v')}`,
+    )
+    .get(employeeId, employeeId) as
+    | { last_indexed_at: string | null; failing: number; last_error: string | null }
+    | undefined;
+  return {
+    lastIndexedAt: row?.last_indexed_at ?? null,
+    failing: row?.failing === 1,
+    lastError: row?.last_error ?? null,
+  };
+}

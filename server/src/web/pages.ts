@@ -35,10 +35,17 @@
  * 内联 <script> 块，共享脚本引用规则不变）。侧栏仅登录态壳渲染（nav.user 存在
  * 时）；匿名/无导航壳（登录页 nav=undefined、403/404 兜底页）保持无侧栏形态。
  * 顶栏品牌/账户菜单/主 CTA 形态不变（S12 已验收资产不得回归）。
+ *
+ * S15-T2 工作台完善（DOD-E4-06/08；D4/D5）：indexPage 页头索引状态位接线
+ * （indexStatusHtml 三态如实——数据面 web/workbench/query.ts indexStatus，
+ * 成员过滤已在该层锁定）；跨库最近文档表新增视图开关 view=list|grid（零 JS
+ * 纯 <a href> querystring 记忆，默认 list；grid 复用 vault-card/vault-grid
+ * 既有 token 卡类）＋ 表尾可见性语义声明固定位。零新增脚本——每页仍恰一
+ * 内联 <script> 块。
  */
 
 import { ACTIVITY_LIMIT, type ActivityEntry } from './activity/query.ts';
-import type { WorkbenchSummary, VaultCard, RecentDocumentRow } from './workbench/query.ts';
+import type { WorkbenchSummary, VaultCard, RecentDocumentRow, IndexStatus } from './workbench/query.ts';
 
 
 /** HTML 文本转义：服务端渲染的唯一插值通道 */
@@ -300,12 +307,16 @@ export function activityEntryRow(e: ActivityEntry): string {
 
 // ── S14-T3 工作台首页（`/` 原地升级——DOD-E4-02/04/07） ──────────────────────
 
-/** 工作台首页数据（三能力全部来自 web/workbench/query.ts——页面零自算，D26：
+/** 工作台首页数据（各能力全部来自 web/workbench/query.ts——页面零自算，D26：
  *  成员过滤与统计口径已在该层锁定，indexPage 只渲染） */
 export interface WorkbenchHomeData {
   readonly summary: WorkbenchSummary;
   readonly vaults: readonly VaultCard[];
   readonly docs: readonly RecentDocumentRow[];
+  /** 页头索引状态位数据（S15-T2，D4：search_index_state 聚合——查询面已做成员过滤） */
+  readonly indexStatus: IndexStatus;
+  /** 跨库文档表视图（S15-T2，D5：querystring 记忆 view=list|grid；缺省 list——纯呈现偏好） */
+  readonly view?: 'list' | 'grid';
 }
 
 /** 角色徽章文案（与 browse/pages.ts 同映射；本文件不 import browse——防环） */
@@ -355,13 +366,55 @@ function workbenchDocRowHtml(d: RecentDocumentRow): string {
 }
 
 /**
- * 工作台首页（S14-T3 `/` 原地升级）：页头（索引状态位留待 S15 W05）＋ 概览三卡
+ * 页头索引状态位（S15-T2，D4 三态如实，零示意值）：
+ * - 健康：相对时间文本 ＋ 绝对时间 title（查询面原值）。
+ * - 失败：警示态类（styles.css 落 warning token）＋ title 含 lastError 摘要——
+ *   索引失败不阻断发布（架构 §9），在此如实可见、不粉饰为健康。
+ * - 无索引行：如实「尚未建立索引」，不虚构时间。
+ */
+function indexStatusHtml(s: IndexStatus): string {
+  if (s.lastIndexedAt === null) {
+    return '<p class="index-status is-empty">尚未建立索引</p>';
+  }
+  if (s.failing) {
+    const t = s.lastError === null ? '' : ` title="${escapeHtml(`索引失败：${s.lastError}`)}"`;
+    return `<p class="index-status is-failing"${t}>索引更新失败</p>`;
+  }
+  return `<p class="index-status is-healthy" title="${escapeHtml(s.lastIndexedAt)}">索引已更新 · ${escapeHtml(formatRelativeTime(s.lastIndexedAt))}</p>`;
+}
+
+/**
+ * 跨库文档网格卡（view=grid，D5）：复用既有 vault-card/vault-grid token 卡形态
+ * （不新引表面色）；整卡链接=viewUrl 同构；卡题=title（无 title 如实落路径，
+ * 与列表行同语义）。
+ */
+function workbenchDocCardHtml(d: RecentDocumentRow): string {
+  const chips =
+    d.tags.length === 0
+      ? ''
+      : `<span class="tag-chips">${d.tags.map((t) => `<span class="badge">${escapeHtml(t)}</span>`).join('')}</span>`;
+  return `<a class="vault-card" href="${activityViewHref(d.vaultSlug, d.path)}">
+    <span class="vault-name">${escapeHtml(d.title ?? d.path)}</span>
+    <span class="doc-row-path">${escapeHtml(d.path)}</span>
+    <span class="badge">${escapeHtml(d.vaultName)}</span>
+    <span class="vault-card-meta" title="${escapeHtml(d.occurredAt)}">${escapeHtml(formatRelativeTime(d.occurredAt))}</span>${chips}
+  </a>`;
+}
+
+/** 视图开关（D5 零 JS：纯 <a href> 携带 query——category-tab token 语义，当前态 aria-current） */
+function viewToggleHtml(view: 'list' | 'grid'): string {
+  return `<p class="view-toggle">视图：<a href="/?view=list"${view === 'list' ? ' aria-current="page"' : ''}>列表</a><a href="/?view=grid"${view === 'grid' ? ' aria-current="page"' : ''}>网格</a></p>`;
+}
+
+/**
+ * 工作台首页（S14-T3 `/` 原地升级）：页头（索引状态位，S15-T2 接线）＋ 概览三卡
  * ＋ 我的文库卡片网格（首张「全部文库」聚合卡跳 /vaults，Q-E4-1——原「知识库」
- * 入口卡的等价承接）＋ 跨库最近文档表 ＋ 最近变更事件流（次级区块，activity
- * 数据面保留）。原三张 feature-card 入口卡移除：/credentials 与 /admin 由侧栏
- * 承接（S14-T2 壳），/vaults 由聚合卡承接——导航可达性零回归。
- * 一切数字来自 WorkbenchHomeData（workbench/query.ts 三能力，D26 同源同过滤
- * 已在该层锁定）；插值唯一通道 escapeHtml。
+ * 入口卡的等价承接）＋ 跨库最近文档表（S15-T2 起视图开关 list|grid ＋ 表尾可见性
+ * 语义声明）＋ 最近变更事件流（次级区块，activity 数据面保留）。原三张
+ * feature-card 入口卡移除：/credentials 与 /admin 由侧栏承接（S14-T2 壳），
+ * /vaults 由聚合卡承接——导航可达性零回归。
+ * 一切数字与状态来自 WorkbenchHomeData（workbench/query.ts 四能力，D26 同源同
+ * 过滤已在该层锁定）；插值唯一通道 escapeHtml。
  */
 export function indexPage(
   user: { username: string; display_name: string; is_instance_admin: boolean },
@@ -394,10 +447,15 @@ export function indexPage(
   ${vaults.length === 0 ? '<p class="state-note">尚无可访问文库（被授权后在此呈现）。</p>' : ''}
   </section>`;
 
+  // S15-T2（D5）：视图开关 view=list|grid（querystring，默认 list）——grid 复用
+  // vault-card/vault-grid 卡形态；非法值由接线层白名单回落 list，本处只收两态。
+  const view = workbench.view ?? 'list';
   const docBody =
     docs.length === 0
       ? '<p class="state-note">尚无最近发布的文档（各库发布动作产生后在此呈现）。</p>'
-      : `<div class="table-wrap">
+      : view === 'grid'
+        ? `<div class="vault-grid">\n  ${docs.map(workbenchDocCardHtml).join('\n  ')}\n  </div>`
+        : `<div class="table-wrap">
   <table>
   <thead><tr><th>文档</th><th class="col-tertiary">所属库</th><th class="col-secondary">维护者</th><th class="col-tertiary">更新时间</th></tr></thead>
   <tbody>
@@ -409,8 +467,10 @@ export function indexPage(
   <div class="section-head">
     <h2>跨库最近文档</h2>
     <p class="page-meta">按服务端审计时间排序的成功发布事件（触及文档路径，最近 ${escapeHtml(String(docs.length))} 条；路径与维护者从该次提交的 Git 记录派生）。维护者=Git 提交者元数据，非认证身份——操作主体以服务端审计记录为准。</p>
+    ${viewToggleHtml(view)}
   </div>
   ${docBody}
+  <p class="page-meta visibility-note">呈现已发布知识；草稿仅创建者可见。搜索与列表遵循文库成员权限。</p>
   </section>`;
 
   const entries = recent ?? [];
@@ -430,7 +490,8 @@ export function indexPage(
   <div class="page-head">
     <h1>工作台</h1>
     <p class="page-meta">跨库知识工作台 · 数据按你的文库成员关系实时呈现</p>
-    <!-- 索引状态位：S15 W05 接线（消费 search_index_state，如实呈现新鲜度）——本任务占位不实现 -->
+    <!-- 索引状态位：S15-T2 已接线（search_index_state 实时面，三态如实零示意值——成员过滤在查询面锁定） -->
+    ${indexStatusHtml(workbench.indexStatus)}
   </div>
   ${statGrid}
   ${vaultSection}
