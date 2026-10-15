@@ -6,11 +6,12 @@
  * innerHTML，防 XSS）；一次性明文（邀请/重置令牌、凭据 token）仅在创建响应后
  * 展示一次，刷新即失（identity §3.1/§7.2）。
  *
- * UI-RESTYLE：layout() 升级为 DESIGN.md 视觉契约壳（top-nav 64px 米色栏 +
- * spike-mark 字标 + 深色页脚；样式唯一来源 /assets/styles.css——见 web/assets.ts
- * 与 assets/styles.css 头注）。插值通道不变：文本仅 escapeHtml；结构与类名由
- * 本模板生成。每页恰好一个内联 <script> 块（既有测试断言）；S12-T3 起改造页
- * 在内联块前另含恰一个共享脚本 <script src="/assets/app.js"> 引用（见下）。
+ * UI-RESTYLE：layout() 为 DESIGN.md 视觉契约壳（S16-T1 起 v2：56px 顶栏＋品牌
+ * 渐变方片 brand-mark＋浅色页脚；样式唯一来源 /assets/styles.css——见
+ * web/assets.ts 与 assets/styles.css 头注）。插值通道不变：文本仅 escapeHtml；
+ * 结构与类名由本模板生成。每页恰好一个内联 <script> 块（既有测试断言）；
+ * S12-T3 起改造页在内联块前另含恰一个共享脚本 <script src="/assets/app.js">
+ * 引用（见下）。
  *
  * S11-T2：indexPage 追加「最近变更」区块（服务端渲染、无新增脚本——区块纯
  * 呈现）；条目行渲染 activityEntryRow 为首页与库内 activity 页共用（同形态），
@@ -71,7 +72,7 @@ export interface PageNav {
   readonly active?: 'home' | 'vaults' | 'drafts' | 'search' | 'cite' | 'credentials' | 'admin';
 }
 
-/** 品牌标记：4-spoke 径向星芒（DESIGN.md「spike-mark 风格标记」；inline SVG，随色继承） */
+/** 品牌标记：4-spoke 径向星芒（Notegit 身份；inline SVG，随色继承——容器渐变方片见 styles.css .brand-mark） */
 const SPIKE_MARK =
   '<svg class="spike-mark" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><g stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5.6 5.6 18.4 18.4"/><path d="M18.4 5.6 5.6 18.4"/></g></svg>';
 
@@ -168,7 +169,7 @@ function topNav(nav?: PageNav): string {
       : '';
   return `<header class="top-nav">
   <div class="top-nav-inner">
-    <a class="brand" href="/">${SPIKE_MARK}Notegit</a>${menu}
+    <a class="brand" href="/"><span class="brand-mark">${SPIKE_MARK}</span>Notegit</a>${menu}
     <div class="nav-side">${account}${cta}
     </div>
   </div>
@@ -177,7 +178,7 @@ function topNav(nav?: PageNav): string {
 
 const SITE_FOOTER = `<footer class="site-footer">
   <div class="site-footer-inner">
-    <span class="brand">${SPIKE_MARK}Notegit</span>
+    <span class="brand"><span class="brand-mark">${SPIKE_MARK}</span>Notegit</span>
     <nav class="site-footer-links" aria-label="页脚">
       <a href="/search">查找</a>
       <a href="/cite">引用解析</a>
@@ -193,7 +194,7 @@ export function layout(title: string, body: string, script = '', nav?: PageNav, 
   // S12-T3：共享脚本页（sharedScript=true）在内联块前置 <script src> 引用——
   // 经典 script 按文档序执行，保证内联块的 ngt 别名取用时 window.ngt 已就位
   const sharedRef = sharedScript ? '<script src="/assets/app.js"></script>\n' : '';
-  // S14-T2 三段壳：顶栏 ＋ app-shell（左侧分区导航 ＋ 内容区）＋ 深色页脚。
+  // S14-T2 三段壳：顶栏 ＋ app-shell（左侧分区导航 ＋ 内容区）＋ 页脚。
   // 侧栏仅登录态壳渲染（nav.user 存在——匿名/无导航壳如登录页、403/404 兜底页
   // 保持无侧栏形态，D3）；侧栏零 JS（D4：当前区服务端落 aria-current）。
   const side = nav?.user !== undefined ? `${sideNav(nav)}\n` : '';
@@ -322,20 +323,27 @@ export interface WorkbenchHomeData {
 /** 角色徽章文案（与 browse/pages.ts 同映射；本文件不 import browse——防环） */
 const WORKBENCH_ROLE_LABELS: Readonly<Record<string, string>> = { admin: '管理员', editor: '编辑者', reader: '读者' };
 
-/** 概览卡（画布＋发丝描边形态；值为查询面原样，绝对时间 title 可选） */
+/**
+ * 图标片四色变奏（S16-T1 DESIGN v2 §5：tint/sand/lilac/teal——§1 装饰色仅限
+ * 图标底）；按卡片序号循环取色，字形用原型同款文字字形（▦ 文库 / ▤ 文档）。
+ */
+const CHIP_VARIANTS: readonly string[] = ['v-tint', 'v-sand', 'v-lilac', 'v-teal'];
+
+/** 概览卡（统计卡：值为查询面原样，绝对时间 title 可选；图标片由 CSS ::before 承载） */
 function statCardHtml(value: string, label: string, title?: string): string {
   const t = title === undefined ? '' : ` title="${escapeHtml(title)}"`;
   return `<div class="stat-card"><span class="stat-value"${t}>${escapeHtml(value)}</span><span class="stat-label">${escapeHtml(label)}</span></div>`;
 }
 
 /** 我的文库卡（最后更新=相对时间＋绝对 title；无提交库如实「暂无发布」，D30 时钟源=审计 occurred_at） */
-function workbenchVaultCardHtml(v: VaultCard): string {
+function workbenchVaultCardHtml(v: VaultCard, index: number): string {
   const role = WORKBENCH_ROLE_LABELS[v.role] ?? escapeHtml(v.role);
   const meta =
     v.lastCommitAt === null
       ? `<span class="vault-card-meta">${escapeHtml(String(v.docCount))} 篇 · 暂无发布</span>`
       : `<span class="vault-card-meta" title="${escapeHtml(v.lastCommitAt)}">${escapeHtml(String(v.docCount))} 篇 · ${escapeHtml(formatRelativeTime(v.lastCommitAt))}</span>`;
   return `<a class="vault-card" href="/vaults/${encodeURIComponent(v.slug)}/browse">
+    <span class="vault-chip ${CHIP_VARIANTS[index % CHIP_VARIANTS.length]}" aria-hidden="true">▦</span>
     <span class="vault-name">${escapeHtml(v.name)}</span>
     <span class="vault-slug">${escapeHtml(v.slug)}</span>
     <span class="badge">${role}</span>
@@ -388,12 +396,13 @@ function indexStatusHtml(s: IndexStatus): string {
  * （不新引表面色）；整卡链接=viewUrl 同构；卡题=title（无 title 如实落路径，
  * 与列表行同语义）。
  */
-function workbenchDocCardHtml(d: RecentDocumentRow): string {
+function workbenchDocCardHtml(d: RecentDocumentRow, index: number): string {
   const chips =
     d.tags.length === 0
       ? ''
       : `<span class="tag-chips">${d.tags.map((t) => `<span class="badge">${escapeHtml(t)}</span>`).join('')}</span>`;
   return `<a class="vault-card" href="${activityViewHref(d.vaultSlug, d.path)}">
+    <span class="vault-chip ${CHIP_VARIANTS[index % CHIP_VARIANTS.length]}" aria-hidden="true">▤</span>
     <span class="vault-name">${escapeHtml(d.title ?? d.path)}</span>
     <span class="doc-row-path">${escapeHtml(d.path)}</span>
     <span class="badge">${escapeHtml(d.vaultName)}</span>
@@ -440,6 +449,7 @@ export function indexPage(
   </div>
   <div class="vault-grid">
   <a class="vault-card vault-card-all" href="/vaults">
+    <span class="vault-chip v-tint" aria-hidden="true">▦</span>
     <span class="vault-name">全部文库</span>
     <span class="vault-slug">${escapeHtml(String(summary.vaultCount))} 个文库 · 你有权访问</span>
   </a>${vaults.length === 0 ? '' : `\n  ${vaultCardRows}`}

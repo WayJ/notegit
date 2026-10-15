@@ -11,8 +11,10 @@ import { pushHistorySeries } from './web-history-fixtures.ts';
 /**
  * UI-RESTYLE 特征断言（验收「HTML 特征断言测试」形态）：DESIGN.md 视觉契约的
  * 结构落位——共享样式端点、top-nav/页脚壳、token 类名（login 卡 / vault 卡 /
- * 目录列表 / 文档阅读 / 表单卡 / 深色 diff 窗 / 表格包裹层 / 珊瑚主按钮）。
+ * 目录列表 / 文档阅读 / 表单卡 / 深色 diff 窗 / 表格包裹层 / 主按钮）。
  * 只断言结构与类名（呈现层）；行为与安全断言在既有 web-* 测试族，不在此重复。
+ * S16-T1（DESIGN v2 修订）：v1 字面值断言（米色/珊瑚/衬线 token 族）换 v2 值
+ * 并逐处注释「DESIGN v2 修订」；结构/类名断言零改动（S16 D3）。
  */
 
 // ── 样式基础设施：单一共享 CSS（DESIGN.md token 全值） ──────────────────────
@@ -26,17 +28,37 @@ test('GET /assets/styles.css：200 text/css，承载 DESIGN.md 设计 token', as
     const res = await app.inject({ method: 'GET', url: '/assets/styles.css' });
     assert.equal(res.statusCode, 200);
     assert.match(res.headers['content-type'] as string, /^text\/css/);
-    // 三色体系 + token 语义值（DESIGN.md Colors 节原值）
-    for (const token of ['--canvas: #faf9f5', '--primary: #cc785c', '--surface-dark: #181715',
-      '--ink: #141413', '--hairline: #e6dfd8', '--error: #c64545']) {
+    // DESIGN v2 修订（S16-T1 D3）：v2 token 全值在位（DESIGN.md §1 逐值，oklch 原样转录）
+    for (const token of [
+      '--page: oklch(0.985 0.001 286.376)', '--canvas: oklch(0.961 0.002 247.84)',
+      '--surface: oklch(1 0 0)', '--inset: oklch(0.979 0.002 247.839)',
+      '--hover: oklch(0.97 0.002 247.839)', '--line: oklch(0.946 0.003 264.542)',
+      '--line-strong: oklch(0.912 0.005 258.326)',
+      '--ink: oklch(0.247 0.006 258.361)', '--ink2: oklch(0.506 0.01 264.477)',
+      '--ink3: oklch(0.695 0.009 264.505)',
+      '--accent: oklch(0.626 0.205 254.947)', '--accent-ink: oklch(0.556 0.187 255.617)',
+      '--tint: oklch(0.96 0.019 252.878)',
+      '--green: oklch(0.603 0.155 150.883)', '--green-tint: oklch(0.958 0.017 159.118)',
+      '--orange: oklch(0.689 0.179 49.902)', '--orange-ink: oklch(0.47 0.13 49.902)',
+      '--orange-tint: oklch(0.964 0.021 67.581)', '--error: #c64545',
+    ]) {
       assert.ok(res.body.includes(token), `样式应含 token ${token}`);
     }
-    // 编辑表单提交按钮的珊瑚样式经作用域选择器（裸形态为直调断言所依）
-    assert.ok(res.body.includes('#edit-form button[type="submit"]'), '编辑提交按钮珊瑚样式作用域');
-    // 字体替代选型记录（§Note on Font Substitutes：衬线 500/-0.02em + Inter 本地栈）
-    assert.ok(res.body.includes('--font-display: "Cormorant Garamond"'));
-    assert.ok(res.body.includes('letter-spacing: -0.02em'));
+    // DESIGN v2 修订（DOD-E5-01）：v1 token 零残留（grep 断言——主 CTA→--accent、
+    // 卡片底→--surface、分隔→--line、深色代码面→#23272e，v1 名全数退役）
+    for (const gone of ['--primary', '--surface-card', '--surface-soft', '--surface-cream-strong',
+      '--surface-dark', '--hairline', '--font-display', 'Cormorant', '--accent-teal', '--accent-amber',
+      '--on-primary', '--on-dark', '--body-strong', '--muted', '--success', '--warning']) {
+      assert.ok(!res.body.includes(gone), `v1 token 应已退役：${gone}`);
+    }
+    // 编辑表单提交按钮的主按钮样式经作用域选择器（裸形态为直调断言所依）——结构断言不变
+    assert.ok(res.body.includes('#edit-form button[type="submit"]'), '编辑提交按钮主按钮样式作用域');
+    // DESIGN v2 修订：全站唯一字族 Inter（衬线 display 退役）＋ h1 −0.035em ＋
+    // 品牌渐变方片（§1 品牌标记）＋ diff/代码深色面中性化 #23272e
     assert.ok(res.body.includes('--font-body: Inter'));
+    assert.ok(res.body.includes('letter-spacing: -0.035em'));
+    assert.ok(res.body.includes('linear-gradient(145deg,#1677ff,#53b6ff)'));
+    assert.ok(res.body.includes('#23272e'));
   } finally {
     await app.close();
     db.close();
@@ -99,7 +121,8 @@ test('页面壳：doctype 首位、script 形态（唯一内联块；S12-T3 改�
         assert.ok(res.body.includes('class="side-nav"'), `${url} 登录态侧栏在位`);
         assert.ok(!res.body.includes('class="nav-menu"'), `${url} 登录态不渲染横向菜单`);
       }
-      assert.ok(res.body.includes('class="site-footer"'), `${url} 深色页脚`);
+      // DESIGN v2 修订：页脚浅色化——断言仍只锁 site-footer 类在位（结构断言零改动）
+      assert.ok(res.body.includes('class="site-footer"'), `${url} 页脚（v2 浅色）`);
     }
   } finally {
     await h.close();
@@ -111,7 +134,7 @@ test('登录页：居中卡 + 珊瑚主按钮；导航无登录态用户名', as
   try {
     const res = await h.app.inject({ method: 'GET', url: '/login' });
     assert.ok(res.body.includes('class="login-card"'), '居中登录卡');
-    assert.ok(res.body.includes('class="btn-primary">登录'), '珊瑚主按钮承担页面 CTA');
+    assert.ok(res.body.includes('class="btn-primary">登录'), '主按钮（v2 accent 胶囊）承担页面 CTA');
     assert.ok(!res.body.includes('nav-user'), '未登录无登录态');
   } finally {
     await h.close();
@@ -172,7 +195,7 @@ test('知识库列表：vault-card 卡片网格 + 角色徽章', async () => {
     const res = await h.app.inject({ method: 'GET', url: '/vaults', headers: h.session(alice) });
     assert.ok(res.body.includes('class="vault-grid"'), '卡片网格');
     assert.ok(res.body.includes('class="vault-card"'), '库卡片');
-    assert.ok(res.body.includes('class="vault-name"'), '库名（衬线标题）');
+    assert.ok(res.body.includes('class="vault-name"'), '库名（v2 无衬线 600 卡片题）');
     assert.ok(res.body.includes('class="badge">编辑者'), '角色徽章 pill');
   } finally {
     await h.close();
@@ -203,7 +226,7 @@ test('文档阅读：meta 徽章行 + article#doc 阅读排版容器', async () 
     });
     assert.ok(res.body.includes('class="meta-badges"'), '元信息徽章行');
     assert.ok(/大小：\d+ 字节/.test(res.body), '大小元信息（文本形态保留）');
-    assert.ok(res.body.includes('<article id="doc">'), '阅读排版容器（衬线标题/正文 16px 由 CSS 承担）');
+    assert.ok(res.body.includes('<article id="doc">'), '阅读排版容器（标题/正文排版由 CSS 承担）');
   } finally {
     await h.close();
   }
@@ -219,7 +242,7 @@ test('编辑页：form-card 表单卡、field-err 行内错误位、珊瑚提交
     assert.ok(res.body.includes('class="form-card"'), '表单卡');
     assert.ok(res.body.includes('class="field-err" id="err-title"'), '行内错误位（E-码定位渲染落点）');
     assert.ok(res.body.includes('<button type="submit">提交'), '提交按钮（裸形态=直调断言所依）');
-    assert.ok(res.body.includes('id="save-draft">保存草稿'), '保存草稿=默认（米色描边）按钮');
+    assert.ok(res.body.includes('id="save-draft">保存草稿'), '保存草稿=默认（描边次按钮）');
   } finally {
     await h.close();
   }
@@ -283,7 +306,7 @@ test('查找页：search-form 表单行 + 珊瑚查找按钮（空态）', async
     const res = await h.app.inject({ method: 'GET', url: '/search', headers: sidCookie(h.session(1)) });
     assert.equal(res.statusCode, 200);
     assert.ok(res.body.includes('class="search-form"'), '表单行');
-    assert.ok(res.body.includes('class="btn-primary">查找'), '珊瑚查找按钮');
+    assert.ok(res.body.includes('class="btn-primary">查找'), 'accent 查找按钮');
   } finally {
     await h.close();
   }

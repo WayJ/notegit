@@ -11,7 +11,8 @@ import { browseHarness, seededVault, addMember, type BrowseHarness } from './web
  * S14-T2 应用壳特征断言（形态测试，锁 layout() 的三段壳契约）：
  *
  * - 三段壳：顶栏 `<header class="top-nav">` ＋ `<div class="app-shell">`
- *   （左侧分区导航 `<nav class="side-nav">` ＋ 内容区 `<main>`）＋ 深色页脚。
+ *   （左侧分区导航 `<nav class="side-nav">` ＋ 内容区 `<main>`）＋ 页脚
+ *   （DESIGN v2 修订：页脚浅色化——结构断言仍锁 site-footer 在位）。
  * - 侧栏五区（sprint D3/D4）：查找 /search、我的草稿 /drafts、引用解析 /cite、
  *   我的凭据 /credentials、管理 /admin（仅实例管理员）；当前区用 aria-current
  *   高亮——**零 JS**（侧栏不落任何内联脚本，D4）。
@@ -287,11 +288,16 @@ test('侧栏与两档断点样式零内联 hex、零第四表面色（只引用�
     const sideBlock = css.slice(sideStart, css.indexOf('@media (max-width: 1020px)'));
     assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(sideBlock), '侧栏样式零内联 hex');
     assert.ok(!/rgba?\(/.test(sideBlock), '侧栏样式零内联 rgb/rgba');
-    for (const token of ['var(--surface-card)', 'var(--canvas)', 'var(--hairline-soft)', 'var(--ink)', 'var(--muted)']) {
+    // DESIGN v2 修订（S16-T1 D3）：侧栏 token 族换 v2 名——canvas 底/line 右缘/
+    // ink3 分区标签与辅助文字/ink2 控件字/tint 当前项底/accent-ink 当前项字
+    for (const token of ['var(--canvas)', 'var(--line)', 'var(--ink3)', 'var(--ink2)', 'var(--tint)', 'var(--accent-ink)']) {
       assert.ok(sideBlock.includes(token), `侧栏样式引用 token ${token}`);
     }
-    // coral 只用于主 CTA——侧栏当前区高亮不得用主色底（用米色卡承载）
-    assert.ok(!sideBlock.includes('var(--primary)'), '侧栏不用 coral（DESIGN.md 稀缺使用条款）');
+    // DESIGN v2 修订：v1 token 退役——coral 主色/米色卡/发丝线不入侧栏
+    // （单 accent 纪律：当前项=tint 底＋accent-ink 字，非主色底）
+    assert.ok(!sideBlock.includes('var(--primary)'), '侧栏不用 v1 coral 主色（单 accent 纪律）');
+    assert.ok(!sideBlock.includes('var(--surface-card)'), '侧栏不用 v1 米色卡');
+    assert.ok(!sideBlock.includes('var(--hairline)'), '侧栏不用 v1 发丝线');
   } finally {
     await h.close();
   }
