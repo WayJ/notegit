@@ -9,6 +9,10 @@ research: [docs/e4-workbench/reference-analysis.md](../../e4-workbench/reference
 predecessor: [E2](2026-10-14-notegit-e2-gui.md)（S10–S12 merged，10/10 DoD）；[E3](2026-10-14-notegit-e3-site.md)（S13 merged，3/3 DoD）
 ---
 
+## 终态（2026-10-15 关闭）
+
+**E4 closed：DOD-E4-01~10 全部达标**（01–04/07=S14 @ 5103f52 前身合并、05/06/08=S15、09/10=两轮结清；验收记录两份在 acceptances/）。两个 sprint 均一次验收 pass；参照稿功能设计的九件套全部落地（样式零采信——DESIGN.md 唯一契约）。D28 终态方向（GitLab 式平台＋agent 知识底座）与 D29 身份模型（凭据委托）已入册，**agent 知识底座 epic 待立项**（三缺口：读协议/机器身份落契/容量验证）。测试计数 server 987→1032。
+
 ## 终态方向：GitLab 化的 agent 知识底座（2026-10-15 用户裁决）
 
 > 「按照最终变成一个像 GitLab 这样的项目的方向去做，我要这个项目作为未来大量 agent
@@ -98,18 +102,18 @@ E4 的使命：**把 Notegit 从「功能页集合」改造成「跨库聚合工
 - [x] **DOD-E4-04 路径级文档流** — S14（acceptance S5：7 行=4 事件触及路径逐一对应；维护者列如实标注；D30 时钟源）：跨库最近文档表行含文档/所属库/维护者/更新时间；
   路径从事件 commit 的 git diff 派生（不是事件级 audit）；维护者列如实标注来源为
   Git 提交者元数据且**不参与任何权限判定**（D25/DOD-03）。
-- [ ] **DOD-E4-05 检索筛选**：`/search` 支持库筛选与状态筛选参数，⌘K/Ctrl-K 聚焦搜索框
+- [x] **DOD-E4-05 检索筛选** — S15（acceptance S1–S3：下拉与命中同判定面、直传同形态零泄露、⌘K 渐进增强；契约 §13 行落契）：`/search` 支持库筛选与状态筛选参数，⌘K/Ctrl-K 聚焦搜索框
   （渐进增强：无 JS 时筛选表单仍可提交）；无权库在筛选器中不出现。
-- [ ] **DOD-E4-06 索引新鲜度**：工作台页头呈现索引状态，数据源 `search_index_state`；
+- [x] **DOD-E4-06 索引新鲜度** — S15（acceptance S4：三态如实零示意值；数据源 search_index_state）：工作台页头呈现索引状态，数据源 `search_index_state`；
   无索引行/失败态如实呈现，**不得出现示意值**。
 - [x] **DOD-E4-07 响应式** — S14（acceptance S7：两档断点+<768 兜底保留）：≤1020px 与 ≤680px 两档断点作用于新壳与新工作台页面；
   680px 下侧栏收成图标条、表格按列优先级隐藏，页面无横向滚动。
-- [ ] **DOD-E4-08 视图开关与可见性声明**：跨库流支持列表/网格切换；表尾（或等价固定位）
+- [x] **DOD-E4-08 视图开关与可见性声明** — S15（acceptance S5：零 JS 开关两态+声明固定位）：跨库流支持列表/网格切换；表尾（或等价固定位）
   呈现可见性语义声明（草稿仅创建者可见 · 搜索遵循成员权限）。
-- [ ] **DOD-E4-09 质量与安全回归**（S14 份额已达标：四 gates 82/82·7/7·14/14·1007/106/369 + §2.2 实景抽查全绿）：四 gates 全绿；research.md §2.2 交叉验证表
+- [x] **DOD-E4-09 质量与安全回归** — S14+S15 两轮四 gates（82/82·7/7·14/14·1007→1032/106/369）+ §2.2 实景抽查与 e2e-final-regression 全绿（S14 份额已达标：四 gates 82/82·7/7·14/14·1007/106/369 + §2.2 实景抽查全绿）：四 gates 全绿；research.md §2.2 交叉验证表
   （未认证 302 / 无权同 404 / CSRF Origin / CAS 409 / reader POST 403）与 E1
   e2e-final-regression 全部保持通过——**UI 与聚合面改动不得弱化任何安全不变量**。
-- [ ] **DOD-E4-10 DESIGN.md 一致性**（S14 份额已达标：新区块零内联 hex/coral 纪律/断点在位）：新增样式零内联 hex、全部引用 token 语义；
+- [x] **DOD-E4-10 DESIGN.md 一致性** — S14+S15 两轮视觉抽检（新区块零内联 hex、coral 纪律、语义 token）（S14 份额已达标：新区块零内联 hex/coral 纪律/断点在位）：新增样式零内联 hex、全部引用 token 语义；
   不引入第四种表面色；coral 仅用于主 CTA 与整幅强调卡（验收含视觉抽检）。
 
 ## Sprint Breakdown
@@ -119,7 +123,7 @@ E4 的使命：**把 Notegit 从「功能页集合」改造成「跨库聚合工
 | sprint | state | note |
 |---|---|---|
 | S14 | merged | 应用壳 ＋ 工作台首页 ＋ 响应式（W01/W02/W03/W06）；2026-10-15 验收 pass（S1–S7 全绿）——DOD-E4-01/02/03/04/07 达标、09/10 S14 份额达标（[acceptance](../acceptances/2026-10-15-S14-acceptance.md)）；D30 时钟源裁决；用户暂停条款履约（T1/T2 后暂停→放行） | [2026-10-15-S14-plan.md](../sprints/2026-10-15-S14-plan.md) |
-| S15 | planned | 检索筛选 ＋ 索引指示 ＋ 视图开关与声明（W04/W05/W07） |
+| S15 | merged | 检索筛选 ＋ 索引指示 ＋ 视图开关与声明（W04/W05/W07）；2026-10-15 验收 pass（S1–S6 全绿）——DOD-E4-05/06/08 达标、09/10 epic 级结清，**E4 关闭 10/10 DoD**（[acceptance](../acceptances/2026-10-15-S15-acceptance.md)）；契约 D 批三笔（/search 行 C3 并入、GET / 行补记、布局壳段更新） | [2026-10-15-S15-plan.md](../sprints/2026-10-15-S15-plan.md) |
 
 ```mermaid
 flowchart LR
@@ -201,5 +205,6 @@ ADR 编号接续 E3（D1–D23）。
 | date | change | evidence |
 |---|---|---|
 | 2026-10-15 | E4 立项：参照稿功能提取（reference-analysis.md）＋ 与 v0.2.0 逐项差距核对；S14/S15 拆分、DoD-E4-01~10、D24–D27；用户三项范围裁决入册 | 本文件；reference-analysis.md；用户裁决 2026-10-15 |
+| 2026-10-15 | S15 merged；**E4 关闭——10/10 DoD**；契约 D 批三笔（/search、GET /、布局壳段） | acceptance/2026-10-15-S15 |
 | 2026-10-15 | S14 merged（DOD-E4-01~04/07 + 09/10 份额）；D30 时钟源；暂停条款履约与放行 | acceptance/2026-10-15-S14 |
 | 2026-10-15 | **终态方向入册（D28）**：GitLab 式平台 ＋ agent 知识底座；既有内核自评契合度表 + 三缺口（读协议/机器身份/容量）另立 epic；E4 边界收窄为「壳 ＋ 人的工作台面」 | 用户裁决 2026-10-15；本文件 §终态方向 |
