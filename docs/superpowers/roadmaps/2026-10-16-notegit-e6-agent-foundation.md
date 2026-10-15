@@ -31,7 +31,7 @@ E4 roadmap §终态方向已论证：Notegit 内核（Git 唯一真源 ＋ commi
 - [x] **DOD-E6-01 读协议** — S18（四端点稳定 JSON；Bearer 全链+锚定差异实证；scope 收窄实景生效）：四端点（vaults 清单 / tree / docs / index-status）稳定 JSON；
   实测 agent 场景——匿名 401、bob 无权库 404 与不存在同形态、commit 锚定读取
   （ref=OID 与 version 页同一树）、截断与分页语义如实标注。
-- [ ] **DOD-E6-02 凭据委托**：委托凭据签发（作用域=员工权限子集）/ 撤销 / 越权拒绝
+- [x] **DOD-E6-02 凭据委托** — S19 收口：五语义全绿（四项 S1/S3 已实现＋读侧可见 S19-T1；验证记录 .agents/notes/2026-10-16-D29-verification.md）：委托凭据签发（作用域=员工权限子集）/ 撤销 / 越权拒绝
   （作用域外 404 同形态）；审计行携带凭据来源标注；员工撤权 → 委托即失效（不缓存）。
 - [ ] **DOD-E6-03 容量验证**：三场景（并发读 / 突发写 / 跨库扇出）实测数字与底线结论
   入档；发现的瓶颈如实记录（不粉饰、不过度优化）。
@@ -45,7 +45,7 @@ E4 roadmap §终态方向已论证：Notegit 内核（Git 唯一真源 ＋ commi
 | sprint | state | note |
 |---|---|---|
 | S18 | merged | 读协议 v1；2026-10-16 验收 pass（agent Bearer 全链实景跑通、锚定差异实证、四 gates 1070/106/369）——DOD-E6-01/04/05 份额达标；Q-E6-1 定案（全量+截断）；契约 D 批四笔（[acceptance](../acceptances/2026-10-16-S18-acceptance.md)） | [2026-10-16-S18-plan.md](../sprints/2026-10-16-S18-plan.md) |
-| S19 | planned | 凭据委托（R02）：作用域列+签发撤销面+审计标注+越权测试 |
+| S19 | planned→执行中 | **范围重定**：凭据委托经核实为 S1/S3 已实现（D29 验证记录 .agents/notes/2026-10-16-D29-verification.md——四语义实景通过）；S19-T1 补读侧+D29 第五项闭环；2026-10-16 验收 pass（credential:5/session:4 实景区分）——**DOD-E6-02 收口**（[acceptance](../acceptances/2026-10-16-S19-acceptance.md)） | [2026-10-16-S19-plan.md](../sprints/2026-10-16-S19-plan.md) |
 | S20 | planned | 容量验证（R03）：三场景实测+结论入档+瓶颈清单 |
 
 ```mermaid
@@ -86,3 +86,4 @@ flowchart LR
 |---|---|---|
 | 2026-10-16 | E6 立项：R01–R04、DOD-E6-01~05、S18–S20、D35–D38 | 用户终态方向（2026-10-15）+「继续推进后续工作」指令（2026-10-16）；本文件 |
 | 2026-10-16 | S18 merged（DOD-E6-01/04/05 份额）；Q-E6-1 closed；契约 D 批四笔 | acceptance/2026-10-16-S18 |
+| 2026-10-16 | S19 merged（范围重定：D29 已实现验证收口）；**DOD-E6-02 收口** | acceptance/2026-10-16-S19 |

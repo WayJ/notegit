@@ -25,6 +25,7 @@ import { registerApiReadVaultRoutes } from './api-read/vaults.ts';
 import { SearchIndexer } from './search/indexer.ts';
 import { registerTreeReadRoutes } from './api-read/tree.ts';
 import { registerDocsReadRoutes } from './api-read/docs.ts';
+import { registerAuditQueryRoutes } from './audit/routes.ts';
 import { metricsCollector } from './metrics/collector.ts';
 import { registerMetricsRoutes } from './metrics/routes.ts';
 import { registerWebRoutes } from './web/routes.ts';
@@ -231,6 +232,10 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       authenticateRequest: wired.authenticateRequest,
       dataDir: deps.dataDir,
     });
+    // S19-T1 审计查询两端点（api.md §9 契约在册）：GET /api/v1/vaults/{slug}/audit
+    // （库管理员或实例管理员）+ GET /api/v1/admin/audit（实例管理员，vault 过滤）。
+    // 只读零写：GET 免 CSRF、维护模式读放行（app 级闸门）、不记审计行。
+    registerAuditQueryRoutes(app, { db: wired.db, authenticateRequest: wired.authenticateRequest });
     // S2-T8 最小页面 + S4 浏览族（/login、/、/admin、/credentials、/vaults…——GET
     // 外壳/数据页；页面无写操作，安全判定全部在 API 侧复用 authorize/管理员门槛）。
     // S4-T1 骨架裁决：web 域此后只在 server/src/web/ 内 append 模块，本调用是
