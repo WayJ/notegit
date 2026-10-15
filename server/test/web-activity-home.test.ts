@@ -119,7 +119,7 @@ function activitySeq(body: string): ActivityItem[] {
 
 // ── 跨库面：成员关系过滤（DOD-E2-06「bob 不见 product-notes 条目」） ────────
 
-test('首页最近变更：两库成员见两库条目，按时间新→旧；既有身份卡与入口卡布局保留', async () => {
+test('首页最近变更：两库成员见两库条目，按时间新→旧；区块在工作台首页保留', async () => {
   const h = await harness();
   try {
     const alice = addEmployee(h.db, { username: 'alice', display_name: '爱丽丝' });
@@ -154,9 +154,9 @@ test('首页最近变更：两库成员见两库条目，按时间新→旧；�
       'commit 短码链接该库历史页（既有页）',
     );
     assert.ok(res.body.includes('href="/vaults/product-notes"'), '库 slug 链接（browse 入口）');
-    // 既有布局保留（身份卡 + 入口卡网格；登出脚本唯一）
-    assert.ok(res.body.includes('class="card-grid"'), '入口卡片网格保留');
-    assert.ok(res.body.includes('class="feature-card"'), 'feature-card 形态保留');
+    // S14-T3 起首页升级为工作台：原 feature-card 入口卡退役（侧栏/聚合卡承接，
+    // 见 web-workbench-home.test.ts）；本区块（最近变更）保留为次级区块
+    assert.ok(res.body.includes('aria-label="最近变更"'), '最近变更区块保留');
     assert.ok(res.body.includes('id="logout"'), '登出控件保留');
     assert.equal((res.body.match(/<script/g) ?? []).length, 1, '唯一 script（区块不新增脚本）');
   } finally {

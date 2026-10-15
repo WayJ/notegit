@@ -782,6 +782,108 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(198
 .form-row label { flex: 1 1 200px; margin-bottom: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: var(--sp-sm); align-items: center; margin-bottom: var(--sp-md); }
 
+/* ── 应用壳（S14-T2：顶栏 ＋ 左侧分区导航 ＋ 内容区三段） ────────────────────
+   侧栏为新组件（DESIGN.md 未单列，按 Iteration Guide 推导）：表面用画布同色
+   ＋ 发丝右描边（category-tab 形态推导），当前区用米色卡 surface-card 承载
+   ——不引入第四种表面色，coral 只留在主 CTA。 */
+.app-shell {
+  display: flex;
+  align-items: stretch;
+  flex: 1 0 auto;
+  min-height: 0;
+}
+.app-shell > main {
+  flex: 1 1 auto;
+  min-width: 0;          /* 表格/代码窗不撑破内容区（配合 .table-wrap 横滚） */
+}
+.side-nav {
+  flex: none;
+  width: 220px;
+  padding: var(--sp-lg) var(--sp-md);
+  border-right: 1px solid var(--hairline-soft);
+  background: var(--canvas);
+}
+.side-nav-title {
+  font-size: var(--caption-sm);
+  color: var(--muted-soft);
+  letter-spacing: 1.5px;      /* caption-uppercase 语义 */
+  margin: 0 0 var(--sp-sm);
+}
+.side-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+}
+.side-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  padding: var(--sp-xs) var(--sp-sm);
+  border-radius: var(--r-md);
+  font-size: var(--body-sm);
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.side-nav-item:active { color: var(--muted); text-decoration: none; }
+.side-nav-item[aria-current="page"] {
+  background: var(--surface-card);   /* category-tab-active：米色卡承载当前区 */
+  color: var(--ink);
+}
+.side-nav-mark { display: inline-flex; flex: none; color: var(--muted); }
+.side-nav-item[aria-current="page"] .side-nav-mark { color: var(--ink); }
+
+/* 表格列优先级（响应式按列隐藏用；默认全显，两档断点逐级收起） */
+.col-secondary, .col-tertiary { display: table-cell; }
+
+/* ── 工作台首页（S14-T3：概览三卡 / 我的文库网格 / 跨库最近文档表） ──────────
+   概览卡 = 画布同色 ＋ 发丝描边（DESIGN.md model-comparison-card 形态推导）；
+   库卡沿用 .vault-card 米色卡；不引入第四种表面色，coral 不入卡片网格。 */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-lg);
+  margin: var(--sp-lg) 0;
+}
+.stat-card {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: var(--sp-lg) var(--sp-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+}
+.stat-value {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;          /* display 负字距（DESIGN 原则） */
+  font-size: var(--display-sm);
+  line-height: 1.2;
+  color: var(--ink);
+}
+.stat-label { font-size: var(--body-sm); color: var(--muted); }
+.section-head h2 { margin-bottom: var(--sp-xxs); }
+.section-head .page-meta { margin-bottom: var(--sp-md); }
+.vault-card .vault-card-meta { font-size: var(--caption); color: var(--muted); }
+.tag-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xxs);
+  margin-left: var(--sp-xs);
+  vertical-align: middle;
+}
+.doc-row-path {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--caption);
+  color: var(--muted-soft);
+  overflow-wrap: anywhere;
+}
+
 /* ── 响应式（<768px 单列；导航菜单折叠——汉堡按钮按任务约定后置） ──────────── */
 @media (max-width: 767px) {
   h1 { font-size: 1.75rem; }
@@ -797,4 +899,25 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(198
   .site-footer-inner { flex-direction: column; align-items: flex-start; gap: var(--sp-sm); }
   .site-footer .foot-fine { margin-left: 0; }
   .search-form label { flex-basis: 100%; }
+}
+
+/* ── S14-T2 断点一档：≤1020px 收窄侧栏 ＋ 隐藏次要表格列 ────────────────────
+   两档断点只作用于新壳与共享表格类（D6：不改既有页面模板的 DOM 结构）。 */
+@media (max-width: 1020px) {
+  .side-nav { width: 176px; padding: var(--sp-md) var(--sp-sm); }
+  .side-nav-title { display: none; }
+  .col-secondary { display: none; }      /* 次要列收起，主列与首列保留 */
+}
+
+/* ── S14-T2 断点二档：≤680px 侧栏图标条 ＋ 表格按列优先级隐藏 ＋ 页面无横向滚动 ── */
+@media (max-width: 680px) {
+  .side-nav { width: 56px; padding: var(--sp-md) var(--sp-xs); }
+  .side-nav-item { justify-content: center; padding: var(--sp-sm) 0; }
+  .side-nav-text { display: none; }      /* 侧栏收成图标条（图标随色继承） */
+  .col-secondary, .col-tertiary { display: none; }   /* 按列优先级：仅存首列 */
+  .app-shell { overflow-x: hidden; }     /* 页面无横向滚动（表格卡内横滚保留） */
+  .page { padding-left: var(--sp-sm); padding-right: var(--sp-sm); }
+  .stat-grid { gap: var(--sp-sm); }      /* 概览卡压三列（reference-analysis §2 区块 9） */
+  .stat-card { padding: var(--sp-md); }
+  .stat-value { font-size: var(--title-lg); }
 }
