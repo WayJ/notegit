@@ -70,6 +70,7 @@
 | E-AUTHZ-001 | 403 | 已认证、已知资源存在，但角色/身份不足（reader 写库、非库管理员改设置、非实例管理员用管理端点） | 架构 §4.2 |
 | E-MAINT-001 | 503 | 维护模式拒绝写入（`maintenance: true`；backup-recovery §3 待定项在此定稿） | backup-recovery §3 |
 | E-RES-008 | 409 | 索引重建已在进行（触发被拒，进度可查；details.rebuild 携带进度面） | S5-T5；backup §7 步骤 9；D13 |
+| E-RES-009 | 415 | 类型不支持：读协议 v1 仅提供 .md 知识文档（docs 端点） | E6 S18-T2；D39 |
 | E-SRCH-001 | 503 | 搜索索引未接线（无 dataDir 形态），索引域管理端点不可用 | S5-T5；D13 |
 | E-RES-001 | 404 | 资源不存在或无权访问（库/文档/凭据/成员等，统一 404 不泄露存在性） | identity §5.2/D-IC-06 |
 | E-RES-002 | 409 | 资源标识已占用（username、vault slug） | 架构 §7.2；identity §2 |
@@ -220,7 +221,7 @@
 - 错误：409 E-RES-002（slug 占用）；400/422 E-RES-004/007（slug 非法）。
 
 #### GET /api/v1/vaults
-- 成功：200：**仅**当前员工有成员关系的库（`{slug, name, role, default_branch, main_admin_only}`，未授权库不进列表，架构 §4.2）。
+- 成功：200：**仅**当前员工有成员关系的库（`{slug, name, role, default_branch, main_admin_only, doc_count}`，未授权库不进列表，架构 §4.2）。`doc_count` = `search_index` 行数（E6 D36/S18-T1 增量——与工作台/检索同派生面，数字不泄露无权库）；排序 slug 升序；token 载体按 scope 交集（identity §3.4）。
 - 错误：401（通用，§1）；列表本身不产生 404（无权库不出现而非报错）。
 
 #### GET /api/v1/vaults/{slug}
@@ -260,6 +261,20 @@
 
 #### GET /api/v1/vaults/{slug}/commits?ref=&path=&limit=&cursor=
 - 成功：200 `{branch, commits: [{oid, author: {name, email, date}, message, parents}], next_cursor}`。错误：404 E-RES-001。
+
+
+#### GET /api/v1/vaults/{slug}/index-status（读；E6 S18-T1/D36）
+- 用途：逐库索引状态（变更感知面，agent 轮询判据——docs/e6/agent-guide.md「变更感知」数据源）。
+- 成功：200 `{slug, head_commit, indexed_at, lag_ms, consecutive_failures, last_error}`——`search_index_state` 该库行如实呈现；**无状态行=首次未索引：除 slug 外如实全 null**（不用 0 伪造）；`head_commit:null`=分支尚无提交；`lag_ms:null`=重建型/失败无完成延迟。
+- 错误：401（§1）；**404 E-RES-001：无成员关系（含撤权）与不存在同响应同体零区分**（D-IC-06 API 面——实例管理员非成员同 404）。GET 免 CSRF、不记审计、维护放行；无 ETag（状态行非内容寻址）。
+
+#### GET /api/v1/vaults/{slug}/tree[?ref=<commit OID>]（读；E6 读协议 v1，S18-T2/D4/D38）
+- 库默认分支或指定提交的**全树扁平清单**（agent 自行构树）。成功 200 `{vault, ref, commit_oid, entries:[{path,type,size}], truncated}`——`ref`=请求回显（缺省回显默认分支名），`commit_oid`=解析后全 SHA；`entries`=`ls-tree -r -t` 全树递归扁平数组（深度优先字节序；blob 的 size=字节数、tree 为 null；子模块不属 v1 契约不出现）；上限 1000 条超出 `truncated:true` 如实标注（Q-E6-1 v1 形态）。`ref` 只收 commit OID（缩写/全 SHA）；缺省=默认分支 HEAD（空库 unborn → 404 如实）；分支名等 rev 形态 **400 E-RES-004**（锚不漂移——引用锚定优先）；未知/非提交 → 404 反存在性。缓存：`ETag:"<commit_oid>"` + no-cache，命中 304。
+- 错误：401；400 E-RES-004；404 E-RES-001；503 无码信封（存储故障形态）。
+
+#### GET /api/v1/vaults/{slug}/docs/{path}[?ref=<commit OID>]（读；E6 读协议 v1，S18-T2/D3/D38）
+- 单文档读取（原始 Markdown＋元数据双给全）。成功 200 `{vault, path, ref, commit_oid, frontmatter, body, body_raw, size_bytes, fetched_at}`——`body_raw`=该提交文件原文；`body`=frontmatter 剥离后正文（与 view/version/检索派生同一切面）；`fetched_at`=响应时刻（**不可信为内容时间——内容时间锚=commit_oid**）。`frontmatter` 三态：闭合块保守解析成功→对象（标量与字符串列表）；无块/未闭合/畸形→**null 且 body=原文全量**（读取面不做发布校验）。仅 `.md`：其余 **415 E-RES-009**；目录/不存在路径 → 404。历史 blob 走 version 页同一读取面（同一棵树）。缓存同 tree 行。
+- 错误：401；400 E-RES-004；404 E-RES-001；415 E-RES-009；503 无码信封。
 
 ## 7. 草稿（写：权威管理数据）
 
