@@ -145,7 +145,9 @@ interface StatCell {
 
 function statCards(body: string): StatCell[] {
   const out: StatCell[] = [];
-  const re = /<div class="stat-card"><span class="stat-value"( title="([^"]*)")?>([^<]*)<\/span><span class="stat-label">([^<]*)<\/span><\/div>/g;
+  // S17-T1 修订（D3(S16) 纪律——逐处注释）：统计卡图标片 DOM 直加（差距 #5，
+  // 原 CSS ::before 退役）——提取器在 stat-value 前容纳 stat-icon 图标片节点
+  const re = /<div class="stat-card"><span class="stat-icon [a-z-]+" aria-hidden="true">[^<]*<\/span><span class="stat-value"( title="([^"]*)")?>([^<]*)<\/span><span class="stat-label">([^<]*)<\/span><\/div>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) out.push({ title: m[2] ?? null, value: m[3] as string, label: m[4] as string });
   return out;
@@ -310,7 +312,9 @@ test('维护者列如实标注（DOD-03/D25）：单元格 title + 区块脚注�
     const marks = res.body.match(/Git 提交者元数据，非认证身份/g) ?? [];
     assert.ok(marks.length >= 2, `title 与脚注双通道在位（实得 ${marks.length} 处）`);
     assert.ok(res.body.includes('title="Git 提交者元数据，非认证身份'), '维护者单元格带说明性 title');
-    assert.ok(/<td class="col-secondary"[^>]*>元数据可填者<\/td>/.test(res.body), '维护者=git 提交者名（如实呈现）');
+    // S17-T1 修订（D3(S16) 纪律——逐处注释）：维护者单元格新增头像圆章（差距 #7
+    // ——git 作者名首字，元数据展示），断言从「td 内容=作者名」放宽为「含作者名」
+    assert.ok(/<td class="col-secondary"[^>]*><span class="doc-author-avatar"[^>]*>[^<]*<\/span><span class="doc-author-name">元数据可填者<\/span>/.test(res.body), '维护者=git 提交者名（如实呈现，头像圆章同格）');
     assert.ok(res.body.includes('title="2026-10-15T02:00:00.000Z"'), '更新时间单元格 title=服务端审计绝对时间');
   } finally {
     await h.b.close();
@@ -326,7 +330,9 @@ test('reader 视角（bob）：首页零写入口（无 form/upload/edit/admin�
     const res = await h.b.app.inject({ method: 'GET', url: '/', headers: h.b.session(h.bob) });
     assert.equal(res.statusCode, 200);
     const body = res.body;
-    assert.ok(!body.includes('<form'), '页面无表单（零写入口）');
+    // S17-T1 修订（D3(S16) 纪律——逐处注释）：首页新增 GET 搜索工具条（差距 #4，
+    // 检索表单非写入口），「页面无表单」收窄为「无 POST 表单」——零写入口语义不变
+    assert.ok(!body.includes('method="post"'), '页面无 POST 表单（零写入口；GET 检索工具条除外）');
     assert.ok(!body.includes('/upload'), '无上传入口');
     assert.ok(!body.includes('/edit'), '无编辑入口');
     assert.ok(!body.includes('/admin'), '普通成员任何位置无管理入口');
