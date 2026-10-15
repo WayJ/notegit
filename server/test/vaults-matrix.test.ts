@@ -125,7 +125,8 @@ test('S1 可见性矩阵：列表只含有成员关系的库；两库成员集�
   try {
     const aliceList = (await (await w.h.app.inject({ method: 'GET', url: '/api/v1/vaults', headers: sidCookie(w.aliceSid) })).json() as { vaults: Array<{ slug: string; role: string }> }).vaults;
     const bobList = (await (await w.h.app.inject({ method: 'GET', url: '/api/v1/vaults', headers: sidCookie(w.bobSid) })).json() as { vaults: Array<{ slug: string; role: string }> }).vaults;
-    assert.deepEqual(aliceList, [{ slug: 'alpha', name: 'Alpha', role: 'admin', default_branch: 'main', main_admin_only: false }]);
+    // S18-T1：清单项增 doc_count（search_index 行数；无索引库如实 0——形状快照同步更新）
+    assert.deepEqual(aliceList, [{ slug: 'alpha', name: 'Alpha', role: 'admin', default_branch: 'main', main_admin_only: false, doc_count: 0 }]);
     assert.deepEqual(bobList.map((v) => [v.slug, v.role]), [['alpha', 'reader'], ['beta', 'admin']]);
 
     // API 入口（Bearer）与 Web 入口（会话）判定一致

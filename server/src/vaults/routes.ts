@@ -109,13 +109,8 @@ export const vaultsPlugin: FastifyPluginAsync<VaultsPluginOptions> = async (
     return reply.code(201).send(vault);
   });
 
-  // 列表：仅当前员工有成员关系的库（未授权库不出现）；token scope 再取交集
-  instance.get('/api/v1/vaults', async (request, reply) => {
-    const auth = await requireAuth(request, reply);
-    if (!auth) return reply;
-    const scope = scopeOf(auth);
-    return { vaults: svc.listVaults(auth.subject.employee_id, scope?.vaultIds) };
-  });
+  // 列表端点自 S18-T1 起迁往 api-read/vaults.ts（D1 文件所有权：机器面读协议
+  // 路由注册各自模块内；本文件的建库/单库/成员/审计端点不变）。
 
   // 单库：非成员与不存在同 404（D-IC-06）
   instance.get('/api/v1/vaults/:slug', async (request, reply) => {

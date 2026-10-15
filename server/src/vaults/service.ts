@@ -39,6 +39,8 @@ export interface VaultListItem {
   role: 'reader' | 'editor' | 'admin';
   default_branch: string;
   main_admin_only: boolean;
+  /** 已发布文档数（search_index 行数——S18-T1 增量；与工作台 vaultCards 同一口径） */
+  doc_count: number;
 }
 
 export interface MemberPublic {
@@ -166,16 +168,19 @@ export class VaultService {
     }
   }
 
-  /** 员工可见列表：仅成员关系的库（架构 §4.2）；token scope 清单非空时再取交集（identity §3.4） */
+  /** 员工可见列表：仅成员关系的库（架构 §4.2）；token scope 清单非空时再取交集（identity §3.4）。
+   *  S18-T1：增 doc_count（search_index 行数标量子查询——与工作台 vaultCards 同源，
+   *  数字差值不泄露无权库）。 */
   listVaults(employeeId: number, scopeVaultIds?: readonly number[]): VaultListItem[] {
     const rows = this.db
       .prepare(
-        `SELECT v.id, v.slug, v.name, v.default_branch, v.main_admin_only, m.role
+        `SELECT v.id, v.slug, v.name, v.default_branch, v.main_admin_only, m.role,
+                (SELECT COUNT(*) FROM search_index i WHERE i.vault_id = v.id) AS doc_count
          FROM vaults v JOIN vault_members m ON m.vault_id = v.id
          WHERE m.employee_id = ?
          ORDER BY v.slug`,
       )
-      .all(employeeId) as Array<{ id: number; slug: string; name: string; default_branch: string; main_admin_only: number; role: VaultRole }>;
+      .all(employeeId) as Array<{ id: number; slug: string; name: string; default_branch: string; main_admin_only: number; role: VaultRole; doc_count: number }>;
     return rows
       .filter((r) => scopeVaultIds === undefined || scopeVaultIds.length === 0 || scopeVaultIds.includes(r.id))
       .map((r) => ({
@@ -184,6 +189,7 @@ export class VaultService {
         role: r.role,
         default_branch: r.default_branch,
         main_admin_only: r.main_admin_only === 1,
+        doc_count: r.doc_count,
       }));
   }
 
@@ -192,6 +198,21 @@ export class VaultService {
     return this.db
       .prepare(`SELECT id, slug, name, default_branch, main_admin_only, created_by, created_at FROM vaults WHERE slug = ?`)
       .get(slug) as (VaultRow & { created_by: number; created_at: string }) | undefined;
+  }
+
+  /** 逐库索引状态行（S18-T1 机器面读协议；只读消费 search_index_state——写面归索引器）。
+   *  无行 = undefined（首次未索引语义，呈现层如实全 null，不伪造）。 */
+  getIndexState(
+    vaultId: number,
+  ): { head_commit: string | null; indexed_at: string; lag_ms: number | null; consecutive_failures: number; last_error: string | null } | undefined {
+    return this.db
+      .prepare(
+        `SELECT head_commit, indexed_at, lag_ms, consecutive_failures, last_error
+         FROM search_index_state WHERE vault_id = ?`,
+      )
+      .get(vaultId) as
+      | { head_commit: string | null; indexed_at: string; lag_ms: number | null; consecutive_failures: number; last_error: string | null }
+      | undefined;
   }
 
   /** 改库（api.md §5 PATCH：name/slug/main_admin_only 任一；slug 可改名、内部 id 不变） */
