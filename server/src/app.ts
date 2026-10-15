@@ -21,6 +21,7 @@ import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
 import { registerMaintenanceRoutes } from './maintenance/routes.ts';
 import { registerRulesVersionRoutes } from './rulesversion/routes.ts';
 import { registerSearchRoutes } from './search/routes.ts';
+import { registerApiReadVaultRoutes } from './api-read/vaults.ts';
 import { SearchIndexer } from './search/indexer.ts';
 import { metricsCollector } from './metrics/collector.ts';
 import { registerMetricsRoutes } from './metrics/routes.ts';
@@ -179,6 +180,10 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       authenticateRequest: wired.authenticateRequest,
       membershipSource: createDbMembershipSource(wired.db),
     });
+    // S18-T1 机器面读协议（E6 D36/D37；api.md §3 建议稿 docs/s18/api-amendments.md）：
+    // GET /api/v1/vaults（清单 +doc_count——路由自 vaultsPlugin 迁入，D1 文件所有权）
+    // + GET /api/v1/vaults/{slug}/index-status（search_index_state 逐库行）。只读。
+    registerApiReadVaultRoutes(app, { db: wired.db, authenticateRequest: wired.authenticateRequest });
     // S4-T6 草稿域路由（api.md §7）：按作者私有 CRUD + 发布后状态流转面；
     // 授权经同一 authorize/membershipSource（三入口同源），维护/CSRF 由 app 级
     // 闸门自动覆盖（gate.ts 注记明列「草稿」写端点）。

@@ -227,7 +227,8 @@ test('列表：仅当前员工有成员关系的库进入列表（未授权库�
     assert.equal(aliceList.statusCode, 200);
     const items = (aliceList.json() as { vaults: Array<Record<string, unknown>> }).vaults;
     assert.equal(items.length, 1);
-    assert.deepEqual(Object.keys(items[0] as Record<string, unknown>).sort(), ['default_branch', 'main_admin_only', 'name', 'role', 'slug']);
+    // S18-T1：清单项增 doc_count（机器面读协议；形状快照同步更新）
+    assert.deepEqual(Object.keys(items[0] as Record<string, unknown>).sort(), ['default_branch', 'doc_count', 'main_admin_only', 'name', 'role', 'slug']);
     assert.equal((items[0] as Record<string, unknown>)['role'], 'admin');
   } finally {
     await h.close();
