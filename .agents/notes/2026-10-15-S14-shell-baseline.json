@@ -1,0 +1,958 @@
+{
+ "alice": {
+  "/": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/product-notes",
+    "/vaults/product-notes/history",
+    "/vaults/team-handbook",
+    "/vaults/team-handbook/history"
+   ]
+  },
+  "/vaults": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/product-notes/browse",
+    "/vaults/team-handbook/browse"
+   ]
+  },
+  "/vaults/team-handbook": {
+   "status": 302,
+   "links": []
+  },
+  "/vaults/team-handbook/browse": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/activity",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/edit/new",
+    "/vaults/team-handbook/upload"
+   ]
+  },
+  "/vaults/team-handbook/browse/docs": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/activity",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/delete/docs/README.md",
+    "/vaults/team-handbook/delete/docs/code-review.md",
+    "/vaults/team-handbook/delete/docs/onboarding.md",
+    "/vaults/team-handbook/delete/docs/travel.md",
+    "/vaults/team-handbook/edit/docs/README.md",
+    "/vaults/team-handbook/edit/docs/code-review.md",
+    "/vaults/team-handbook/edit/docs/onboarding.md",
+    "/vaults/team-handbook/edit/docs/travel.md",
+    "/vaults/team-handbook/edit/new?dir=docs",
+    "/vaults/team-handbook/rename/docs/README.md",
+    "/vaults/team-handbook/rename/docs/code-review.md",
+    "/vaults/team-handbook/rename/docs/onboarding.md",
+    "/vaults/team-handbook/rename/docs/travel.md",
+    "/vaults/team-handbook/upload/docs",
+    "/vaults/team-handbook/view/docs/README.md",
+    "/vaults/team-handbook/view/docs/code-review.md",
+    "/vaults/team-handbook/view/docs/onboarding.md",
+    "/vaults/team-handbook/view/docs/travel.md"
+   ]
+  },
+  "/vaults/team-handbook/view/docs/README.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/edit/docs/README.md"
+   ]
+  },
+  "/vaults/team-handbook/view/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/edit/docs/travel.md"
+   ]
+  },
+  "/vaults/team-handbook/edit/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/upload/docs"
+   ]
+  },
+  "/vaults/team-handbook/edit/new": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/upload"
+   ]
+  },
+  "/vaults/team-handbook/history": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/diff/6b88118cc81e7e75c78cca9162b58df3b17b25c8/docs/code-review.md",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/README.md",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/onboarding.md",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md",
+    "/vaults/team-handbook/history"
+   ]
+  },
+  "/vaults/team-handbook/history/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md",
+    "/vaults/team-handbook/edit/docs/travel.md",
+    "/vaults/team-handbook/history",
+    "/vaults/team-handbook/history/docs",
+    "/vaults/team-handbook/history/docs/travel.md",
+    "/vaults/team-handbook/restore/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md",
+    "/vaults/team-handbook/version/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md"
+   ]
+  },
+  "/vaults/team-handbook/activity": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/history"
+   ]
+  },
+  "/vaults/team-handbook/upload": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse"
+   ]
+  },
+  "/vaults/team-handbook/rename/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs"
+   ]
+  },
+  "/vaults/team-handbook/delete/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs"
+   ]
+  },
+  "/search": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/search?q=roadmap": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/product-notes/browse",
+    "/vaults/product-notes/view/docs/roadmap.md"
+   ]
+  },
+  "/drafts": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook",
+    "/vaults/team-handbook/edit/docs/remote-work.md"
+   ]
+  },
+  "/cite": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/credentials": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/admin": {
+   "status": 403,
+   "links": []
+  },
+  "/login": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/search",
+    "/vaults"
+   ]
+  }
+ },
+ "bob": {
+  "/": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook",
+    "/vaults/team-handbook/history"
+   ]
+  },
+  "/vaults": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse"
+   ]
+  },
+  "/vaults/team-handbook": {
+   "status": 302,
+   "links": []
+  },
+  "/vaults/team-handbook/browse": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/activity",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs"
+   ]
+  },
+  "/vaults/team-handbook/browse/docs": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/activity",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/view/docs/README.md",
+    "/vaults/team-handbook/view/docs/code-review.md",
+    "/vaults/team-handbook/view/docs/onboarding.md",
+    "/vaults/team-handbook/view/docs/travel.md"
+   ]
+  },
+  "/vaults/team-handbook/view/docs/README.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs"
+   ]
+  },
+  "/vaults/team-handbook/view/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs"
+   ]
+  },
+  "/vaults/team-handbook/edit/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs"
+   ]
+  },
+  "/vaults/team-handbook/edit/new": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/upload"
+   ]
+  },
+  "/vaults/team-handbook/history": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/diff/6b88118cc81e7e75c78cca9162b58df3b17b25c8/docs/code-review.md",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/README.md",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/onboarding.md",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md",
+    "/vaults/team-handbook/history"
+   ]
+  },
+  "/vaults/team-handbook/history/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md",
+    "/vaults/team-handbook/history",
+    "/vaults/team-handbook/history/docs",
+    "/vaults/team-handbook/history/docs/travel.md",
+    "/vaults/team-handbook/restore/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md",
+    "/vaults/team-handbook/version/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md"
+   ]
+  },
+  "/vaults/team-handbook/activity": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/history"
+   ]
+  },
+  "/vaults/team-handbook/upload": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse"
+   ]
+  },
+  "/vaults/team-handbook/rename/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs"
+   ]
+  },
+  "/vaults/team-handbook/delete/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs"
+   ]
+  },
+  "/search": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/search?q=roadmap": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/drafts": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/cite": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/credentials": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/admin": {
+   "status": 403,
+   "links": []
+  },
+  "/login": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/search",
+    "/vaults"
+   ]
+  }
+ },
+ "admin": {
+  "/": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/product-notes",
+    "/vaults/product-notes/history",
+    "/vaults/team-handbook",
+    "/vaults/team-handbook/history"
+   ]
+  },
+  "/vaults": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/product-notes/browse",
+    "/vaults/team-handbook/browse"
+   ]
+  },
+  "/vaults/team-handbook": {
+   "status": 302,
+   "links": []
+  },
+  "/vaults/team-handbook/browse": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/activity",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/edit/new",
+    "/vaults/team-handbook/upload"
+   ]
+  },
+  "/vaults/team-handbook/browse/docs": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/activity",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/delete/docs/README.md",
+    "/vaults/team-handbook/delete/docs/code-review.md",
+    "/vaults/team-handbook/delete/docs/onboarding.md",
+    "/vaults/team-handbook/delete/docs/travel.md",
+    "/vaults/team-handbook/edit/docs/README.md",
+    "/vaults/team-handbook/edit/docs/code-review.md",
+    "/vaults/team-handbook/edit/docs/onboarding.md",
+    "/vaults/team-handbook/edit/docs/travel.md",
+    "/vaults/team-handbook/edit/new?dir=docs",
+    "/vaults/team-handbook/rename/docs/README.md",
+    "/vaults/team-handbook/rename/docs/code-review.md",
+    "/vaults/team-handbook/rename/docs/onboarding.md",
+    "/vaults/team-handbook/rename/docs/travel.md",
+    "/vaults/team-handbook/upload/docs",
+    "/vaults/team-handbook/view/docs/README.md",
+    "/vaults/team-handbook/view/docs/code-review.md",
+    "/vaults/team-handbook/view/docs/onboarding.md",
+    "/vaults/team-handbook/view/docs/travel.md"
+   ]
+  },
+  "/vaults/team-handbook/view/docs/README.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/edit/docs/README.md"
+   ]
+  },
+  "/vaults/team-handbook/view/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/edit/docs/travel.md"
+   ]
+  },
+  "/vaults/team-handbook/edit/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/upload/docs"
+   ]
+  },
+  "/vaults/team-handbook/edit/new": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/upload"
+   ]
+  },
+  "/vaults/team-handbook/history": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/diff/6b88118cc81e7e75c78cca9162b58df3b17b25c8/docs/code-review.md",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/README.md",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/onboarding.md",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md",
+    "/vaults/team-handbook/history"
+   ]
+  },
+  "/vaults/team-handbook/history/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs",
+    "/vaults/team-handbook/diff/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md",
+    "/vaults/team-handbook/edit/docs/travel.md",
+    "/vaults/team-handbook/history",
+    "/vaults/team-handbook/history/docs",
+    "/vaults/team-handbook/history/docs/travel.md",
+    "/vaults/team-handbook/restore/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md",
+    "/vaults/team-handbook/version/7c6bb2b930c23d414771930691ecef6e4c911306/docs/travel.md"
+   ]
+  },
+  "/vaults/team-handbook/activity": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/history"
+   ]
+  },
+  "/vaults/team-handbook/upload": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse"
+   ]
+  },
+  "/vaults/team-handbook/rename/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs"
+   ]
+  },
+  "/vaults/team-handbook/delete/docs/travel.md": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/team-handbook/browse",
+    "/vaults/team-handbook/browse/docs"
+   ]
+  },
+  "/search": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/search?q=roadmap": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults",
+    "/vaults/product-notes/browse",
+    "/vaults/product-notes/view/docs/roadmap.md"
+   ]
+  },
+  "/drafts": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/cite": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/credentials": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/admin": {
+   "status": 200,
+   "links": [
+    "/",
+    "/admin",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/drafts",
+    "/search",
+    "/vaults"
+   ]
+  },
+  "/login": {
+   "status": 200,
+   "links": [
+    "/",
+    "/assets/styles.css",
+    "/cite",
+    "/credentials",
+    "/search",
+    "/vaults"
+   ]
+  }
+ }
+}
