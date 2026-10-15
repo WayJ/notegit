@@ -38,3 +38,13 @@ Agent 用**既有访问凭据**（identity §3，非交互形态=Bearer token；
 | `GET /api/v1/vaults/{slug}/index-status` | 索引状态（变更感知） | S18-T1 |
 | `GET /api/v1/vaults/{slug}/tree[?ref=OID]` | 全树扁平清单 | S18-T2 |
 | `GET /api/v1/vaults/{slug}/docs/{path}[?ref=OID]` | 单文档（frontmatter+正文双形态） | S18-T2 |
+
+## 写入与并发（S20 容量实测建议，2026-10-16）
+
+- 并发写同一分支必然冲突：`base_commit` CAS 使同 base 并发提交**恰一个 201、
+  其余 409**（实测 8 并发=1×201+7×409）。正确模式＝收到 409 后**取新 head 重试**
+  （409 信封含当前 tip）。
+- 单分支顺序写上限 ≈6 次/秒（含提交与索引派生）；大批量变更放进**一次提交的
+  changes 数组**（500 文档单提交实测正常），不要逐条提交。
+- 读并发 ≤10–20 时 p95 <200ms；超过 ~200 rps 后排队延迟线性上升（不报错）。
+  agent 轮询请用 `index-status` 而非高频全量拉取。
