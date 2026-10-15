@@ -56,13 +56,40 @@ function sidCookie(sid: string): Record<string, string> {
 
 // ── 资产端点（与 /assets/styles.css 同构的注册面） ──────────────────────────
 
-test('GET /assets/app.js：200 application/javascript + 短缓存（styles.css 同构约定）', async () => {
+test('GET /assets/app.js：200 application/javascript + 协商缓存（styles.css 同构约定）', async () => {
   const h = await harness();
   try {
     const res = await h.app.inject({ method: 'GET', url: '/assets/app.js' });
     assert.equal(res.statusCode, 200, res.body);
     assert.match(res.headers['content-type'] as string, /^application\/javascript/);
-    assert.equal(res.headers['cache-control'], 'public, max-age=3600', '文件名无内容哈希——短缓存同 styles.css');
+    // 缓存热修（2026-10-15）：可变内容挂稳定 URL 不得配强缓存（v2 换轨日全体用户
+    // 撞 1h 旧 CSS 墙）——改协商缓存：no-cache 每次重验证 + 内容 ETag，命中 304
+    assert.equal(res.headers['cache-control'], 'no-cache', '稳定 URL 不配强缓存——重验证');
+    assert.match(res.headers.etag as string, /^"[0-9a-f]{64}"$/, '内容 sha256 ETag');
+    const res304 = await h.app.inject({
+      method: 'GET',
+      url: '/assets/app.js',
+      headers: { 'if-none-match': res.headers.etag as string },
+    });
+    assert.equal(res304.statusCode, 304, 'If-None-Match 命中协商 304');
+  } finally {
+    await h.close();
+  }
+});
+
+test('GET /assets/styles.css：ETag 协商缓存同构（内容变化→新 ETag→浏览器即时取新）', async () => {
+  const h = await harness();
+  try {
+    const res = await h.app.inject({ method: 'GET', url: '/assets/styles.css' });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.headers['cache-control'], 'no-cache');
+    assert.match(res.headers.etag as string, /^"[0-9a-f]{64}"$/);
+    const miss = await h.app.inject({
+      method: 'GET',
+      url: '/assets/styles.css',
+      headers: { 'if-none-match': '"0000000000000000000000000000000000000000000000000000000000000000"' },
+    });
+    assert.equal(miss.statusCode, 200, 'ETag 不匹配全量回送');
   } finally {
     await h.close();
   }
