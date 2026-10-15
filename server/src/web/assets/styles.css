@@ -727,6 +727,8 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(198
   color: var(--body-strong);
 }
 .search-form input { flex: 1 1 auto; }
+/* S15-T1 库筛选下拉（visual token 全承既有 select 控件——只补 flex 行内尺寸） */
+.search-form select { flex: 0 1 auto; width: auto; min-width: 180px; }
 
 /* ── 页脚（深色面收束全页——产品 chrome） ─────────────────────────────────── */
 .site-footer {
@@ -882,6 +884,40 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(198
   font-size: var(--caption);
   color: var(--muted-soft);
   overflow-wrap: anywhere;
+}
+
+/* ── S15-T2：页头索引状态位 / 跨库文档视图开关 / 表尾可见性声明 ───────────────
+   状态位三态如实（D4）：健康=muted 正文、失败=warning 语义 token（不新引色）、
+   无行=muted-soft fine-print。视图开关（D5 零 JS）取 category-tab token 语义：
+   非透明底 muted、当前态 surface-card 底＋ink。全 token，零内联 hex。 */
+.index-status {
+  font-size: var(--body-sm);
+  color: var(--muted);
+  margin: var(--sp-xs) 0 0;
+}
+.index-status.is-failing { color: var(--warning); }
+.index-status.is-empty { color: var(--muted-soft); }
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xxs);
+  font-size: var(--body-sm);
+  color: var(--muted);
+  margin: var(--sp-xs) 0 0;
+}
+.view-toggle a {
+  color: var(--muted);
+  padding: 2px var(--sp-sm);
+  border-radius: var(--r-md);
+}
+.view-toggle a[aria-current='page'] {
+  background: var(--surface-card);
+  color: var(--ink);
+  font-weight: 500;
+}
+.visibility-note {
+  border-top: 1px solid var(--hairline-soft);
+  padding-top: var(--sp-sm);
 }
 
 /* ── 响应式（<768px 单列；导航菜单折叠——汉堡按钮按任务约定后置） ──────────── */

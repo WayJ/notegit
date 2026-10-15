@@ -4,7 +4,7 @@ import type { AuthSuccess } from '../auth/lifecycle.ts';
 import { indexPage, loginPage, adminPage, credentialsPage, layout } from './pages.ts';
 import { html } from './page-kit.ts';
 import { recentChangesForEmployee } from './activity/query.ts';
-import { workbenchSummary, vaultCards, recentDocuments, WORKBENCH_RECENT_DOC_LIMIT } from './workbench/query.ts';
+import { workbenchSummary, vaultCards, recentDocuments, indexStatus, WORKBENCH_RECENT_DOC_LIMIT } from './workbench/query.ts';
 
 /**
  * S2-T8 最小页面外壳路由（GET；数据由页内 fetch 调 api.md 既有端点）：
@@ -56,6 +56,10 @@ export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptio
     // S11-T2 首页「最近变更」区块：跨库最近发布（查询面实时成员过滤——
     // web/activity/query.ts，与检索同一判定面；本接线行不含判定逻辑）
     const recent = recentChangesForEmployee(opts.db, outcome.subject.employee_id);
+    // S15-T2 接线（D4/D5）：索引状态位数据面（indexStatus，成员过滤在查询面）＋
+    // 视图开关 querystring 白名单解析（view=list|grid，非法值回落 list——纯呈现
+    // 偏好，不写任何存储）
+    const view = (req.query as { view?: unknown }).view === 'grid' ? 'grid' : 'list';
     return html(
       reply,
       indexPage(
@@ -68,6 +72,8 @@ export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptio
           summary: workbenchSummary(opts.db, outcome.subject.employee_id),
           vaults: vaultCards(opts.db, outcome.subject.employee_id),
           docs,
+          indexStatus: indexStatus(opts.db, outcome.subject.employee_id),
+          view,
         },
         recent,
       ),
