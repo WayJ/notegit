@@ -384,6 +384,11 @@ pre.token-view { color: var(--surface); }
 .table-wrap tbody tr:last-child td { border-bottom: none; }
 .table-wrap tbody tr:hover td { background: var(--hover); }   /* §5 行 hover */
 .table-wrap a { color: var(--accent-ink); }
+/* S21-T1（A5/D43）：数据表统一横滚容器（DESIGN.md §4 断点）——容器横滚＋表格
+   min-width:max-content：列按内容定宽、不压缩折行，窄屏（390px）卡内横滚、
+   视口不溢出。与 .table-wrap（卡片形态）叠用：table-wrap table-scroll。 */
+.table-scroll { overflow-x: auto; }
+.table-scroll table { min-width: max-content; }
 
 /* ── 面包屑（ink3 导航语义） ─────────────────────────────────────────────── */
 nav[aria-label="面包屑"] {
@@ -428,6 +433,10 @@ nav[aria-label="面包屑"] span[aria-hidden="true"] { color: var(--ink3); paddi
 .field-err { color: var(--error); font-size: var(--fs-aux-sm); min-height: 0; margin: calc(-1 * var(--sp-xs)) 0 var(--sp-sm); }
 p[role="alert"], output { font-size: 12px; }
 p.note, .draft-note { font-size: 12px; color: var(--ink3); }
+/* S21-T1（A2/D40）：空态守卫——内容为空的提示/警示/错误条不呈现色块
+   （:empty 严格匹配零子节点：模板须保持空元素内无空白文本） */
+.form-warn:empty, .warn-block:empty, .notice:empty,
+.op-error:empty, .error-block:empty, pre.token-view:empty { display: none; }
 
 /* ── 页面骨架（§4 内容区：max-width 1220px 居中 padding 27px 34px 32px） ───── */
 .page {
@@ -1009,8 +1018,10 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(237
   line-height: 1.2;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+  min-width: 0;              /* S21-T1（A6/D43）：值/标签按整词换行，窄卡不逐字竖排 */
+  overflow-wrap: break-word;
 }
-.stat-label { font-size: var(--fs-table); color: var(--ink2); }
+.stat-label { font-size: var(--fs-table); color: var(--ink2); min-width: 0; overflow-wrap: break-word; }
 /* S17-T1 差距6：区块头=标题＋副题（左列）＋右侧动作链接（11.5px accent-ink——
    a 默认色；§2 区块头形态） */
 .section-head {
@@ -1030,6 +1041,9 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(237
   margin-bottom: var(--sp-sm);
 }
 .vault-card .vault-card-meta { font-size: var(--fs-aux-sm); color: var(--ink3); margin-top: auto; padding-top: var(--sp-xs); }
+/* S21-T1（B8/D42）：库卡角色徽章回归 §5 胶囊 chip——列向卡内 flex 子项默认拉伸
+   成通栏灰条（似骨架屏），align-self 收回内容宽（.badge 本身即胶囊 token） */
+.vault-card .badge { align-self: flex-start; }
 .tag-chips {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1196,7 +1210,7 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(237
   .col-secondary, .col-tertiary { display: none; }   /* 按列优先级：仅存首列 */
   .app-shell { overflow-x: hidden; }     /* 页面无横向滚动（表格卡内横滚保留） */
   .page { padding-left: var(--sp-sm); padding-right: var(--sp-sm); }
-  .stat-grid { gap: var(--sp-sm); }      /* 概览卡压三列（reference-analysis §2 区块 9） */
+  .stat-grid { gap: var(--sp-sm); grid-template-columns: 1fr; }   /* S21-T1（A6/D43）：≤680px 单列堆叠——不逐字竖排 */
   .stat-card { padding: var(--sp-sm); }
   .stat-icon { width: 28px; height: 28px; font-size: 13px; }   /* S17-T1：图标片 DOM 直加后的窄屏档 */
   .stat-value { font-size: 15px; }

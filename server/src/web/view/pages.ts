@@ -16,6 +16,8 @@ import { escapeHtml, layout } from '../pages.ts';
 /** 顶部导航登录态（呈现层透传） */
 export interface PageViewer {
   readonly username: string;
+  /** S21-T1/A1：展示名（顶栏徽章单形态接线；缺省回落用户名） */
+  readonly display_name?: string;
   readonly is_instance_admin: boolean;
 }
 
@@ -96,7 +98,7 @@ ${bodyHtml}
 </div>
 `,
     '',
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -131,7 +133,7 @@ export function attachmentImagePage(input: {
 </div>
 `,
     '',
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -157,7 +159,7 @@ export function noPreviewPage(input: {
 </div>
 `,
     '',
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -184,6 +186,6 @@ export function tooLargePage(input: {
 </div>
 `,
     '',
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }

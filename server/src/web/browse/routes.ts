@@ -4,7 +4,7 @@ import type { AuthSuccess } from '../../auth/lifecycle.ts';
 import { authorize } from '../../auth/lifecycle.ts';
 import { createDbMembershipSource } from '../../vaults/membership.ts';
 import { VaultService } from '../../vaults/service.ts';
-import { html, sendPageNotFound } from '../page-kit.ts';
+import { html, sendPageNotFound, type PageAuth } from '../page-kit.ts';
 import { canWriteVault } from '../role-gate.ts';
 import { vaultListPage, browsePage, browseStatePage, browseUrl, type BrowsePageInput } from './pages.ts';
 import { readDirTree, findReadmeEntry, readBlobText, readLastCommits, README_RENDER_MAX_BYTES, type LastCommitInfo } from './tree.ts';
@@ -33,7 +33,7 @@ import { readDirTree, findReadmeEntry, readBlobText, readLastCommits, README_REN
 export interface BrowseRoutesOptions {
   readonly db: DatabaseSync;
   readonly dataDir?: string;
-  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<AuthSuccess | null>;
+  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<PageAuth | null>;
 }
 
 export function registerBrowseRoutes(app: FastifyInstance, opts: BrowseRoutesOptions): void {
@@ -45,7 +45,7 @@ export function registerBrowseRoutes(app: FastifyInstance, opts: BrowseRoutesOpt
     req: FastifyRequest,
     reply: FastifyReply,
     slug: string,
-  ): Promise<{ who: AuthSuccess; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
+  ): Promise<{ who: PageAuth; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return null;
     const decision = authorize(membershipSource, who.subject.employee_id, slug, 'read');
@@ -62,7 +62,7 @@ export function registerBrowseRoutes(app: FastifyInstance, opts: BrowseRoutesOpt
     return html(
       reply,
       vaultListPage(
-        { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+        { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin },
         list,
       ),
     );
@@ -124,7 +124,7 @@ export function registerBrowseRoutes(app: FastifyInstance, opts: BrowseRoutesOpt
         // S10-T2 权限感知：写入口按当前会话员工对该库的写权渲染（canWriteVault
         // 唯一判定面；reader 只读态——D17 呈现层，POST 侧鉴权原样）
         canWrite: canWriteVault(membershipSource, who.subject.employee_id, vault.slug),
-        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+        viewer: { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin },
       }),
     );
   };

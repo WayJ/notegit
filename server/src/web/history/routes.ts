@@ -8,7 +8,7 @@ import type { RejectedResult } from '../../publish/index.ts';
 import { createDbMembershipSource } from '../../vaults/membership.ts';
 import { VaultService } from '../../vaults/service.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
-import { html, sendPageNotFound } from '../page-kit.ts';
+import { html, sendPageNotFound, type PageAuth } from '../page-kit.ts';
 import { hintFor } from '../hints.ts';
 import { canWriteVault } from '../role-gate.ts';
 import { viewUrl } from '../browse/pages.ts';
@@ -61,7 +61,7 @@ import {
 export interface HistoryRoutesOptions {
   readonly db: DatabaseSync;
   readonly dataDir?: string;
-  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<AuthSuccess | null>;
+  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<PageAuth | null>;
   /** 维护闸门（S5-T2 还原 POST 组件层最后一道；HTTP 层第一道=组装点 webWriteGuard） */
   readonly maintenanceGate?: MaintenanceGate;
 }
@@ -115,8 +115,8 @@ function firstErrorNotice(report: Report | undefined): RestoreNotice | undefined
 
 /** S12-T2 顶栏账户位 viewer（呈现层——coordinator 批准扩展：cite 族/状态页/
  *  diff/历史版本页模板可选参数；判定不变，仅登录态落位）。 */
-function pageViewer(who: AuthSuccess): { username: string; is_instance_admin: boolean } {
-  return { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin };
+function pageViewer(who: PageAuth): { username: string; display_name?: string; is_instance_admin: boolean } {
+  return { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin };
 }
 
 export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesOptions): void {
@@ -135,7 +135,7 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
     req: FastifyRequest,
     reply: FastifyReply,
     slug: string,
-  ): Promise<{ who: AuthSuccess; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
+  ): Promise<{ who: PageAuth; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return null;
     const decision = authorize(membershipSource, who.subject.employee_id, slug, 'read');
@@ -185,6 +185,7 @@ export function registerHistoryRoutes(app: FastifyInstance, opts: HistoryRoutesO
         vault,
         viewer: {
           username: who.subject.username,
+          display_name: who.display_name,
           is_instance_admin: who.subject.is_instance_admin,
         },
         treePath,

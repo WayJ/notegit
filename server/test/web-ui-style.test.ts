@@ -149,7 +149,9 @@ test('入口页（S14-T3 工作台）：概览三卡 + 登录态导航；普通�
     const plebRes = await h.app.inject({ method: 'GET', url: '/', headers: sidCookie(h.session(2)) });
     assert.ok(plebRes.body.includes('class="stat-grid"'), '概览三卡网格');
     assert.ok(plebRes.body.includes('class="stat-card"'), '概览卡形态');
-    assert.ok(plebRes.body.includes('class="nav-user"'), '导航登录态');
+    // S21-T1（A1/D41）双槽同名单槽：pleb 无独立显示名（回落=用户名）——徽章单槽承载
+    assert.ok(plebRes.body.includes('class="badge">pleb</span>'), '导航登录态（徽章承载）');
+    assert.ok(!plebRes.body.includes('class="nav-user"'), '同名单槽：用户名槽不重复渲染');
     assert.ok(!plebRes.body.includes('/admin'), '普通成员导航与页面均无管理入口');
     const bossRes = await h.app.inject({ method: 'GET', url: '/', headers: sidCookie(h.session(1)) });
     assert.ok(bossRes.body.includes('href="/admin"'), '管理员导航含管理项');
@@ -165,7 +167,7 @@ test('管理/凭据页：admin-section 分区卡、table-wrap 表格包裹、tok
     const boss = addEmployee(h.db, { username: 'boss', is_instance_admin: 1 });
     const adminRes = await h.app.inject({ method: 'GET', url: '/admin', headers: sidCookie(h.session(boss)) });
     assert.ok(adminRes.body.includes('class="admin-section"'), '分区卡');
-    assert.ok(adminRes.body.includes('class="table-wrap"'), '表格包裹层（<768px 不溢出）');
+    assert.ok(adminRes.body.includes('class="table-wrap table-scroll"'), '表格包裹层＋横滚容器（<768px 不溢出、列不压缩）');
     assert.ok(adminRes.body.includes('class="token-view"'), '一次性令牌深色窗');
     assert.ok(adminRes.body.includes('class="btn-primary"'), '表单主按钮');
     const credRes = await h.app.inject({ method: 'GET', url: '/credentials', headers: sidCookie(h.session(boss)) });

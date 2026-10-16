@@ -1,3 +1,4 @@
+import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthSuccess, RequestAuthenticator } from '../auth/lifecycle.ts';
 import { notFoundPage } from './pages.ts';
@@ -19,14 +20,30 @@ export function sendPageNotFound(reply: FastifyReply): FastifyReply {
 }
 
 /**
- * 页面认证守卫（S2-T8 语义提取）：成功返回主体；未认证/四状态失败 302 /login
- * （已回复返回 null）。页面路径不走 rejectAuth，不清 Cookie——Cookie 已不可用，
- * 无安全影响；登录成功重发覆盖。安全判定（authorize/管理员门槛）在各路由叠加。
+ * 页面守卫附带展示名（S21-T1 / D41：顶栏徽章 displayName 全量接线的数据面）：
+ * 认证成功后实时查库取 employees.display_name（D-IC-05 精神——与 shell/drafts
+ * 此前各自的展示名查询集中到本缝，单一来源）；缺省 undefined 由呈现层回落
+ * 用户名（PageNav.displayName 语义）。纯展示字段：active 与身份判定仍由认证缝
+ * 保证，本查询不参与任何授权判定。
  */
-export function createPageGuard(authenticateRequest: RequestAuthenticator) {
-  return async function requirePageUser(req: FastifyRequest, reply: FastifyReply): Promise<AuthSuccess | null> {
+export type PageAuth = AuthSuccess & { readonly display_name?: string };
+
+/**
+ * 页面认证守卫（S2-T8 语义提取）：成功返回主体（S21-T1 起附 display_name——
+ * 见 PageAuth）；未认证/四状态失败 302 /login（已回复返回 null）。页面路径不走
+ * rejectAuth，不清 Cookie——Cookie 已不可用，无安全影响；登录成功重发覆盖。
+ * 安全判定（authorize/管理员门槛）在各路由叠加。
+ */
+export function createPageGuard(db: DatabaseSync, authenticateRequest: RequestAuthenticator) {
+  return async function requirePageUser(req: FastifyRequest, reply: FastifyReply): Promise<PageAuth | null> {
     const outcome = await authenticateRequest(req);
-    if (outcome.ok) return outcome;
+    if (outcome.ok) {
+      // FK 保证行在（fail-closed：异常形态不带展示名，呈现层回落用户名）
+      const row = db.prepare('SELECT display_name FROM employees WHERE id = ?').get(outcome.subject.employee_id) as
+        | { display_name: string }
+        | undefined;
+      return { ...outcome, ...(row !== undefined ? { display_name: row.display_name } : {}) };
+    }
     reply.redirect('/login', 302);
     return null;
   };

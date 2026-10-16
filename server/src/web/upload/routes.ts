@@ -11,7 +11,7 @@ import { effectiveConfig } from '../../limits/engine.ts';
 import { publishWebSubmit, type PublishResult, type RejectedResult } from '../../publish/index.ts';
 import { execGit } from '../../publish/git-exec.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
-import { sendPageNotFound, html } from '../page-kit.ts';
+import { sendPageNotFound, html, type PageAuth } from '../page-kit.ts';
 import { canWriteVault } from '../role-gate.ts';
 import { hintFor } from '../hints.ts';
 import { uploadPage, uploadStatePage } from './pages.ts';
@@ -43,7 +43,7 @@ import { readEntryAt, treePathOk } from '../browse/tree.ts';
 export interface UploadRoutesOptions {
   readonly db: DatabaseSync;
   readonly dataDir?: string;
-  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<AuthSuccess | null>;
+  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<PageAuth | null>;
   /** 维护闸门（S4-T5 缝，T4 遗留移交）：HTTP 层第一道=组装点 webWriteGuard，
    *  此处注入组件为最后一道（pipeline execution-point 复查——双层同构）。 */
   readonly maintenanceGate?: MaintenanceGate;
@@ -187,7 +187,7 @@ export function registerUploadRoutes(app: FastifyInstance, opts: UploadRoutesOpt
     req: FastifyRequest,
     reply: FastifyReply,
     slug: string,
-  ): Promise<{ who: AuthSuccess; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
+  ): Promise<{ who: PageAuth; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return null;
     const decision = authorize(membershipSource, who.subject.employee_id, slug, 'read');
@@ -212,7 +212,7 @@ export function registerUploadRoutes(app: FastifyInstance, opts: UploadRoutesOpt
         uploadStatePage(
           vault,
           '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。',
-          { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin }, // S12-T2 账户位（批准扩展）
+          { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin }, // S12-T2 账户位（批准扩展）
         ),
       );
     }
@@ -226,7 +226,7 @@ export function registerUploadRoutes(app: FastifyInstance, opts: UploadRoutesOpt
         // S10-T2 权限感知：reader 直开 URL 呈只读态（D4：门槛 read 成员不变；
         // canWriteVault 唯一判定面，D17 呈现层——POST 侧鉴权原样）
         canWrite: canWriteVault(membershipSource, who.subject.employee_id, vault.slug),
-        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+        viewer: { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin },
       }),
     );
   };

@@ -1,8 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { AuthSuccess } from '../auth/lifecycle.ts';
 import { indexPage, loginPage, adminPage, credentialsPage, layout } from './pages.ts';
-import { html } from './page-kit.ts';
+import { html, type PageAuth } from './page-kit.ts';
 import { recentChangesForEmployee } from './activity/query.ts';
 import { workbenchSummary, vaultCards, recentDocuments, indexStatus, WORKBENCH_RECENT_DOC_LIMIT } from './workbench/query.ts';
 
@@ -28,7 +27,7 @@ import { workbenchSummary, vaultCards, recentDocuments, indexStatus, WORKBENCH_R
 
 export interface ShellRoutesOptions {
   readonly db: DatabaseSync;
-  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<AuthSuccess | null>;
+  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<PageAuth | null>;
   /** S14-T3：数据目录（工作台文档流的 git 路径派生所需）。缺省（S2 测试形态）
    *  时文档流如实为空态——与 browse 仓库读取空态同形态。 */
   readonly dataDir?: string;
@@ -40,10 +39,7 @@ export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptio
   app.get('/', async (req, reply) => {
     const outcome = await opts.requirePageUser(req, reply);
     if (!outcome) return reply;
-    // 展示名实时查库（展示字段；active 与身份判定已由认证缝保证）
-    const row = opts.db
-      .prepare('SELECT display_name FROM employees WHERE id = ?')
-      .get(outcome.subject.employee_id) as { display_name: string } | undefined;
+    // 展示名由页面守卫附带（S21-T1/A1 集中到 createPageGuard；缺省回落用户名）
     // S14-T3 工作台接线：三能力全部来自 web/workbench/query.ts（D26 成员过滤与
     // 统计口径已在该层锁定；本接线行不含判定逻辑）。dataDir 缺省（S2 测试形态）
     // 时文档流如实为空态——与 browse 仓库读取空态同形态。
@@ -65,7 +61,7 @@ export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptio
       indexPage(
         {
           username: outcome.subject.username,
-          display_name: row?.display_name ?? outcome.subject.username,
+          display_name: outcome.display_name ?? outcome.subject.username,
           is_instance_admin: outcome.subject.is_instance_admin,
         },
         {
@@ -102,7 +98,11 @@ export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptio
     }
     return html(
       reply,
-      adminPage({ username: outcome.subject.username, is_instance_admin: outcome.subject.is_instance_admin }),
+      adminPage({
+        username: outcome.subject.username,
+        ...(outcome.display_name !== undefined ? { display_name: outcome.display_name } : {}),
+        is_instance_admin: outcome.subject.is_instance_admin,
+      }),
     );
   });
 
@@ -111,7 +111,11 @@ export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptio
     if (!outcome) return reply;
     return html(
       reply,
-      credentialsPage({ username: outcome.subject.username, is_instance_admin: outcome.subject.is_instance_admin }),
+      credentialsPage({
+        username: outcome.subject.username,
+        ...(outcome.display_name !== undefined ? { display_name: outcome.display_name } : {}),
+        is_instance_admin: outcome.subject.is_instance_admin,
+      }),
     );
   });
 }

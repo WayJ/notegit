@@ -39,7 +39,7 @@ const SEARCH_KBD_SCRIPT = `
 `;
 
 export interface SearchPageInput {
-  readonly viewer: { username: string; is_instance_admin?: boolean };
+  readonly viewer: { username: string; display_name?: string; is_instance_admin?: boolean };
   /** 查询关键词（缺省/null=空态表单页）；页内回显须转义 */
   readonly q: string | null;
   /** 查询结果（q 非空时给定） */
@@ -118,7 +118,7 @@ ${listing}`;
 `,
     SEARCH_KBD_SCRIPT, // S15-T1 ⌘K 聚焦（页内增强——并入本页唯一内联 script 块）
     {
-      user: { username: input.viewer.username, isAdmin: input.viewer.is_instance_admin === true },
+      user: { username: input.viewer.username, displayName: input.viewer.display_name, isAdmin: input.viewer.is_instance_admin === true },
       active: 'search',
     },
   );

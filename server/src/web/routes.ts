@@ -46,7 +46,7 @@ export interface WebRoutesOptions {
 }
 
 export function registerWebRoutes(app: FastifyInstance, opts: WebRoutesOptions): void {
-  const shared = { ...opts, requirePageUser: createPageGuard(opts.authenticateRequest) };
+  const shared = { ...opts, requirePageUser: createPageGuard(opts.db, opts.authenticateRequest) };
   // S4-T5 缝（T4 遗留）：web 写守卫——/vaults/ 下非安全方法维护模式 503
   // （backup §3 矩阵 web 行；api/v1 与 /git 各有同语义闸门，不在此层）
   app.addHook('onRequest', webWriteGuard(opts.maintenanceGate));
