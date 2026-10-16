@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyServerOptions } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import { openDatabase } from './db/connection.ts';
 import { migrate } from './db/migrate.ts';
@@ -22,10 +22,23 @@ import { sweepVaultResidue } from './gitrepo/hygiene.ts';
 
 export const DEFAULT_DATA_DIR = '/data';
 
+/** 可信反代白名单（S25/E9 D53）：NOTEGIT_TRUST_PROXY 逗号分隔 IP/CIDR（如
+ *  "127.0.0.1" 或 "10.0.0.0/8,172.20.0.5"）。未设置/空 = 不信任任何代理头
+ *  （直连部署默认）。设置后 req.protocol/ip 经 X-Forwarded-* 判定（架构 §10
+ *  TLS 终结反代形态）。禁宽松 true——信任边界必须显式。 */
+function trustProxyFromEnv(): string[] | undefined {
+  const raw = process.env.NOTEGIT_TRUST_PROXY;
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const list = raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  return list.length > 0 ? list : undefined;
+}
+
 export interface StartOptions {
   readonly dataDir?: string;
   readonly host?: string;
   readonly port?: number;
+  /** 可信代理白名单（S25/E9 D53）：缺省由 NOTEGIT_TRUST_PROXY 解析；测试注入覆盖。 */
+  readonly trustProxy?: FastifyServerOptions['trustProxy'];
   readonly authenticateRequest?: RequestAuthenticator;
   readonly hashPassword?: PasswordHasher;
 }
@@ -84,6 +97,7 @@ export async function startApp(opts: StartOptions = {}): Promise<StartedApp> {
       dbFile, // S3-T2：/git 入口透传 NOTEGIT_DB 给 pre-receive hook 直连
       authenticateRequest: opts.authenticateRequest,
       hashPassword: opts.hashPassword,
+      trustProxy: opts.trustProxy ?? trustProxyFromEnv(),
     });
     const host = opts.host ?? process.env.HOST ?? '0.0.0.0';
     const port = opts.port ?? Number(process.env.PORT ?? 3000);

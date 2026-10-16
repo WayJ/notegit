@@ -58,6 +58,11 @@ export interface AppDeps {
   readonly hashPassword?: PasswordHasher;
   readonly credentials?: CredentialsOptions;
   readonly logger?: FastifyServerOptions['logger'];
+  /** 可信代理白名单（S25/E9 D53）：Fastify trustProxy 透传——设置后 req.protocol/ip
+   *  在可信代理链上取 X-Forwarded-Proto/For（TLS 终结反代形态，架构 §10；CSRF 同源
+   *  判定随之正确）。缺省 = 不信任任何代理头（直连部署现行为）。main.ts 由
+   *  NOTEGIT_TRUST_PROXY 解析（逗号分隔 IP/CIDR）；禁宽松 true——信任边界显式。 */
+  readonly trustProxy?: FastifyServerOptions['trustProxy'];
   /** 数据目录（S3-T1）：注入后建库端点真实 init bare 于 <dataDir>/git/<id>.git；
    *  缺省 = S2 测试形态（仅建行）。生产装配（main.ts）恒传入。
    *  S3-T2：注入后同时注册 /git Smart HTTP 入口（CGI 包装 git http-backend）。 */
@@ -90,7 +95,7 @@ export interface WiredAppDeps extends AppDeps {
  * 路由与认证缝（token 四状态映射唯一来源）。
  */
 export function buildApp(deps?: AppDeps): FastifyInstance {
-  const app = fastify({ logger: deps?.logger ?? false });
+  const app = fastify({ logger: deps?.logger ?? false, trustProxy: deps?.trustProxy });
   app.get('/healthz', async () => ({ status: 'ok' }));
 
   if (deps) {

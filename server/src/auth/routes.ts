@@ -14,7 +14,7 @@ import {
   sidHash,
   type SessionDefaults,
 } from './sessions.ts';
-import { COOKIE_NAME } from './subject.ts';
+import { sessionClearCookie, sessionSetCookie } from './subject.ts';
 import { recordAuditEvent } from '../audit/audit.ts';
 
 /**
@@ -37,12 +37,6 @@ export interface AuthPluginOptions {
   backoff?: Partial<LoginBackoffOptions>;
   session?: Partial<SessionDefaults>;
   passwordPolicy?: PasswordPolicy;
-}
-
-function cookieHeader(sid: string, clear = false): string {
-  return clear
-    ? `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
-    : `${COOKIE_NAME}=${sid}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string, details?: Record<string, unknown>): FastifyReply {
@@ -114,7 +108,7 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
 
     backoff.recordSuccess(username, ip);
     const { sid } = createSession(db, row.id, pepper.active.key, now(), timeouts);
-    reply.header('set-cookie', cookieHeader(sid));
+    reply.header('set-cookie', sessionSetCookie(sid));
     return { username, display_name: row.display_name, is_instance_admin: row.is_instance_admin === 1 };
   });
 
@@ -126,7 +120,7 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
       return sendError(reply, 401, 'E-AUTH-001', '未认证');
     }
     deleteSessionByHash(db, sidHash(outcome.session.sid, pepper.active.key));
-    reply.header('set-cookie', cookieHeader('', true));
+    reply.header('set-cookie', sessionClearCookie());
     return reply.code(204).send();
   });
 
@@ -166,7 +160,7 @@ export const registerAuth: FastifyPluginAsync<AuthPluginOptions> = async (app, o
     //（token 域随 S2-T4 落地，本路径不触碰任何凭据存储——写面断言见 auth-routes.test.ts）。
     db.prepare('UPDATE employees SET password_hash = ? WHERE id = ?').run(newHash, subject.employee_id);
     deleteSessionsForEmployee(db, subject.employee_id);
-    reply.header('set-cookie', cookieHeader('', true));
+    reply.header('set-cookie', sessionClearCookie());
     return reply.code(204).send();
   });
 
