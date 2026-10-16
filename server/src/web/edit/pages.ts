@@ -24,6 +24,8 @@ import type { ParsedForForm } from './form.ts';
 /** 顶部导航登录态（呈现层透传） */
 export interface PageViewer {
   readonly username: string;
+  /** S21-T1/A1：展示名（顶栏徽章单形态接线；缺省回落用户名） */
+  readonly display_name?: string;
   readonly is_instance_admin: boolean;
 }
 
@@ -396,7 +398,7 @@ ${fieldRow('摘要（可选，简短摘要）', `<textarea name="description"${d
 ${fieldRow('标签（可选，逗号分隔）', `<input name="tags"${dis} value="${attr(prefill.fields.tags)}">`, 'tags')}
 ${fieldRow('状态（可选，下拉封闭集）', `<select name="status"${dis}>${statusOptions.join('')}</select>`, 'status')}
 ${fieldRow('来源（可选，原始资料或依据）', `<input name="source"${dis} maxlength="500" value="${attr(prefill.fields.source)}">`, 'source')}
-${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</code>；允许标量/列表/映射）', `<textarea name="extra"${dis} rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
+${fieldRow('额外字段（YAML，每行 key: value）', `<textarea name="extra"${dis} rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
 ${ro
   ? `  <label>正文（Markdown，多行纯文本）<br><textarea name="body"${dis} rows="18">${attr(prefill.body)}</textarea></label>`
   : `  <div class="edit-dual">
@@ -421,7 +423,7 @@ ${ro ? '' : `  <p class="form-foot"><small>保存=草稿（按作者私有、不
 </div>
 `,
     script,
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
     !ro, // S12-T3：写者形态引用共享脚本 /assets/app.js（只读态零脚本——行为不变）
   );
 }
@@ -499,7 +501,7 @@ ${ro
 </div>
 `,
     script,
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
     !ro, // S12-T3：写者形态引用共享脚本 /assets/app.js（只读态零脚本——行为不变）
   );
 }
@@ -523,7 +525,7 @@ export function editStatePage(
 </div>
 `,
     '',
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -671,7 +673,7 @@ ${fieldRow('摘要（可选，简短摘要）', `<textarea name="description"${d
 ${fieldRow('标签（可选，逗号分隔）', `<input name="tags"${dis} value="${attr(prefill.fields.tags)}">`, 'tags')}
 ${fieldRow('状态（可选，下拉封闭集）', `<select name="status"${dis}>${statusOptions.join('')}</select>`, 'status')}
 ${fieldRow('来源（可选，原始资料或依据）', `<input name="source"${dis} maxlength="500" value="${attr(prefill.fields.source)}">`, 'source')}
-${fieldRow('额外字段（可选；安全 YAML 值，每行 <code>key: value</code>；允许标量/列表/映射）', `<textarea name="extra"${dis} rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
+${fieldRow('额外字段（YAML，每行 key: value）', `<textarea name="extra"${dis} rows="3" placeholder="department: 财务部&#10;reviewers: [a, b]">${attr(prefill.extra)}</textarea>`, 'extra')}
   <label>正文（Markdown，多行纯文本）<br><textarea name="body"${dis} rows="18">${attr(prefill.body)}</textarea></label>
   <label>提交说明（可选）<br><input name="message"${dis} placeholder="缺省：Web 新建：&lt;路径&gt;"></label>
   <p id="form-warn" class="form-warn"></p>
@@ -688,7 +690,7 @@ ${ro ? '' : `  <p class="form-foot"><small>创建=以新路径正式发布（走
 </div>
 `,
     script,
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
     !ro, // S12-T3：写者形态引用共享脚本 /assets/app.js（只读态零脚本——行为不变）
   );
 }

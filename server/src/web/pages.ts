@@ -127,6 +127,8 @@ function sideNav(nav: PageNav): string {
   // ＋身份行（isAdmin 实例管理员/成员——纯呈现文案，判定面仍在 API 授权层）；
   // 分隔线隔开导航区（styles.css .side-foot border-top）。本函数仅登录态壳被调
   // 用（layout 判 nav.user），foot 的缺省守卫为形态完备性而设。
+  // S21-T1（B9）：displayName 与身份行文案碰撞（如显示名就叫「实例管理员」）时
+  // 身份行不重复渲染——姓名为准，去同文双行。
   const u = nav.user;
   const foot =
     u === undefined
@@ -134,8 +136,7 @@ function sideNav(nav: PageNav): string {
       : `\n  <div class="side-foot">
     <span class="side-foot-avatar" aria-hidden="true">${escapeHtml([...(u.displayName ?? u.username)][0] ?? '')}</span>
     <span class="side-foot-id">
-      <span class="side-foot-name">${escapeHtml(u.displayName ?? u.username)}</span>
-      <span class="side-foot-role">${u.isAdmin ? '实例管理员' : '成员'}</span>
+      <span class="side-foot-name">${escapeHtml(u.displayName ?? u.username)}</span>${(u.displayName ?? u.username) === (u.isAdmin ? '实例管理员' : '成员') ? '' : `\n      <span class="side-foot-role">${u.isAdmin ? '实例管理员' : '成员'}</span>`}
     </span>
   </div>`;
   return `<nav class="side-nav" aria-label="分区导航">
@@ -168,11 +169,13 @@ function topNav(nav?: PageNav): string {
       ? `\n      <li><a href="/admin"${nav.active === 'admin' ? ' aria-current="page"' : ''}>管理</a></li>`
       : '';
   // 账户菜单（S12-T2）：details 零 JS 下拉——徽章（displayName 缺省回落用户名）+ 用户名；
+  // S21-T1（A1/D41）双槽同名单槽：徽章名与用户名相同（含 displayName 缺省回落）
+  // 时不再重复渲染 username 槽——身份呈现单形态。
   // 下拉=凭据/管理（仅实例管理员）/退出登录（id="logout"——顶栏全域承担，脚本见 ACCOUNT_SCRIPT）
   const account =
     nav?.user !== undefined
       ? `\n      <details class="nav-account">
-        <summary title="${escapeHtml(nav.user.username)}"><span class="badge">${escapeHtml(nav.user.displayName ?? nav.user.username)}</span> <span class="nav-user">${escapeHtml(nav.user.username)}</span></summary>
+        <summary title="${escapeHtml(nav.user.username)}"><span class="badge">${escapeHtml(nav.user.displayName ?? nav.user.username)}</span>${(nav.user.displayName ?? nav.user.username) === nav.user.username ? '' : ` <span class="nav-user">${escapeHtml(nav.user.username)}</span>`}</summary>
         <div class="account-menu">
           <a href="/credentials"${nav.active === 'credentials' ? ' aria-current="page"' : ''}>我的凭据</a>${
             nav.user.isAdmin
@@ -205,17 +208,27 @@ function topNav(nav?: PageNav): string {
 </header>`;
 }
 
-const SITE_FOOTER = `<footer class="site-footer">
-  <div class="site-footer-inner">
-    <span class="brand"><span class="brand-mark">${SPIKE_MARK}</span>Notegit</span>
-    <nav class="site-footer-links" aria-label="页脚">
+/**
+ * 页脚（S21-T1 / B2：登录态去导航）：登录态桌面导航唯一承担者=侧栏（S14 master
+ * B 方案），页脚不再重复渲染导航链接——登录态仅品牌＋fine print；匿名/无导航壳
+ * （登录页、403/404 兜底）保留三项链接（无侧栏，页脚为其唯一引导）。
+ */
+function siteFooter(nav?: PageNav): string {
+  const links =
+    nav?.user === undefined
+      ? `\n    <nav class="site-footer-links" aria-label="页脚">
       <a href="/search">查找</a>
       <a href="/cite">引用解析</a>
       <a href="/credentials">我的凭据</a>
-    </nav>
+    </nav>`
+      : '';
+  return `<footer class="site-footer">
+  <div class="site-footer-inner">
+    <span class="brand"><span class="brand-mark">${SPIKE_MARK}</span>Notegit</span>${links}
     <span class="foot-fine">团队知识库 · 服务端渲染</span>
   </div>
 </footer>`;
+}
 
 export function layout(title: string, body: string, script = '', nav?: PageNav, sharedScript = false): string {
   // S12-T2：登录态页面把账户菜单脚本并入页面唯一 script 块（每页仍恰好一个 <script>）
@@ -233,6 +246,7 @@ export function layout(title: string, body: string, script = '', nav?: PageNav, 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)} — Notegit</title>
+<link rel="icon" href="/favicon.ico">
 <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
@@ -242,7 +256,7 @@ ${side}<main>
 ${body}
 </main>
 </div>
-${SITE_FOOTER}
+${siteFooter(nav)}
 ${sharedRef}<script>
 ${inline}
 </script>
@@ -558,7 +572,7 @@ export function indexPage(
       ? '<p class="state-note">尚无最近发布的文档（各库发布动作产生后在此呈现）。</p>'
       : view === 'grid'
         ? `<div class="vault-grid">\n  ${docs.map(workbenchDocCardHtml).join('\n  ')}\n  </div>`
-        : `<div class="table-wrap">
+        : `<div class="table-wrap table-scroll">
   <table>
   <thead><tr><th>文档</th><th class="col-tertiary">所属库</th><th class="col-secondary">维护者</th><th class="col-tertiary">更新时间</th></tr></thead>
   <tbody>
@@ -621,8 +635,9 @@ export function indexPage(
   );
 }
 
-/** 管理页（UI-RESTYLE：分区 admin-section 米色卡 + 表格包裹层 + 一次性令牌深色窗） */
-export function adminPage(viewer?: { username: string; is_instance_admin: boolean }): string {
+/** 管理页（UI-RESTYLE：分区 admin-section 米色卡 + 表格包裹层 + 一次性令牌深色窗；
+ * S21-T1/A1：viewer 附 display_name——顶栏徽章单形态接线） */
+export function adminPage(viewer?: { username: string; display_name?: string; is_instance_admin: boolean }): string {
   return layout(
     '管理',
     `<div class="page">
@@ -633,7 +648,7 @@ export function adminPage(viewer?: { username: string; is_instance_admin: boolea
 
   <section class="admin-section">
   <h2>员工管理</h2>
-  <div class="table-wrap">
+  <div class="table-wrap table-scroll">
   <table id="employees-table">
     <thead><tr><th>用户名</th><th>显示名</th><th>状态</th><th>实例管理员</th><th>创建时间</th><th>操作</th></tr></thead>
     <tbody></tbody>
@@ -652,8 +667,10 @@ export function adminPage(viewer?: { username: string; is_instance_admin: boolea
     </div>
     <p><button type="submit" class="btn-primary">邀请</button></p>
   </form>
+  <div class="token-block" hidden>
   <p>一次性口令重置令牌（明文仅此一次，经企业内渠道交付）：</p>
   <pre id="invite-token" class="token-view"></pre>
+  </div>
   <p><output id="invite-msg"></output></p>
   </section>
 
@@ -672,7 +689,7 @@ export function adminPage(viewer?: { username: string; is_instance_admin: boolea
   <section class="admin-section">
   <h2>成员与角色管理（我任库管理员的库）</h2>
   <p class="toolbar"><select id="member-vault"></select> <button id="member-load" type="button">加载成员</button></p>
-  <div class="table-wrap">
+  <div class="table-wrap table-scroll" id="members-table-wrap" hidden>
   <table id="members-table">
     <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>授权时间</th><th>操作</th></tr></thead>
     <tbody></tbody>
@@ -686,8 +703,10 @@ export function adminPage(viewer?: { username: string; is_instance_admin: boolea
     <p><button type="submit" class="btn-primary">授权 / 改角色</button></p>
   </form>
   <p><output id="member-msg"></output></p>
+  <div class="token-block" hidden>
   <p>重置口令的一次性令牌（明文仅此一次，独立于邀请令牌展示）：</p>
   <pre id="reset-token" class="token-view"></pre>
+  </div>
   </section>
 
   <section class="admin-section">
@@ -699,6 +718,13 @@ export function adminPage(viewer?: { username: string; is_instance_admin: boolea
 </div>
 `,
     `${SHARED_ALIAS}
+
+// —— 一次性令牌写入即展开（S21-T1 A3/D40：token 区块默认隐藏，生成后才显示）——
+function revealToken(id, value) {
+  const pre = document.getElementById(id);
+  pre.textContent = value || '';
+  if (pre.textContent) pre.closest('.token-block').hidden = false;
+}
 
 // —— 员工管理：列表（分页 limit=50 + cursor「加载更多」）+ 停用/启用 + 实例管理员开关 + 重置口令 ——
 
@@ -743,7 +769,7 @@ async function loadEmployees(append) {
           const r = await api('POST',
             '/api/v1/admin/employees/' + encodeURIComponent(e.username) + '/password-reset');
           // 独立展示区（不覆盖尚未交付的邀请令牌——两者明文都仅此一次，覆盖即丢失）
-          document.getElementById('reset-token').textContent = r.password_reset_token || '';
+          revealToken('reset-token', r.password_reset_token);
           show(document.getElementById('employees-msg'),
             e.username + ' 的重置令牌已生成（30 分钟内单次有效，见下方重置令牌区）');
         } catch (err) { show(document.getElementById('employees-msg'), err.message); }
@@ -784,7 +810,7 @@ document.getElementById('invite-form').addEventListener('submit', async (ev) => 
     const r = await api('POST', '/api/v1/admin/employees', {
       username: f.username.value, display_name: f.display_name.value,
     });
-    document.getElementById('invite-token').textContent = r.password_reset_token || '';
+    revealToken('invite-token', r.password_reset_token);
     show(document.getElementById('invite-msg'), '已邀请 ' + r.username);
     f.reset();
     await loadEmployees();
@@ -855,6 +881,7 @@ async function loadMembers() {
       tr.appendChild(td);
       tbody.appendChild(tr);
     }
+    document.getElementById('members-table-wrap').hidden = false; // S21-T1 A7：首批数据到位才呈现表头（未加载不裸表头）
     show(document.getElementById('member-msg'), slug + '：' + members.length + ' 名成员');
   } catch (err) {
     show(document.getElementById('member-msg'), '成员加载失败：' + err.message);
@@ -892,13 +919,23 @@ document.getElementById('maint-off').addEventListener('click', async () => {
   } catch (err) { show(document.getElementById('maint-msg'), err.message); }
 });
 `,
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'admin' } : undefined,
+    viewer !== undefined
+      ? {
+          user: {
+            username: viewer.username,
+            isAdmin: viewer.is_instance_admin,
+            ...(viewer.display_name !== undefined ? { displayName: viewer.display_name } : {}),
+          },
+          active: 'admin',
+        }
+      : undefined,
     true, // S12-T3：引用共享脚本 /assets/app.js（FETCH_HELPER 迁出——行为零变化）
   );
 }
 
-/** 员工自助凭据页（UI-RESTYLE：分区卡 + 表格包裹层 + 一次性令牌深色窗） */
-export function credentialsPage(viewer?: { username: string; is_instance_admin: boolean }): string {
+/** 员工自助凭据页（UI-RESTYLE：分区卡 + 表格包裹层 + 一次性令牌深色窗；
+ * S21-T1/A1：viewer 附 display_name——顶栏徽章单形态接线） */
+export function credentialsPage(viewer?: { username: string; display_name?: string; is_instance_admin: boolean }): string {
   return layout(
     '我的访问凭据',
     `<div class="page">
@@ -918,14 +955,16 @@ export function credentialsPage(viewer?: { username: string; is_instance_admin: 
     <label>库范围（可空 = 全部有权库；逗号分隔 slug 清单 = 只能收窄） <input name="vaults" placeholder="vault-a, vault-b"></label>
     <p><button type="submit" class="btn-primary">创建</button></p>
   </form>
+  <div class="token-block" hidden>
   <p><strong>新凭据明文仅此一次展示，关闭/刷新后不可再取（identity §3.1）：</strong></p>
   <pre id="cred-token" class="token-view"></pre>
+  </div>
   <p><output id="cred-msg"></output></p>
   </section>
 
   <section class="admin-section">
   <h2>我的凭据（脱敏显示）</h2>
-  <div class="table-wrap">
+  <div class="table-wrap table-scroll">
   <table id="cred-table">
     <thead><tr><th>名称</th><th>凭据</th><th>权限</th><th>库范围</th><th>创建</th><th>到期</th><th>最近使用</th><th>状态</th><th>操作</th></tr></thead>
     <tbody></tbody>
@@ -936,6 +975,13 @@ export function credentialsPage(viewer?: { username: string; is_instance_admin: 
 </div>
 `,
     `${SHARED_ALIAS}
+
+// —— 一次性令牌写入即展开（S21-T1 A3/D40：token 区块默认隐藏，生成后才显示）——
+function revealToken(id, value) {
+  const pre = document.getElementById(id);
+  pre.textContent = value || '';
+  if (pre.textContent) pre.closest('.token-block').hidden = false;
+}
 
 async function loadCredentials() {
   const tbody = document.querySelector('#cred-table tbody');
@@ -986,7 +1032,7 @@ document.getElementById('cred-form').addEventListener('submit', async (ev) => {
       expires_at: new Date(f.expires_at.value).toISOString(),
       scope,
     });
-    document.getElementById('cred-token').textContent = r.token || '';
+    revealToken('cred-token', r.token);
     show(document.getElementById('cred-msg'), '已创建（' + r.display_hint + '）——明文仅此一次，请立即保存');
     f.reset();
     await loadCredentials();
@@ -995,7 +1041,16 @@ document.getElementById('cred-form').addEventListener('submit', async (ev) => {
   }
 });
 `,
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'credentials' } : undefined,
+    viewer !== undefined
+      ? {
+          user: {
+            username: viewer.username,
+            isAdmin: viewer.is_instance_admin,
+            ...(viewer.display_name !== undefined ? { displayName: viewer.display_name } : {}),
+          },
+          active: 'credentials',
+        }
+      : undefined,
     true, // S12-T3：引用共享脚本 /assets/app.js（FETCH_HELPER 迁出——行为零变化）
   );
 }

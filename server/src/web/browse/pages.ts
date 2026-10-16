@@ -22,6 +22,8 @@ import type { LastCommitInfo, TreeEntry } from './tree.ts';
 /** 顶部导航登录态（呈现层透传——S2-T8「管理入口可见性」判定不在此） */
 export interface PageViewer {
   readonly username: string;
+  /** S21-T1/A1：展示名（顶栏徽章单形态接线；缺省回落用户名） */
+  readonly display_name?: string;
   readonly is_instance_admin: boolean;
 }
 
@@ -29,7 +31,7 @@ const ROLE_LABELS: Readonly<Record<string, string>> = { admin: '管理员', edit
 
 /** 有权库列表页（架构 §4.2：未授权的库不进入列表） */
 export function vaultListPage(
-  user: { username: string; is_instance_admin?: boolean },
+  user: { username: string; display_name?: string; is_instance_admin?: boolean },
   vaults: readonly VaultListItem[],
 ): string {
   const cards = vaults
@@ -57,7 +59,7 @@ export function vaultListPage(
 `,
     '',
     {
-      user: { username: user.username, isAdmin: user.is_instance_admin === true },
+      user: { username: user.username, displayName: user.display_name, isAdmin: user.is_instance_admin === true },
       active: 'vaults',
     },
   );
@@ -237,7 +239,7 @@ ${list}
 </div>
 `,
     '',
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 

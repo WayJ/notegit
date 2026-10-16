@@ -16,7 +16,7 @@ export function activityUrl(slug: string): string {
 /** 库内最近变更页：面包屑 + 条目列表（新→旧）+ 主体标注 */
 export function vaultActivityPage(input: {
   vault: { slug: string; name: string };
-  viewer: { username: string; is_instance_admin?: boolean };
+  viewer: { username: string; display_name?: string; is_instance_admin?: boolean };
   entries: readonly ActivityEntry[];
 }): string {
   const { vault, viewer, entries } = input;
@@ -39,7 +39,7 @@ export function vaultActivityPage(input: {
 `,
     '',
     {
-      user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true },
+      user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true },
       active: 'vaults',
     },
   );

@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
-import type { AuthSuccess } from '../../auth/lifecycle.ts';
-import { html } from '../page-kit.ts';
+import { html, type PageAuth } from '../page-kit.ts';
 import { myDraftsAcrossVaults } from './query.ts';
 import { draftsPage } from './pages.ts';
 
@@ -20,25 +19,22 @@ import { draftsPage } from './pages.ts';
 /** drafts 页所需选项（组装点传入项的结构化子集——模块不反向依赖 web/routes.ts） */
 export interface DraftsPageRoutesOptions {
   readonly db: DatabaseSync;
-  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<AuthSuccess | null>;
+  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<PageAuth | null>;
 }
 
 export function registerDraftsPageRoutes(app: FastifyInstance, opts: DraftsPageRoutesOptions): void {
   app.get('/drafts', async (req, reply) => {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return reply;
-    // 展示名实时查库（与 shell GET / 同一形态——展示字段；身份判定已由认证缝保证）
-    const row = opts.db
-      .prepare('SELECT display_name FROM employees WHERE id = ?')
-      .get(who.subject.employee_id) as { display_name: string } | undefined;
+    // 展示名由页面守卫附带（S21-T1/A1 集中到 createPageGuard——本路由不再自建查询）
     const rows = myDraftsAcrossVaults(opts.db, who.subject.employee_id);
     return html(
       reply,
       draftsPage({
         viewer: {
           username: who.subject.username,
+          displayName: who.display_name,
           isAdmin: who.subject.is_instance_admin,
-          ...(row !== undefined ? { displayName: row.display_name } : {}),
         },
         rows,
       }),

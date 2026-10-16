@@ -287,7 +287,7 @@ test('视图开关·默认 list：表格形态 + 切换链接纯 <a href>（零 
     const res = await h.b.app.inject({ method: 'GET', url: '/', headers: h.b.session(h.alice) });
     assert.equal(res.statusCode, 200);
     const section = docSectionOf(res.body);
-    assert.ok(section.includes('class="table-wrap"'), '默认 list=表格形态');
+    assert.ok(section.includes('class="table-wrap table-scroll"'), '默认 list=表格形态（S21-T1 起含横滚容器）');
     assert.ok(!section.includes('class="vault-grid"'), '默认态网格卡不渲染');
     assert.ok(section.includes('href="/?view=list"'), '切换链接=纯 <a href> 携带 query');
     assert.ok(section.includes('href="/?view=grid"'), '网格切换链接在位');
@@ -324,7 +324,7 @@ test('视图开关·非法值回落 list：view=block 按默认 list 渲染（�
     const res = await h.b.app.inject({ method: 'GET', url: '/?view=block', headers: h.b.session(h.alice) });
     assert.equal(res.statusCode, 200);
     const section = docSectionOf(res.body);
-    assert.ok(section.includes('class="table-wrap"'), '非法值=默认 list');
+    assert.ok(section.includes('class="table-wrap table-scroll"'), '非法值=默认 list');
     assert.ok(section.includes('aria-current="page">列表</a>'), '当前态回落列表');
     assert.ok(!res.body.includes('block'), '非法参数值不回显');
   } finally {

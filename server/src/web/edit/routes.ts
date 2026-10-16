@@ -6,7 +6,7 @@ import { createDbMembershipSource } from '../../vaults/membership.ts';
 import { VaultService } from '../../vaults/service.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
 import { execGit } from '../../publish/git-exec.ts';
-import { html, sendPageNotFound } from '../page-kit.ts';
+import { html, sendPageNotFound, type PageAuth } from '../page-kit.ts';
 import { canWriteVault } from '../role-gate.ts';
 import { browseUrl } from '../browse/pages.ts';
 import { readEntryAt, readBlobText, README_RENDER_MAX_BYTES, treePathOk } from '../browse/tree.ts';
@@ -51,7 +51,7 @@ import { editPreviewPlugin } from './preview.ts';
 export interface EditRoutesOptions {
   readonly db: DatabaseSync;
   readonly dataDir?: string;
-  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<AuthSuccess | null>;
+  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<PageAuth | null>;
 }
 
 /** 编辑页加载上限：与 README/预览渲染上限同值同因（防超大文件拖垮页面） */
@@ -74,7 +74,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
     req: FastifyRequest,
     reply: FastifyReply,
     slug: string,
-  ): Promise<{ who: AuthSuccess; slug: string; name: string; id: number; defaultBranch: string } | null> {
+  ): Promise<{ who: PageAuth; slug: string; name: string; id: number; defaultBranch: string } | null> {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return null;
     const decision = authorize(membershipSource, who.subject.employee_id, slug, 'read');
@@ -93,8 +93,8 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
 
   /** S12-T3 状态页 viewer（呈现层可选参数——与 T2 已做的 upload/rename/history
    *  状态页同形；判定/门槛/重定向零变化） */
-  function stateViewer(who: AuthSuccess): { username: string; is_instance_admin: boolean } {
-    return { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin };
+  function stateViewer(who: PageAuth): { username: string; display_name?: string; is_instance_admin: boolean } {
+    return { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin };
   }
 
   /** 默认分支 HEAD（base commit）；空库/解析失败 = null（分支创建语义） */
@@ -131,7 +131,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
 
     const baseCommit = await headCommit(opts.dataDir, vault.id, vault.defaultBranch);
     const canWrite = canWriteVault(membershipSource, vault.who.subject.employee_id, vault.slug);
-    const viewer = { username: vault.who.subject.username, is_instance_admin: vault.who.subject.is_instance_admin };
+    const viewer = { username: vault.who.subject.username, display_name: vault.who.display_name, is_instance_admin: vault.who.subject.is_instance_admin };
 
     // ?path= 候选路径（确认态/提示态）；无 path= 直出空表单（路径输入预填目录前缀）
     const candRaw = query.path === undefined ? undefined : String(query.path).replace(/^\/+/, '').replace(/\/+$/, '');
@@ -226,7 +226,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
           // S10-T2 权限感知：reader 只读态（D4：门槛 read 成员不变；canWriteVault
           // 唯一判定面，D17 呈现层——POST 侧鉴权原样）
           canWrite: canWriteVault(membershipSource, vault.who.subject.employee_id, vault.slug),
-          viewer: { username: vault.who.subject.username, is_instance_admin: vault.who.subject.is_instance_admin },
+          viewer: { username: vault.who.subject.username, display_name: vault.who.display_name, is_instance_admin: vault.who.subject.is_instance_admin },
           prefill:
             draft !== null
               ? parseDocForForm(draft.content)
@@ -254,7 +254,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
           baseCommit,
           // S10-T2 权限感知：同六字段页——reader 只读态（D4/D17）
           canWrite: canWriteVault(membershipSource, vault.who.subject.employee_id, vault.slug),
-          viewer: { username: vault.who.subject.username, is_instance_admin: vault.who.subject.is_instance_admin },
+          viewer: { username: vault.who.subject.username, display_name: vault.who.display_name, is_instance_admin: vault.who.subject.is_instance_admin },
           body: draft?.content ?? text,
           ...draftInfoOf(draft, baseCommit),
         }),
@@ -269,7 +269,7 @@ export function registerEditRoutes(app: FastifyInstance, opts: EditRoutesOptions
         baseCommit,
         // S10-T2 权限感知：reader 只读态——字段禁用、无保存/提交控件（D4/D17）
         canWrite: canWriteVault(membershipSource, vault.who.subject.employee_id, vault.slug),
-        viewer: { username: vault.who.subject.username, is_instance_admin: vault.who.subject.is_instance_admin },
+        viewer: { username: vault.who.subject.username, display_name: vault.who.display_name, is_instance_admin: vault.who.subject.is_instance_admin },
         prefill: draft !== null ? parseDocForForm(draft.content) : parseDocForForm(text),
         ...draftInfoOf(draft, baseCommit),
       }),

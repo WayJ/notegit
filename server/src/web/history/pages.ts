@@ -67,7 +67,7 @@ const AUTHOR_NOTE =
 export function historyPage(input: {
   vault: { slug: string; name: string };
   /** 当前认证员工（主体视角呈现——与作者元数据区分） */
-  viewer: { username: string; is_instance_admin?: boolean };
+  viewer: { username: string; display_name?: string; is_instance_admin?: boolean };
   treePath: string;
   commits: readonly CommitEntry[];
   page: number;
@@ -129,7 +129,7 @@ export function historyPage(input: {
 `,
     '',
     {
-      user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true },
+      user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true },
       active: 'vaults',
     },
   );
@@ -140,7 +140,7 @@ export function historyPage(input: {
 export function historyStatePage(
   vault: { slug: string; name: string },
   message: string,
-  viewer?: { username: string; is_instance_admin?: boolean },
+  viewer?: { username: string; display_name?: string; is_instance_admin?: boolean },
 ): string {
   return layout(
     `${vault.name} 提交历史`,
@@ -152,7 +152,7 @@ export function historyStatePage(
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
       : undefined,
   );
 }
@@ -182,7 +182,7 @@ export function diffPage(input: {
   treePath: string;
   diff: string;
   /** S12-T2（coordinator 批准扩展）：可选 viewer → 顶栏账户位 */
-  viewer?: { username: string; is_instance_admin?: boolean };
+  viewer?: { username: string; display_name?: string; is_instance_admin?: boolean };
 }): string {
   const { vault, commitOid, treePath, diff, viewer } = input;
   const body =
@@ -207,7 +207,7 @@ export function diffPage(input: {
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
       : undefined,
   );
 }
@@ -240,7 +240,7 @@ export function versionPage(input: {
    *  知识 Markdown——其余形态不生成（edit GET 对非 .md 一律 404）。 */
   canWrite?: boolean;
   /** S12-T2（coordinator 批准扩展）：可选 viewer → 顶栏账户位 */
-  viewer?: { username: string; is_instance_admin?: boolean };
+  viewer?: { username: string; display_name?: string; is_instance_admin?: boolean };
 }): string {
   const { vault, commitOid, treePath, sizeBytes, body, canWrite, viewer } = input;
   const name = treePath.includes('/') ? treePath.slice(treePath.lastIndexOf('/') + 1) : treePath;
@@ -278,7 +278,7 @@ export function versionPage(input: {
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
       : undefined,
   );
 }
@@ -332,7 +332,7 @@ export function restorePage(input: {
 const CITE_FORMAT_HINT = '库 / 路径 @ commit（例：v-handbook / docs/getting-started.md @ 4c55b7a0d1e2f3a4）';
 
 /** 引用解析入口页（GET /cite 空输入：粘贴表单 + 格式说明——GET 表单、无 JS） */
-export function citeEntryPage(viewer?: { username: string; is_instance_admin?: boolean }): string {
+export function citeEntryPage(viewer?: { username: string; display_name?: string; is_instance_admin?: boolean }): string {
   return layout(
     '引用解析',
     `<div class="page page-narrow">
@@ -352,13 +352,13 @@ export function citeEntryPage(viewer?: { username: string; is_instance_admin?: b
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
       : { active: 'cite' },
   );
 }
 
 /** 引用格式失败页（404）：非三要素形态的可理解错误（静态同页——只谈格式，不触库判定） */
-export function citeFormatErrorPage(viewer?: { username: string; is_instance_admin?: boolean }): string {
+export function citeFormatErrorPage(viewer?: { username: string; display_name?: string; is_instance_admin?: boolean }): string {
   return layout(
     '引用格式无法解析',
     `<div class="page page-narrow">
@@ -370,7 +370,7 @@ export function citeFormatErrorPage(viewer?: { username: string; is_instance_adm
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
       : { active: 'cite' },
   );
 }
@@ -378,7 +378,7 @@ export function citeFormatErrorPage(viewer?: { username: string; is_instance_adm
 /** 引用存在性失败页（404 反存在性）：已过权限判定的引用未能对应任何历史版本。
  *  静态同页不区分原因（提交未知/非提交对象/该路径在该提交处不存在——不泄露
  *  库内容）；无权/未知库不在此页（D-IC-06 与页面族同页同码 404）。 */
-export function citeUnresolvablePage(viewer?: { username: string; is_instance_admin?: boolean }): string {
+export function citeUnresolvablePage(viewer?: { username: string; display_name?: string; is_instance_admin?: boolean }): string {
   return layout(
     '引用无法解析',
     `<div class="page page-narrow">
@@ -389,7 +389,7 @@ export function citeUnresolvablePage(viewer?: { username: string; is_instance_ad
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
       : { active: 'cite' },
   );
 }

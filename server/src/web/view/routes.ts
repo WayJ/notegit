@@ -5,7 +5,7 @@ import { authorize } from '../../auth/lifecycle.ts';
 import { createDbMembershipSource } from '../../vaults/membership.ts';
 import { VaultService } from '../../vaults/service.ts';
 import { extractFrontmatter } from 'notegit-validation';
-import { html, sendPageNotFound } from '../page-kit.ts';
+import { html, sendPageNotFound, type PageAuth } from '../page-kit.ts';
 import { canWriteVault } from '../role-gate.ts';
 import { browseStatePage, browseUrl } from '../browse/pages.ts';
 import { readEntryAt, readBlobText, README_RENDER_MAX_BYTES } from '../browse/tree.ts';
@@ -34,7 +34,7 @@ import { viewPage, attachmentImagePage, noPreviewPage, tooLargePage } from './pa
 export interface ViewRoutesOptions {
   readonly db: DatabaseSync;
   readonly dataDir?: string;
-  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<AuthSuccess | null>;
+  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<PageAuth | null>;
   /** 附件鉴权通道解析器（S4-T4 装配传入；缺省 = 通道未接入占位） */
   readonly attachmentImageUrl?: (repoRelPath: string) => string | null;
 }
@@ -66,7 +66,7 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
     req: FastifyRequest,
     reply: FastifyReply,
     slug: string,
-  ): Promise<{ who: AuthSuccess; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
+  ): Promise<{ who: PageAuth; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return null;
     const decision = authorize(membershipSource, who.subject.employee_id, slug, 'read');
@@ -138,7 +138,7 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
       vault,
       entryPath,
       sizeBytes: entry.size,
-      viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+      viewer: { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin },
     };
 
     if ((entry.size ?? 0) > PREVIEW_RENDER_MAX_BYTES) {
@@ -179,7 +179,7 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
         sizeBytes: entry.size,
         bodyHtml: rendered.html,
         strippedHtml: rendered.strippedHtml,
-        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+        viewer: { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin },
         canWrite,
       }),
     );

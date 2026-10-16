@@ -14,6 +14,10 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
  * 约定见 assets/app.js 头注）。与 styles.css 同构注册：模块加载期一次读入、
  * 公开访问（脚本不含实例数据）、GET 免 CSRF。
  *
+ * S21-T1（A4）：GET /favicon.ico —— 品牌标记 favicon（spike-mark 形象，
+ * scripts/make-favicon.mjs 生成的 32×32 PNG-in-ICO；与 styles.css 同构注册：
+ * 模块加载期一次读入、公开访问）。此前全站无 favicon——每页 console 404。
+ *
  * 缓存热修（2026-10-15，v2 换轨日暴露）：可变内容挂稳定 URL 不得配强缓存
  * （原 public, max-age=3600 使视觉切换后全体用户最长 1h 仍见旧 CSS）。改
  * **协商缓存**：`Cache-Control: no-cache`（每次重验证）+ 内容 sha256 ETag，
@@ -23,14 +27,15 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 
 const STYLES = readFileSync(new URL('./assets/styles.css', import.meta.url), 'utf8');
 const APP_JS = readFileSync(new URL('./assets/app.js', import.meta.url), 'utf8');
+const FAVICON = readFileSync(new URL('./assets/favicon.ico', import.meta.url));
 
 /** 内容 ETag（sha256 双引号形态——协商缓存比较用；启动期一次计算） */
-function contentEtag(body: string): string {
+function contentEtag(body: string | Buffer): string {
   return `"${createHash('sha256').update(body).digest('hex')}"`;
 }
 
 /** 协商缓存发送（styles.css/app.js 共用：no-cache + ETag；命中 If-None-Match 304） */
-function sendNegotiated(reply: FastifyReply, contentType: string, body: string): FastifyReply {
+function sendNegotiated(reply: FastifyReply, contentType: string, body: string | Buffer): FastifyReply {
   const etag = contentEtag(body);
   reply.type(contentType).header('cache-control', 'no-cache').header('etag', etag);
   if (reply.request.headers['if-none-match'] === etag) {
@@ -45,5 +50,8 @@ export function registerAssetRoutes(app: FastifyInstance): void {
   });
   app.get('/assets/app.js', async (_req, reply) => {
     return sendNegotiated(reply, 'application/javascript; charset=utf-8', APP_JS);
+  });
+  app.get('/favicon.ico', async (_req, reply) => {
+    return sendNegotiated(reply, 'image/x-icon', FAVICON);
   });
 }
