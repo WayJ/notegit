@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { execGit } from '../../publish/git-exec.ts';
+import { readTreeCached } from '../../readcache/tree-cache.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
 import type { RunGit } from '../browse/tree.ts';
 import type { RecentDocumentRow } from './query.ts';
@@ -14,7 +14,9 @@ import type { RecentDocDisplay } from '../pages.ts';
  *   「N 次发布」微标注）。
  * - **与各库 HEAD 树求交**：逐库读默认分支 HEAD 的递归路径清单
  *   （`git ls-tree -r -z`——与派生索引同快照语义、不读 blob），不在当前树中的
- *   路径（已被删除）不再呈现。
+ *   路径（已被删除）不再呈现。S24-T1 起本读取经单源跨请求树缓存
+ *   （readcache/tree-cache.ts，D1——原 S21 的 per-request Map 由共享缓存层取代：
+ *   同库重复行/重复请求均命中同一层，失效一处处处生效）。
  *
  * `recentDocuments`（query.ts，D25/D30）零改动：排序键、成员过滤、事件扫描
  * 上限、降级语义全部保持——本模块是其输出的纯函数式后处理（D45：显示层求交，
@@ -26,7 +28,7 @@ import type { RecentDocDisplay } from '../pages.ts';
 export interface PresentRecentOptions {
   /** 仓库根目录（→ vaultRepoPath 映射库 ID 到磁盘路径） */
   readonly dataDir: string;
-  /** git 执行面注入缝（缺省 execGit；与 browse/tree.ts 同一缝） */
+  /** git 执行面注入缝（缺省经单源树缓存 readTreeCached——S24 D1；注入时逐调用直通不缓存） */
   readonly runGit?: RunGit;
 }
 
@@ -81,18 +83,15 @@ export async function presentRecentDocuments(
     }
   }
 
-  // ② HEAD 树求交：逐库取现存路径集（同库一次 spawn），路径不在集中即出局
-  const runGit = opts.runGit ?? execGit;
+  // ② HEAD 树求交：逐库取现存路径集，路径不在集中即出局。同库重复行/重复请求
+  // 经单源树缓存命中（S24 D1——缺省执行面 readTreeCached，跨请求去重 spawn）；
+  // 注入 runGit 的测试形态逐调用直通
+  const runGit = opts.runGit ?? readTreeCached;
   const vaultStmt = db.prepare('SELECT id, default_branch FROM vaults WHERE slug = ?');
-  const treeCache = new Map<string, Set<string> | null>();
   const out: RecentDocDisplay[] = [];
   for (const d of seen.values()) {
-    let tree = treeCache.get(d.vaultSlug);
-    if (tree === undefined) {
-      const v = vaultStmt.get(d.vaultSlug) as { id: number; default_branch: string } | undefined;
-      tree = v === undefined ? null : await headPaths(runGit, opts.dataDir, v.id, v.default_branch);
-      treeCache.set(d.vaultSlug, tree);
-    }
+    const v = vaultStmt.get(d.vaultSlug) as { id: number; default_branch: string } | undefined;
+    const tree = v === undefined ? null : await headPaths(runGit, opts.dataDir, v.id, v.default_branch);
     if (tree !== null && tree.has(d.path)) out.push(d);
   }
   return out;

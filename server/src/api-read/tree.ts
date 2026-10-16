@@ -3,7 +3,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import { authorize, rejectAuth, type AuthSuccess, type RequestAuthenticator, type VaultScope } from '../auth/lifecycle.ts';
 import { createDbMembershipSource } from '../vaults/membership.ts';
 import { VaultService } from '../vaults/service.ts';
-import { execGit, type GitExecOptions } from '../publish/git-exec.ts';
+import type { GitExecOptions } from '../publish/git-exec.ts';
+import { readTreeCached } from '../readcache/tree-cache.ts';
 import { vaultRepoPath } from '../vaults/repo-path.ts';
 
 /**
@@ -24,8 +25,9 @@ import { vaultRepoPath } from '../vaults/repo-path.ts';
  * - 认证/授权：统一缝 authenticateRequest（匿名 401）+ authorize read 门槛
  *   （token scope 交集收窄）；无权/不存在/空库/未知路径一律 404 E-RES-001 同
  *   信封（D-IC-06 API 面）；GET 免 CSRF；只读无审计行；写通道零变更。
- * - ls-tree 执行沿 browse/tree.ts 的注入缝形态（runGit 参数缺省 execGit，可测）
- *   ；每请求实时 spawn、无缓存（D-IC-05 精神）。
+ * - ls-tree 执行沿 browse/tree.ts 的注入缝形态（runGit 参数可注入，可测）；
+ *   缺省经单源跨请求树缓存（S24-T1，readcache/tree-cache.ts——失效钩子+TTL
+ *   兜底+fail-closed，读端点响应零变化）；注入 runGit 时直通不缓存（测试缝）。
  *
  * D1 文件所有权：本文件归 S18-T2；api-read/vaults.ts 归 T1（路由注册组装点
  * app.ts 各持一行，互不改他人行）。
@@ -72,7 +74,7 @@ export interface FlatTreeEntry {
  * 递归路径直出。子模块（commit 条目）跳过——不虚构 v1 契约外类型。
  * 截断在解析后按输出序取前 TREE_ENTRY_LIMIT 条（树序=深度优先字节序）。
  */
-export async function readFlatTree(repoPath: string, rev: string, runGit: RunGit = execGit): Promise<FlatTreeRead> {
+export async function readFlatTree(repoPath: string, rev: string, runGit: RunGit = readTreeCached): Promise<FlatTreeRead> {
   let out: string;
   try {
     out = await runGit(['ls-tree', '-r', '-t', '-l', '-z', '--full-tree', rev], { cwd: repoPath });
@@ -115,7 +117,7 @@ export async function resolveRefCommit(
   const spec = ref === undefined || ref === '' ? `refs/heads/${defaultBranch}` : `${ref}^{commit}`;
   if (ref !== undefined && ref !== '' && !OID_SHAPE.test(ref)) return { kind: 'bad-shape' };
   try {
-    return { kind: 'ok', commitOid: (await execGit(['rev-parse', '--verify', spec], { cwd: repoPath })).trim() };
+    return { kind: 'ok', commitOid: (await readTreeCached(['rev-parse', '--verify', spec], { cwd: repoPath })).trim() };
   } catch (err) {
     if (!isGitExitFailure(err)) return { kind: 'unavailable' };
     return { kind: 'not-found' };
