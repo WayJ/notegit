@@ -34,7 +34,7 @@ export function draftsPage(input: {
     `<div class="page">
   <div class="page-head">
   <h1>我的草稿</h1>
-  <p class="page-meta">当前登录：${escapeHtml(viewer.username)} · 跨库列出本人现行草稿（${rows.length} 条） · <a href="/">返回首页</a></p>
+  <p class="page-sub page-sub-quiet">跨库列出本人现行草稿（${rows.length} 条） · <a href="/">返回首页</a></p>
   </div>
   ${listing}
   <p class="note">仅本人可见（草稿按作者私有）；按你的库成员关系过滤——已撤权库的草稿行不呈现（草稿数据保留，重新获权后恢复可见）；「继续编辑」回到对应库的编辑页。</p>

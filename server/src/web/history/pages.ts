@@ -1,4 +1,4 @@
-import { escapeHtml, layout } from '../pages.ts';
+import { escapeHtml, formatRelativeTime, layout } from '../pages.ts';
 import { editUrl } from '../view/pages.ts';
 import type { CommitEntry } from './log.ts';
 import { formatCitation } from './cite.ts';
@@ -55,9 +55,10 @@ function browseHref(slug: string): string {
   return `/vaults/${encodeURIComponent(slug)}/browse`;
 }
 
-/** DOD-03 主体标注（库级/路径级历史页共用）：作者=可填写元数据，主体=认证员工 */
+/** 主体标注（库级/路径级历史页共用；S21-T2/B6 页级说明——不逐行括注）：
+ *  作者与时间为提交记录自带信息，主体=认证员工（员工可读表述） */
 const AUTHOR_NOTE =
-  '<p class="note">提交作者为 Git 元数据展示（推送方可填写任意值）；操作主体以服务端审计记录的认证员工为准（DOD-03）。</p>';
+  '<p class="note">提交人与提交时间为 Git 元数据（推送方可自行填写，不代表登录身份）；站内操作记录以认证员工为准。</p>';
 
 /** 历史页（库级 treePath='' / 路径级 treePath=树路径）：提交行 data 属性与
  *  `git log --format` 对照（一致性断言所依）；分页跨页导航 rel=prev/next。
@@ -100,9 +101,16 @@ export function historyPage(input: {
     treePath === ''
       ? ''
       : ` <a href="${versionUrl(vault.slug, oid, treePath)}">预览</a> <a href="${restoreUrl(vault.slug, oid, treePath)}">还原到此版本</a> <code class="citation">${escapeHtml(formatCitation(vault.slug, treePath, oid))}</code>`;
+  // S21-T2/B6：历史行两段式——主行=短 OID＋提交主题；次行=作者 · 相对时间
+  // （title=ISO 绝对时间——全站相对时间统一）· diff/预览/还原链接。「（Git
+  // 元数据）」逐行括注退役，由页级 AUTHOR_NOTE 说明承担。data-* 属性序列
+  // 原样保留（一致性断言与 fixtures pageCommitSeq 提取所依）。
   const rows = commits
     .map(
-      (c) => `  <li class="commit" data-short="${escapeHtml(c.shortOid)}" data-author="${escapeHtml(c.authorName)}" data-date="${escapeHtml(c.authorDate)}" data-oid="${escapeHtml(c.oid)}" data-email="${escapeHtml(c.authorEmail)}" data-subject="${escapeHtml(c.subject)}">${escapeHtml(c.shortOid)} ${escapeHtml(c.subject)} — ${escapeHtml(c.authorName)}（Git 元数据） ${escapeHtml(c.authorDate)}${diffLinks(c)}${rowLinks(c.oid)}</li>`,
+      (c) => `  <li class="commit" data-short="${escapeHtml(c.shortOid)}" data-author="${escapeHtml(c.authorName)}" data-date="${escapeHtml(c.authorDate)}" data-oid="${escapeHtml(c.oid)}" data-email="${escapeHtml(c.authorEmail)}" data-subject="${escapeHtml(c.subject)}">
+    <div class="commit-main"><code class="commit-oid">${escapeHtml(c.shortOid)}</code> <span class="commit-subject">${escapeHtml(c.subject)}</span></div>
+    <div class="commit-meta"><span title="${escapeHtml(c.authorDate)}">${escapeHtml(c.authorName)} · ${escapeHtml(formatRelativeTime(c.authorDate))}</span>${diffLinks(c)}${rowLinks(c.oid)}</div>
+  </li>`,
     )
     .join('\n');
   const listing =
@@ -120,7 +128,7 @@ export function historyPage(input: {
   <div class="page-head">
   <h1>${escapeHtml(vault.name)} 提交历史${scope}</h1>
   <nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
-  <p class="page-meta">当前登录：${escapeHtml(viewer.username)} · 默认分支实时读 Git · <a href="${backToBrowse}">返回目录</a>${editEntry}</p>
+  <p class="page-sub page-sub-quiet">默认分支实时读 Git · <a href="${backToBrowse}">返回目录</a>${editEntry}</p>
   </div>
   ${listing}
   ${pager}

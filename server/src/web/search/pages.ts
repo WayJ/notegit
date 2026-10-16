@@ -18,7 +18,14 @@ import type { SearchHit } from '../../search/query.ts';
  * 单仍可提交——渐进增强）。
  */
 
-const MATCH_LABELS: Readonly<Record<string, string>> = { title: '标题', tags: '标签', summary: '摘要' };
+/** 命中字段中文映射（S21-T2/B5：查询面 matched 全集 title/tags/summary/path/body） */
+const MATCH_LABELS: Readonly<Record<string, string>> = {
+  title: '标题',
+  tags: '标签',
+  summary: '摘要',
+  path: '路径',
+  body: '正文',
+};
 
 /**
  * ⌘K/Ctrl-K 聚焦搜索框（S15 D1：仅 /search 页内，不做全局快捷键）。页内增强
@@ -62,13 +69,19 @@ export function searchPage(input: SearchPageInput): string {
         `<option value="${escapeHtml(v.slug)}"${vaultSelected === v.slug ? ' selected' : ''}>${escapeHtml(v.name)}（${escapeHtml(v.slug)}）</option>`,
     ),
   ].join('\n    ');
+  // S21-T2/B5：表单改网格（label 置控件上方左对齐、select/按钮与列对齐——
+  // field 包裹层承载列位；CSS .search-form 网格三列）。旧扁平 label 行退役。
   const form = `<form method="get" action="/search" class="search-form">
-  <label for="q">关键词（标题 / 标签 / 摘要）</label>
-  <input type="search" id="q" name="q" value="${q === null ? '' : escapeHtml(q)}" maxlength="200" required>
-  <label for="vault">库</label>
-  <select id="vault" name="vault">
+  <div class="field">
+    <label for="q">关键词（标题 / 标签 / 摘要 / 路径 / 正文）</label>
+    <input type="search" id="q" name="q" value="${q === null ? '' : escapeHtml(q)}" maxlength="200" required>
+  </div>
+  <div class="field">
+    <label for="vault">库</label>
+    <select id="vault" name="vault">
     ${vaultOptions}
-  </select>
+    </select>
+  </div>
   <button type="submit" class="btn-primary">查找</button>
 </form>`;
 
@@ -78,10 +91,16 @@ export function searchPage(input: SearchPageInput): string {
     const rows = hits
       .map((hit) => {
         const matchedLabels = hit.matched.map((m) => MATCH_LABELS[m] ?? m).join('、');
+        // S21-T2/B5：标题列=链接（指向 view——文档主入口）；路径列降为次要文本
+        // （原路径链接退役，链接语义由标题承担；库列链接保留）
+        const titleCell =
+          hit.title === null
+            ? `<a href="${viewUrl(hit.vaultSlug, hit.path)}">${escapeHtml(hit.path)}</a>`
+            : `<a href="${viewUrl(hit.vaultSlug, hit.path)}">${escapeHtml(hit.title)}</a>`;
         return `  <tr data-vault="${escapeHtml(hit.vaultSlug)}" data-path="${escapeHtml(hit.path)}" data-commit="${escapeHtml(hit.commitOid)}" data-matched="${escapeHtml(hit.matched.join(','))}">
     <td><a href="${browseUrl(hit.vaultSlug, '')}">${escapeHtml(hit.vaultName)}</a></td>
-    <td><a href="${viewUrl(hit.vaultSlug, hit.path)}">${escapeHtml(hit.path)}</a></td>
-    <td>${hit.title === null ? '<em>（无标题——frontmatter 豁免文件）</em>' : escapeHtml(hit.title)}</td>
+    <td class="col-tertiary">${escapeHtml(hit.path)}</td>
+    <td>${titleCell}</td>
     <td>${hit.tags.length === 0 ? '' : escapeHtml(hit.tags.join('、'))}</td>
     <td>${escapeHtml(hit.summary)}</td>
     <td>${escapeHtml(matchedLabels)}</td>
@@ -109,7 +128,7 @@ ${listing}`;
     `<div class="page">
   <div class="page-head">
   <h1>查找</h1>
-  <p class="page-meta">当前登录：${escapeHtml(input.viewer.username)} · <a href="/">返回首页</a> · <a href="/vaults">知识库</a></p>
+  <p class="page-sub page-sub-quiet">跨库搜索已发布文档（标题/标签/摘要/路径/正文） · <a href="/">返回首页</a></p>
   </div>
   ${input.notice === undefined ? '' : `<p class="warn-block">${escapeHtml(input.notice)}</p>`}
   ${form}

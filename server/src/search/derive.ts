@@ -78,8 +78,10 @@ function unquote(value: string): string {
   return value;
 }
 
-/** 行式解析 frontmatter 的 title（标量行）。多行折叠等形态返回 null（如实少记） */
-function parseTitle(blockText: string): string | null {
+/** 行式解析 frontmatter 的 title（标量行）。多行折叠等形态返回 null（如实少记）。
+ *  S21-T2 起导出：view 阅读页元数据条（B4）复用同一保守解析面——索引怎么切
+ *  title，阅读页就怎么呈现，不另写第二套边界语义。 */
+export function parseTitle(blockText: string): string | null {
   for (const rawLine of blockText.split('\n')) {
     const m = /^title:[ \t]*(.*)$/.exec(rawLine);
     if (m === null) continue;
@@ -90,8 +92,9 @@ function parseTitle(blockText: string): string | null {
   return null;
 }
 
-/** 行式解析 frontmatter 的 tags（块式序列 / 流式序列）。其余形态返回空数组 */
-function parseTags(blockText: string): string[] {
+/** 行式解析 frontmatter 的 tags（块式序列 / 流式序列）。其余形态返回空数组。
+ *  S21-T2 起导出：view 阅读页元数据条（B4）复用（同 parseTitle 导出因由）。 */
+export function parseTags(blockText: string): string[] {
   const lines = blockText.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const m = /^tags:[ \t]*(.*)$/.exec(lines[i]!);

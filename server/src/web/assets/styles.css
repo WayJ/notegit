@@ -471,6 +471,13 @@ p.note, .draft-note { font-size: 12px; color: var(--ink3); }
   color: var(--ink2);
   margin: var(--sp-xxs) 0 0;
 }
+/* S21-T2/B3：旧页页头副行=工作台副标题的 quiet 变体（DESIGN.md §4 页头副行
+   ——11px ink3 小字；身份呈现只由顶栏账户菜单承担） */
+.page-sub.page-sub-quiet {
+  font-size: var(--fs-aux-lg);
+  color: var(--ink3);
+}
+.page-sub-quiet a { color: var(--ink3); }
 .head-meta { flex: none; }
 .head-meta .index-status { margin: 0 0 2px; }   /* 右位底对齐（原上边距语义挪位） */
 
@@ -734,6 +741,20 @@ ul.commits li.commit {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+/* S21-T2/B6：历史行两段式——主行=短 OID＋主题（--ink）；次行=作者·相对时间·
+   链接（--ink3 小字）；「Git 元数据」改页级说明后行内不再括注 */
+.commit-main { color: var(--ink); }
+.commit-main .commit-oid {
+  font-family: var(--font-mono);
+  font-size: var(--fs-aux-sm);
+  color: var(--ink3);
+  background: var(--inset);
+  border-radius: var(--r-chip);
+  padding: 0.1em 0.4em;
+}
+.commit-meta { margin-top: 2px; font-size: var(--fs-aux-sm); color: var(--ink3); }
+.commit-meta a { color: var(--ink3); }
+.commit-meta code.citation { font-size: var(--fs-aux-sm); }
 ul.commits li.commit code.citation {
   background: var(--inset);
   color: var(--ink3);
@@ -784,27 +805,26 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(237
   color: var(--ink);
 }
 
-/* ── 查找页（§5：40px 输入/搜索框——surface 底 line-strong 描边内阴影） ─────── */
+/* ── 查找页（§5：40px 输入/搜索框——surface 底 line-strong 描边内阴影） ───────
+   S21-T2/B5：表单网格三列（关键词 2fr / 库 1fr / 按钮自适应）——label 置控件
+   上方左对齐（10.5px ink3），select/按钮与列底对齐；≤767px 单列堆叠。 */
 .search-form {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-sm);
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  gap: var(--sp-sm) var(--sp-md);
+  align-items: end;
   margin: var(--sp-md) 0;
 }
+.search-form .field { display: flex; flex-direction: column; gap: var(--sp-xxs); min-width: 0; }
 .search-form label {
-  flex: 1 1 320px;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-sm);
+  font-size: var(--fs-aux-sm);
+  color: var(--ink3);
   margin-bottom: 0;
-  max-width: 640px;
-  font-size: 12px;
-  color: var(--ink);
+  text-align: left;
 }
-.search-form input { flex: 1 1 auto; }
-/* S15-T1 库筛选下拉（visual token 全承既有 select 控件——只补 flex 行内尺寸） */
-.search-form select { flex: 0 1 auto; width: auto; min-width: 180px; }
+.search-form input { width: 100%; }
+/* S15-T1 库筛选下拉（visual token 全承既有 select 控件）；B5 网格内随列宽 */
+.search-form select { width: 100%; min-width: 140px; }
 
 /* ── S17-T1 首页搜索工具条（差距4；§5 输入/搜索框——⌘K 角标=10px line 描边小片） ──
    GET form action=/search（q+vault 与 /search 同参数面）；⌕ 图标与角标为呈现件，
@@ -892,6 +912,31 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(237
   margin: 0 0 var(--sp-md);
 }
 .admin-section h2 { margin-top: 0; }
+/* S21-T2/B10：维护模式状态行——关=正常运行（--green 状态点）；开=维护中
+   （--orange-ink 文字＋--orange-tint 高亮条，DESIGN.md §5 维护模式区块） */
+.maint-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-xxs);
+  margin: 0 0 var(--sp-sm);
+  padding: var(--sp-xxs) var(--sp-sm);
+  border-radius: var(--r-chip);
+  font-size: var(--fs-aux-lg);
+  color: var(--ink2);
+  background: var(--inset);
+}
+.maint-status .status-dot {
+  width: 6px;      /* §5 状态点：6px 圆点（doc-status 同形） */
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  flex: none;
+}
+.maint-status.is-on {
+  background: var(--orange-tint);
+  color: var(--orange-ink);
+}
+.maint-status.is-on .status-dot { background: var(--orange); }
 .form-row { display: flex; flex-wrap: wrap; gap: var(--sp-md); align-items: flex-end; }
 .form-row label { flex: 1 1 200px; margin-bottom: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: var(--sp-sm); align-items: center; margin-bottom: var(--sp-md); }
@@ -1190,7 +1235,7 @@ pre.diff-body .diff-line[data-kind="del"] { color: #eda7a7; background: rgba(237
   .table-wrap th, .table-wrap td { padding: 6px 8px; }
   .site-footer-inner { flex-direction: column; align-items: flex-start; gap: var(--sp-sm); }
   .site-footer .foot-fine { margin-left: 0; }
-  .search-form label { flex-basis: 100%; }
+  .search-form { grid-template-columns: 1fr; }   /* S21-T2/B5：窄屏单列堆叠（按钮随行） */
 }
 
 /* ── S14-T2 断点一档：≤1020px 收窄侧栏（§4：190px）＋ 隐藏次要表格列 ──────────

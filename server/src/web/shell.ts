@@ -4,6 +4,7 @@ import { indexPage, loginPage, adminPage, credentialsPage, layout } from './page
 import { html, type PageAuth } from './page-kit.ts';
 import { recentChangesForEmployee } from './activity/query.ts';
 import { workbenchSummary, vaultCards, recentDocuments, indexStatus, WORKBENCH_RECENT_DOC_LIMIT } from './workbench/query.ts';
+import { presentRecentDocuments } from './workbench/display.ts';
 
 /**
  * S2-T8 最小页面外壳路由（GET；数据由页内 fetch 调 api.md 既有端点）：
@@ -31,6 +32,9 @@ export interface ShellRoutesOptions {
   /** S14-T3：数据目录（工作台文档流的 git 路径派生所需）。缺省（S2 测试形态）
    *  时文档流如实为空态——与 browse 仓库读取空态同形态。 */
   readonly dataDir?: string;
+  /** S21-T2/B10：维护闸门（/admin 页维护模式状态位只读消费 isEnabled——呈现
+   *  层；缺省（无 gate 注入形态）按「正常运行」渲染）。开关判定仍在 API 端点。 */
+  readonly maintenanceGate?: { isEnabled(): boolean };
 }
 
 export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptions): void {
@@ -43,12 +47,18 @@ export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptio
     // S14-T3 工作台接线：三能力全部来自 web/workbench/query.ts（D26 成员过滤与
     // 统计口径已在该层锁定；本接线行不含判定逻辑）。dataDir 缺省（S2 测试形态）
     // 时文档流如实为空态——与 browse 仓库读取空态同形态。
+    // S21-T2/B7：recentDocuments 输出经显示层整理（workbench/display.ts——按
+    // 路径去重＋与各库 HEAD 树求交，已删文档不再呈现；D25/D30 数据面语义不变）。
     const docs =
       opts.dataDir === undefined
         ? []
-        : await recentDocuments(opts.db, outcome.subject.employee_id, WORKBENCH_RECENT_DOC_LIMIT, {
-            dataDir: opts.dataDir,
-          });
+        : await presentRecentDocuments(
+            opts.db,
+            await recentDocuments(opts.db, outcome.subject.employee_id, WORKBENCH_RECENT_DOC_LIMIT, {
+              dataDir: opts.dataDir,
+            }),
+            { dataDir: opts.dataDir },
+          );
     // S11-T2 首页「最近变更」区块：跨库最近发布（查询面实时成员过滤——
     // web/activity/query.ts，与检索同一判定面；本接线行不含判定逻辑）
     const recent = recentChangesForEmployee(opts.db, outcome.subject.employee_id);
@@ -98,11 +108,16 @@ export function registerShellRoutes(app: FastifyInstance, opts: ShellRoutesOptio
     }
     return html(
       reply,
-      adminPage({
-        username: outcome.subject.username,
-        ...(outcome.display_name !== undefined ? { display_name: outcome.display_name } : {}),
-        is_instance_admin: outcome.subject.is_instance_admin,
-      }),
+      adminPage(
+        {
+          username: outcome.subject.username,
+          ...(outcome.display_name !== undefined ? { display_name: outcome.display_name } : {}),
+          is_instance_admin: outcome.subject.is_instance_admin,
+        },
+        // S21-T2/B10：维护模式区块状态位——服务端读闸门实态（呈现层；开关判定
+        // 仍在 API 端点，与页面层分工不变）
+        { maintenanceOn: opts.maintenanceGate?.isEnabled() === true },
+      ),
     );
   });
 

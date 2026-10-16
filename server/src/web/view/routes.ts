@@ -8,8 +8,10 @@ import { extractFrontmatter } from 'notegit-validation';
 import { html, sendPageNotFound, type PageAuth } from '../page-kit.ts';
 import { canWriteVault } from '../role-gate.ts';
 import { browseStatePage, browseUrl } from '../browse/pages.ts';
-import { readEntryAt, readBlobText, README_RENDER_MAX_BYTES } from '../browse/tree.ts';
+import { readEntryAt, readBlobText, readLastCommitForPath, README_RENDER_MAX_BYTES } from '../browse/tree.ts';
+import { parseTitle, parseTags } from '../../search/derive.ts';
 import { renderMarkdown } from './render.ts';
+import type { DocMeta } from './pages.ts';
 import {
   ATTACHMENT_CHANNEL_PENDING,
   attachmentUrl,
@@ -56,6 +58,44 @@ function bodyAfterFrontmatter(text: string): string {
   if (fm.kind === 'block' && fm.closeLine !== undefined) return lines.slice(fm.closeLine).join('\n');
   if (fm.kind === 'unterminated') return lines.slice(1).join('\n');
   return text;
+}
+
+/** 可选字符串字段的保守行式解析（S21-T2/B4：与 search/derive parseTitle 同法——
+ *  标量行；块标量等罕见形态如实放弃返回 null，呈现层省略不虚构） */
+function parseScalarField(blockText: string, field: string): string | null {
+  for (const rawLine of blockText.split('\n')) {
+    const m = new RegExp(`^${field}:[ \\t]*(.*)$`).exec(rawLine);
+    if (m === null) continue;
+    const value = m[1]!.trim();
+    if (value === '' || value === '|' || value === '>') return null; // 块标量形态——保守放弃
+    const first = value[0]!;
+    const last = value[value.length - 1]!;
+    return (first === '"' && last === '"') || (first === "'" && last === "'") ? value.slice(1, -1) : value;
+  }
+  return null;
+}
+
+/** status 枚举解析（schema：active/draft/deprecated；非法/缺失如实 null——呈现层
+ *  按 schema 缺省语义「现行」解释，非法值不虚构为合法态） */
+function parseStatus(blockText: string): 'active' | 'draft' | 'deprecated' | null {
+  const v = parseScalarField(blockText, 'status');
+  return v === 'active' || v === 'draft' || v === 'deprecated' ? v : null;
+}
+
+/** 阅读页元数据条数据（B4）：从正文的同一 frontmatter 块解析（展示面复用索引
+ *  的保守解析面——不新开端点、不读第二份数据）；无块式 frontmatter（README
+ *  等豁免文件）返回 undefined——页面回落基础元信息行 */
+function docMetaFromText(text: string): DocMeta | undefined {
+  const fm = extractFrontmatter(text);
+  if (fm.kind !== 'block') return undefined;
+  const blockText = fm.blockText ?? '';
+  return {
+    title: parseTitle(blockText),
+    owner: parseScalarField(blockText, 'owner'),
+    status: parseStatus(blockText),
+    tags: parseTags(blockText),
+    source: parseScalarField(blockText, 'source'),
+  };
 }
 
 export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions): void {
@@ -169,6 +209,12 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
     }
     const body = bodyAfterFrontmatter(text);
     const rendered = await renderBody(vault, entryPath, body);
+    // S21-T2/B4：阅读页头元数据（frontmatter 展示面）＋最后触及提交（维护者·
+    // 更新时间——单次 spawn，默认分支实时读；失败如实省略）。dataDir 已在上文
+    // 判定非 undefined。
+    const docMeta = docMetaFromText(text);
+    const lastCommit =
+      docMeta === undefined ? null : await readLastCommitForPath(opts.dataDir, vault.id, vault.defaultBranch, entryPath);
     // S10-T1 编辑入口（呈现层 canWriteVault——D17 薄委托；edit 表单仅 .md，本分支恰为 .md）
     const canWrite = canWriteVault(membershipSource, who.subject.employee_id, slug);
     return html(
@@ -179,6 +225,7 @@ export function registerViewRoutes(app: FastifyInstance, opts: ViewRoutesOptions
         sizeBytes: entry.size,
         bodyHtml: rendered.html,
         strippedHtml: rendered.strippedHtml,
+        ...(docMeta !== undefined ? { docMeta, lastCommit } : {}),
         viewer: { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin },
         canWrite,
       }),

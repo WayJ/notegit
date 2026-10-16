@@ -226,7 +226,9 @@ test('文档阅读：meta 徽章行 + article#doc 阅读排版容器', async () 
     const res = await h.app.inject({
       method: 'GET', url: '/vaults/alpha/view/docs/getting-started.md', headers: h.session(alice),
     });
-    assert.ok(res.body.includes('class="meta-badges"'), '元信息徽章行');
+    // S21-T2/B4：有 frontmatter 的文档页元数据条为 doc-meta 扩展形态（前缀类匹配
+    // 兼容无 frontmatter 文件的基础 meta-badges 行）
+    assert.ok(res.body.includes('class="meta-badges'), '元信息徽章行');
     assert.ok(/大小：\d+ 字节/.test(res.body), '大小元信息（文本形态保留）');
     assert.ok(res.body.includes('<article id="doc">'), '阅读排版容器（标题/正文排版由 CSS 承担）');
   } finally {
