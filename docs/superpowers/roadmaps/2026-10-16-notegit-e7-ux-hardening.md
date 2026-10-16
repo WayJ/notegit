@@ -32,11 +32,11 @@ E4–E6 交付了工作台外壳、视觉系统与 agent 地基；本 epic 清�
 
 | sprint | scope | state |
 |---|---|---|
-| S21 | T1 壳与组件破损修复 + T2 结构一致性 + master demo 清理 + 截图复验 | ready（2026-10-16 物化） |
+| S21 | T1 壳与组件破损修复 + T2 结构一致性 + master demo 清理 + 截图复验 | done（2026-10-16 验收 pass——[acceptance](../../superpowers/acceptances/2026-10-16-S21-acceptance.md)；C1 更正：无需数据操作） |
 
 ## Definition of Done
 
-- [ ] **DOD-E7-01 破损清零** — A1–A8 全部修复并被测试锁定；四 gates 绿
-- [ ] **DOD-E7-02 结构一致性** — B1–B10 按本 epic ADR 落地；DESIGN.md 同步修订在码前
-- [ ] **DOD-E7-03 demo 数据卫生** — 探针残留清除；首页最近文档表不再出现测试文件
-- [ ] **DOD-E7-04 截图复验** — 审计脚本复跑全页比对，破损相归零（记录在验收）
+- [x] **DOD-E7-01 破损清零** — A1–A8 全部修复并被测试锁定（web-s21-polish.test.ts 14 断言）；四 gates 绿（2026-10-16 验收）
+- [x] **DOD-E7-02 结构一致性** — B1–B10 按本 epic ADR 落地；DESIGN.md 修订在码前（c8a271e → eea19bd；web-s21-t2-consistency.test.ts 11 断言）
+- [x] **DOD-E7-03 demo 数据卫生** — C1 更正：探针文件 S19 已正式删除；残留感根因=B7，显示层修复后首页不再出现已删文档（复验实证）
+- [x] **DOD-E7-04 截图复验** — 审计脚本复跑 20 全页截图逐屏比对，破损相归零（记录在 [acceptance](../../superpowers/acceptances/2026-10-16-S21-acceptance.md)）
