@@ -52,7 +52,7 @@ export function vaultListPage(
     `<div class="page">
   <div class="page-head">
     <h1>知识库</h1>
-    <p class="page-meta">当前登录：${escapeHtml(user.username)} · <a href="/">返回首页</a></p>
+    <p class="page-sub page-sub-quiet">按你的成员关系呈现有权文库 · <a href="/">返回首页</a></p>
   </div>
   ${listing}
 </div>

@@ -88,6 +88,9 @@ const SPIKE_MARK =
   '<svg class="spike-mark" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><g stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5.6 5.6 18.4 18.4"/><path d="M18.4 5.6 5.6 18.4"/></g></svg>';
 
 const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string; readonly key: NonNullable<PageNav['active']> }> = [
+  // S21-T2（B1）：侧栏首项=「文库」（/vaults——文库是主目的地，置于查找之前；
+  // 枚举 'vaults' 既有，browse 族页面已按 active='vaults' 落位）。
+  { href: '/vaults', label: '文库', key: 'vaults' },
   { href: '/search', label: '查找', key: 'search' },
   { href: '/cite', label: '引用解析', key: 'cite' },
   { href: '/drafts', label: '我的草稿', key: 'drafts' }, // 认证全员可见（顶栏渲染过滤——匿名壳不呈现）
@@ -99,8 +102,10 @@ const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string; 
  * 图标为内联 SVG 线条标记（随色继承 currentColor，与 spike-mark 同一处理方式——
  * DESIGN.md 未覆盖侧栏组件，按其 Iteration Guide 原则推导：先结构与米色卡承载
  * 当前区，不引入第四种表面色、coral 不入侧栏）。
+ * S21-T2（B1）：文库项居首（主目的地）——DESIGN.md §4 侧栏首项条款。
  */
 const SIDE_ICONS: Readonly<Record<string, string>> = {
+  vaults: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="4" y="4" width="7.5" height="7.5" rx="1.5"/><rect x="4" y="12.5" width="7.5" height="7.5" rx="1.5"/><path d="M12.5 6.5h7M12.5 10.5h7M12.5 14.5h7M12.5 18.5h7"/></g></svg>',
   search: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 19 19"/></g></svg>',
   drafts: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M6 3.5h7.5L18 8v12.5H6z"/><path d="M13.5 3.5V8H18"/><path d="M9 12.5h6M9 16h4"/></g></svg>',
   cite: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M4.5 5v13"/><path d="M8.5 7.5h11M8.5 12h11M8.5 16.5h6"/></g></svg>',
@@ -160,7 +165,9 @@ const ACCOUNT_SCRIPT = `
 `;
 
 function topNav(nav?: PageNav): string {
-  const items = NAV_ITEMS.filter((it) => it.key !== 'drafts' || nav?.user !== undefined).map(
+  // S21-T2（B1）：横向主菜单（仅匿名壳渲染）不承载「文库」——顶栏主 CTA「知识库」
+  // 已是 /vaults 的等价入口，不重复两处；侧栏（登录态）文库居首。
+  const items = NAV_ITEMS.filter((it) => it.key !== 'drafts' && it.key !== 'vaults').map(
     (it) =>
       `<li><a href="${it.href}"${nav?.active === it.key ? ' aria-current="page"' : ''}>${it.label}</a></li>`,
   );
@@ -351,12 +358,22 @@ export function activityEntryRow(e: ActivityEntry): string {
 
 // ── S14-T3 工作台首页（`/` 原地升级——DOD-E4-02/04/07） ──────────────────────
 
+/**
+ * 显示层最近文档行（S21-T2/B7）：在查询面 RecentDocumentRow 之上仅追加呈现用
+ * `publishCount`（同库同路径在取数窗口内的发布次数——>1 时行内「N 次发布」微
+ * 标注）。去重与 HEAD 树求交在 web/workbench/display.ts（纯显示层，D25/D30
+ * 数据面语义不变）；查询面原行结构零改动（RecentDocumentRow 可直传——字段可选）。
+ */
+export interface RecentDocDisplay extends RecentDocumentRow {
+  readonly publishCount?: number;
+}
+
 /** 工作台首页数据（各能力全部来自 web/workbench/query.ts——页面零自算，D26：
  *  成员过滤与统计口径已在该层锁定，indexPage 只渲染） */
 export interface WorkbenchHomeData {
   readonly summary: WorkbenchSummary;
   readonly vaults: readonly VaultCard[];
-  readonly docs: readonly RecentDocumentRow[];
+  readonly docs: readonly RecentDocDisplay[];
   /** 页头索引状态位数据（S15-T2，D4：search_index_state 聚合——查询面已做成员过滤） */
   readonly indexStatus: IndexStatus;
   /** 跨库文档表视图（S15-T2，D5：querystring 记忆 view=list|grid；缺省 list——纯呈现偏好） */
@@ -411,13 +428,18 @@ function workbenchVaultCardHtml(v: VaultCard, index: number): string {
  * browse——防环，同 activityViewHref 手法）；维护者=Git 提交者元数据（DOD-03/
  * D25）——单元格 title 与区块脚注双通道如实标注；更新时间=服务端审计时间。
  */
-function workbenchDocRowHtml(d: RecentDocumentRow): string {
+function workbenchDocRowHtml(d: RecentDocDisplay): string {
   const view = activityViewHref(d.vaultSlug, d.path);
   const chips =
     d.tags.length === 0
       ? ''
       : `<span class="tag-chips">${d.tags.map((t) => `<span class="badge">${escapeHtml(t)}</span>`).join('')}</span>`;
-  const titleLink = `<a href="${view}">${escapeHtml(d.title ?? d.path)}</a>`;
+  // S21-T2/B7：同路径多次发布的微标注（去重后保留最新事件，次数如实随行）
+  const countNote =
+    d.publishCount !== undefined && d.publishCount > 1
+      ? `<span class="badge badge-muted doc-publish-count">${d.publishCount} 次发布</span>`
+      : '';
+  const titleLink = `<a href="${view}">${escapeHtml(d.title ?? d.path)}</a>${countNote}`;
   const pathPart = d.title === null ? '' : `<span class="doc-row-path">${escapeHtml(d.path)}</span>`;
   // S17-T1 差距7（静态原型对齐；S17 D4）：MD 文件图标片（29×32 surface 底 line
   // 描边 accent-ink 'MD'——v2 §5 文档表）＋维护者头像圆章（git 作者名首字，20px
@@ -456,14 +478,19 @@ function indexStatusHtml(s: IndexStatus): string {
  * （不新引表面色）；整卡链接=viewUrl 同构；卡题=title（无 title 如实落路径，
  * 与列表行同语义）。
  */
-function workbenchDocCardHtml(d: RecentDocumentRow, index: number): string {
+function workbenchDocCardHtml(d: RecentDocDisplay, index: number): string {
   const chips =
     d.tags.length === 0
       ? ''
       : `<span class="tag-chips">${d.tags.map((t) => `<span class="badge">${escapeHtml(t)}</span>`).join('')}</span>`;
+  // S21-T2/B7：网格卡同款微标注（列表/网格同形态）
+  const countNote =
+    d.publishCount !== undefined && d.publishCount > 1
+      ? ` <span class="badge badge-muted">${d.publishCount} 次发布</span>`
+      : '';
   return `<a class="vault-card" href="${activityViewHref(d.vaultSlug, d.path)}">
     <span class="vault-chip ${CHIP_VARIANTS[index % CHIP_VARIANTS.length]}" aria-hidden="true">▤</span>
-    <span class="vault-name">${escapeHtml(d.title ?? d.path)}</span>
+    <span class="vault-name">${escapeHtml(d.title ?? d.path)}${countNote}</span>
     <span class="doc-row-path">${escapeHtml(d.path)}</span>
     <span class="badge">${escapeHtml(d.vaultName)}</span>
     <span class="vault-card-meta" title="${escapeHtml(d.occurredAt)}">${escapeHtml(formatRelativeTime(d.occurredAt))}</span>${chips}
@@ -584,7 +611,7 @@ export function indexPage(
   <div class="section-head">
     <div class="section-head-main">
       <h2>跨库最近文档</h2>
-      <p class="page-meta">按服务端审计时间排序的成功发布事件（触及文档路径，最近 ${escapeHtml(String(docs.length))} 条；路径与维护者从该次提交的 Git 记录派生）。维护者=Git 提交者元数据，非认证身份——操作主体以服务端审计记录为准。</p>
+      <p class="page-meta">按服务端审计时间排序的成功发布事件（按文档去重、只呈现各库当前仍存在的文档，最近 ${escapeHtml(String(docs.length))} 篇；路径与维护者从提交的 Git 记录派生）。维护者为提交记录自带信息（提交人可自行填写）——站内操作记录以认证员工为准。</p>
       ${viewToggleHtml(view)}
     </div>
     <a class="section-action" href="/search">查看全部文档 →</a>
@@ -635,15 +662,24 @@ export function indexPage(
   );
 }
 
-/** 管理页（UI-RESTYLE：分区 admin-section 米色卡 + 表格包裹层 + 一次性令牌深色窗；
- * S21-T1/A1：viewer 附 display_name——顶栏徽章单形态接线） */
-export function adminPage(viewer?: { username: string; display_name?: string; is_instance_admin: boolean }): string {
+/**
+ * 管理页（UI-RESTYLE：分区 admin-section 米色卡 + 表格包裹层 + 一次性令牌深色窗；
+ * S21-T1/A1：viewer 附 display_name——顶栏徽章单形态接线）。
+ * S21-T2/B10：维护模式区块呈现当前状态（maintenanceOn——服务端读闸门实态渲染；
+ * 开启=orange 高亮）＋「开启/关闭」按钮按状态定主次（下一步动作为主按钮）＋
+ * 文案去内部引用（员工可读——不引文档编号/任务注记）。
+ */
+export function adminPage(
+  viewer?: { username: string; display_name?: string; is_instance_admin: boolean },
+  maint?: { readonly maintenanceOn: boolean },
+): string {
+  const maintOn = maint?.maintenanceOn === true;
   return layout(
     '管理',
     `<div class="page">
   <div class="page-head">
     <h1>Notegit 管理</h1>
-    <p class="page-meta"><a href="/">← 返回</a></p>
+    <p class="page-sub page-sub-quiet"><a href="/">← 返回</a></p>
   </div>
 
   <section class="admin-section">
@@ -709,10 +745,11 @@ export function adminPage(viewer?: { username: string; display_name?: string; is
   </div>
   </section>
 
-  <section class="admin-section">
+  <section class="admin-section" id="maint-section">
   <h2>维护模式</h2>
-  <p class="toolbar"><button id="maint-on" type="button">开启维护模式</button> <button id="maint-off" type="button">关闭维护模式</button></p>
-  <p>（实例级写闸门：开启后业务与管理写一律 503，登录与读放行；当前状态无查询端点——见 docs/credentials-ops.md 与任务 notes）</p>
+  <p class="maint-status${maintOn ? ' is-on' : ''}"><span class="status-dot" aria-hidden="true"></span>当前状态：<strong id="maint-state-text">${maintOn ? '维护中（写入已暂停）' : '正常运行'}</strong></p>
+  <p class="toolbar"><button id="maint-on" type="button"${maintOn ? '' : ' class="btn-primary"'}>开启维护模式</button> <button id="maint-off" type="button"${maintOn ? ' class="btn-primary"' : ''}>关闭维护模式</button></p>
+  <p class="page-meta">用于系统升级或数据恢复期间：开启后发布、编辑等一切写入被暂停（登录与浏览不受影响），关闭后立即恢复。</p>
   <p><output id="maint-msg"></output></p>
   </section>
 </div>
@@ -906,16 +943,26 @@ document.getElementById('member-form').addEventListener('submit', async (ev) => 
 
 // —— 维护模式（T7 端点：POST 开启 / DELETE 关闭；实例管理员） ——
 
+// S21-T2/B10：状态行与按钮主次随实态切换（初始态由服务端渲染，切换后本地同步）
+function updateMaintUi(on) {
+  document.getElementById('maint-state-text').textContent = on ? '维护中（写入已暂停）' : '正常运行';
+  document.getElementById('maint-section').querySelector('.maint-status').classList.toggle('is-on', on);
+  document.getElementById('maint-on').classList.toggle('btn-primary', !on);
+  document.getElementById('maint-off').classList.toggle('btn-primary', on);
+}
+
 document.getElementById('maint-on').addEventListener('click', async () => {
   try {
     await api('POST', '/api/v1/admin/maintenance');
-    show(document.getElementById('maint-msg'), '已进入维护模式（写入被拒，登录与读放行）');
+    updateMaintUi(true);
+    show(document.getElementById('maint-msg'), '已进入维护模式（写入被暂停，登录与浏览不受影响）');
   } catch (err) { show(document.getElementById('maint-msg'), err.message); }
 });
 document.getElementById('maint-off').addEventListener('click', async () => {
   try {
     await api('DELETE', '/api/v1/admin/maintenance');
-    show(document.getElementById('maint-msg'), '已退出维护模式');
+    updateMaintUi(false);
+    show(document.getElementById('maint-msg'), '已退出维护模式，写入恢复');
   } catch (err) { show(document.getElementById('maint-msg'), err.message); }
 });
 `,
@@ -941,7 +988,7 @@ export function credentialsPage(viewer?: { username: string; display_name?: stri
     `<div class="page">
   <div class="page-head">
     <h1>我的访问凭据</h1>
-    <p class="page-meta"><a href="/">← 返回</a></p>
+    <p class="page-sub page-sub-quiet"><a href="/">← 返回</a></p>
   </div>
 
   <section class="admin-section">
@@ -956,7 +1003,7 @@ export function credentialsPage(viewer?: { username: string; display_name?: stri
     <p><button type="submit" class="btn-primary">创建</button></p>
   </form>
   <div class="token-block" hidden>
-  <p><strong>新凭据明文仅此一次展示，关闭/刷新后不可再取（identity §3.1）：</strong></p>
+  <p><strong>新凭据的完整密钥只在创建后显示这一次，关闭或刷新页面后无法再次查看，请立即复制保存：</strong></p>
   <pre id="cred-token" class="token-view"></pre>
   </div>
   <p><output id="cred-msg"></output></p>

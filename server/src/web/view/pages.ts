@@ -1,4 +1,4 @@
-import { escapeHtml, layout } from '../pages.ts';
+import { escapeHtml, formatRelativeTime, layout } from '../pages.ts';
 
 /**
  * S4-T2 预览页模板（服务端渲染、无框架；插值唯一通道 escapeHtml）。
@@ -41,9 +41,50 @@ function breadcrumb(vault: { slug: string; name: string }, entryPath: string): s
   return parts.join(' <span aria-hidden="true">›</span> ');
 }
 
-/** 文件元信息行（各预览形态共用）——徽章化呈现（「大小：N 字节」文本形态为既有断言所依） */
+/** 文件元信息行（非 Markdown 预览形态共用）——徽章化呈现（「大小：N 字节」文本形态为既有断言所依） */
 function metaLine(sizeBytes: number | undefined): string {
   return `<div class="meta-badges"><span class="badge">文件</span><span class="badge badge-muted">大小：${sizeBytes ?? '?'} 字节</span></div>`;
+}
+
+/**
+ * 文档 frontmatter 展示元数据（S21-T2/B4）：阅读页元数据条的数据形态。
+ * 来源=文档自身 frontmatter（view 路由读正文的同一 text 解析——不新开端点、
+ * 不读第二份数据）；可选字段缺失如实为 null/空（呈现层不虚构）。
+ */
+export interface DocMeta {
+  /** frontmatter title（无标题如实 null——h1 回落文件名） */
+  readonly title: string | null;
+  /** 知识负责人（可选） */
+  readonly owner: string | null;
+  /** active/draft/deprecated（schema 缺省按 active 解释——null 呈现为「现行」） */
+  readonly status: 'active' | 'draft' | 'deprecated' | null;
+  readonly tags: readonly string[];
+  /** 原始资料或依据（可选） */
+  readonly source: string | null;
+}
+
+/** 阅读页元数据条（B4）：状态徽章＋负责人/标签/来源（有则显）＋维护者·相对时间
+ *  ＋大小（muted）。维护者与更新时间派生自最后触及该路径的 Git 提交（title 注明
+ *  可填写属性——员工可读，同首页文档表语义）；绝对时间只入 title。 */
+const STATUS_LABELS: Readonly<Record<NonNullable<DocMeta['status']>, string>> = {
+  active: '现行',
+  draft: '草稿',
+  deprecated: '已废弃',
+};
+
+function docMetaLine(meta: DocMeta, lastCommit: { author: string; isoTime: string } | null, sizeBytes: number | undefined): string {
+  const statusLabel = STATUS_LABELS[meta.status ?? 'active'];
+  const ownerBadge = meta.owner === null ? '' : `<span class="badge">负责人：${escapeHtml(meta.owner)}</span>`;
+  const chips =
+    meta.tags.length === 0
+      ? ''
+      : `<span class="tag-chips">${meta.tags.map((t) => `<span class="badge">${escapeHtml(t)}</span>`).join('')}</span>`;
+  const sourceBadge = meta.source === null ? '' : `<span class="badge badge-muted">来源：${escapeHtml(meta.source)}</span>`;
+  const maintBadge =
+    lastCommit === null
+      ? ''
+      : `<span class="badge badge-muted" title="最后触及提交 ${escapeHtml(lastCommit.isoTime)}（派生自 Git 提交记录，提交人可自行填写）">${escapeHtml(lastCommit.author)} 维护 · ${escapeHtml(formatRelativeTime(lastCommit.isoTime))}</span>`;
+  return `<div class="meta-badges doc-meta"><span class="badge">状态：${statusLabel}</span>${ownerBadge}${chips}${sourceBadge}${maintBadge}<span class="badge badge-muted">大小：${sizeBytes ?? '?'} 字节</span></div>`;
 }
 
 /** 编辑表单 URL（S10-T1：view/version/路径级 history 编辑入口共指既有 GET edit
@@ -65,7 +106,12 @@ function editEntryLine(canWrite: boolean | undefined, editHref: string): string 
     : `\n  <p class="page-actions"><span class="badge">只读</span></p>`;
 }
 
-/** Markdown 正文预览页：frontmatter 已剥离；正文 = 安全渲染管输出 */
+/**
+ * Markdown 正文预览页：frontmatter 已剥离；正文 = 安全渲染管输出。
+ * S21-T2/B4：h1=frontmatter title（无标题如实回落文件名——不用文件名伪造标题）；
+ * 元数据条=负责人/状态/标签/来源＋维护者·更新时间（docMeta+lastCommit 由路由
+ * 从既有数据面解析传入——文档 frontmatter 与最后触及提交；不新开端点）。
+ */
 export function viewPage(input: {
   vault: { slug: string; name: string };
   entryPath: string;
@@ -74,6 +120,10 @@ export function viewPage(input: {
   bodyHtml: string;
   /** 原文含被剥离的原始 HTML（如实标注） */
   strippedHtml: boolean;
+  /** S21-T2/B4：frontmatter 展示元数据（缺省=无 frontmatter 形态——回落文件名+基础条） */
+  docMeta?: DocMeta;
+  /** S21-T2/B4：最后触及提交（作者/时间——Git 元数据；缺省不呈现该徽章） */
+  lastCommit?: { author: string; isoTime: string } | null;
   /** UI-RESTYLE：顶部导航登录态（可选——测试直调形态缺省） */
   viewer?: PageViewer;
   /** S10-T1：写权判定（canWriteVault——true=编辑入口 / false=只读徽章；缺省不判定） */
@@ -81,17 +131,24 @@ export function viewPage(input: {
 }): string {
   const { vault, entryPath, sizeBytes, bodyHtml, strippedHtml, viewer, canWrite } = input;
   const name = entryPath.includes('/') ? entryPath.slice(entryPath.lastIndexOf('/') + 1) : entryPath;
+  // B4：h1=文档标题（frontmatter title；无标题回落文件名——与搜索/首页「title
+  // ?? path」同语义）。<title> 同源（标题优先）。
+  const heading = input.docMeta?.title ?? name;
+  const metaHtml =
+    input.docMeta === undefined
+      ? metaLine(sizeBytes)
+      : docMetaLine(input.docMeta, input.lastCommit ?? null, sizeBytes);
   const notice = strippedHtml
     ? '\n<p class="notice">注：原文含 HTML 标签，已按安全子集剥离（预览不解释 HTML；脚本/事件属性不执行）。</p>'
     : '';
   return layout(
-    `${name} — ${vault.name}`,
+    `${heading} — ${vault.name}`,
     `<div class="page">
   <div class="page-head">
-    <h1>${escapeHtml(name)}</h1>
+    <h1>${escapeHtml(heading)}</h1>
     <nav aria-label="面包屑">${breadcrumb(vault, entryPath)} <span aria-hidden="true">›</span> ${escapeHtml(name)}</nav>
   </div>${editEntryLine(canWrite, editUrl(vault.slug, entryPath))}
-  ${metaLine(sizeBytes)}${notice}
+  ${metaHtml}${notice}
   <article id="doc">
 ${bodyHtml}
   </article>
