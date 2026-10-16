@@ -1,0 +1,40 @@
+{
+ "date": "2026-10-16T15:25:13.658Z",
+ "results": [
+  {
+   "name": "P1 anon / → 302 /login",
+   "pass": true,
+   "detail": "302 → /login"
+  },
+  {
+   "name": "P2 anon vault 页 → 302",
+   "pass": true,
+   "detail": "302"
+  },
+  {
+   "name": "P3 anon API → 401",
+   "pass": true,
+   "detail": "401"
+  },
+  {
+   "name": "P4 越权 404 与不存在 404 逐字节同体",
+   "pass": true,
+   "detail": "create=201 priv=404 none=404 identical=true"
+  },
+  {
+   "name": "P5 favicon 200",
+   "pass": true,
+   "detail": "200 image/x-icon"
+  },
+  {
+   "name": "P6 ETag+no-cache 在位",
+   "pass": true,
+   "detail": "etag=\"5956000c2cd2480 cc=no-cache"
+  },
+  {
+   "name": "P7 缓存热时 anon 401 / 无授权 404",
+   "pass": true,
+   "detail": "anon=401 alice=404"
+  }
+ ]
+}

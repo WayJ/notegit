@@ -28,10 +28,10 @@
 
 | sprint | scope | state |
 |---|---|---|
-| S24 | T1 跨请求 HEAD 树缓存（browse/agent tree/docs/工作台 HEAD 求交共用层）+ 对拍与失效测试 · T2 S20 基准复跑对比 + 验收 | ready（2026-10-16 物化） |
+| S24 | T1 跨请求 HEAD 树缓存（browse/agent tree/docs/工作台 HEAD 求交共用层）+ 对拍与失效测试 · T2 S20 基准复跑对比 + 验收 | done（2026-10-16 验收 pass——[acceptance](../acceptances/2026-10-16-S24-acceptance.md)；E8 关闭：饱和 ~200→~1000–1350 rps、扇出 417ms、304 补测 50/50） |
 
 ## Definition of Done
 
-- [ ] **DOD-E8-01 缓存落地且行为锁定** — 跨请求缓存生效；web publish 与 git push 两路径失效各有行为测试；对拍逐字节一致；git 错误不缓存（fail-closed）；四 gates 绿
-- [ ] **DOD-E8-02 收益复测入档** — 场景一梯度 + 场景三扇出 before/after 数字追加 capacity.md（含 304 节省补测）；瓶颈清单如实更新
-- [ ] **DOD-E8-03 安全面零漂移** — 四 gates + 探针组（302/401/404 同体/越权过滤）复验绿
+- [x] **DOD-E8-01 缓存落地且行为锁定** — 单源缓存层四读面共用；publish/push 两路径失效各有行为测试；对拍逐字节一致；fail-closed；四 gates 绿（1602/1602）——[acceptance](../acceptances/2026-10-16-S24-acceptance.md)
+- [x] **DOD-E8-02 收益复测入档** — capacity.md §5 before/after（c10–c100 饱和 ~5–6 倍、扇出 1.01s→417ms）+ 304 补测 50/50→304；瓶颈清单如实更新
+- [x] **DOD-E8-03 安全面零漂移** — 四 gates + 探针组 7/7（含缓存热窗专项 P7）复验绿
