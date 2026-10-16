@@ -216,10 +216,11 @@ export function browsePage(input: BrowsePageInput): string {
   const readmeHtml = readmeCard(readme);
   // S4-T8（T4 遗留收口）：目录级上传入口（写者）。S10-T2：reader 同位呈现只读徽章
   // （写入口隐藏，读者明确知态——F-2 满屏死按钮修复）。S10-T3：「新建笔记」主
-  // 操作位（DESIGN.md button-primary——coral 仅主 CTA；目录上下文=当前目录）
+  // 操作位（DESIGN.md button-primary——coral 仅主 CTA；目录上下文=当前目录）。
+  // TD-2（S22）：上传入口去裸括号、改完整短语「上传文件」（S21 验收残留 R2）
   const uploadUrl = `/vaults/${encodeURIComponent(vault.slug)}/upload${dirPath === '' ? '' : '/' + dirPath.split('/').map(encodeURIComponent).join('/')}`;
   const headOps = canWrite
-    ? ` <a class="btn btn-primary" href="${newNoteUrl(vault.slug, dirPath)}">新建笔记</a> <span class="entry-ops">(<a href="${uploadUrl}">上传</a>)</span>`
+    ? ` <a class="btn btn-primary" href="${newNoteUrl(vault.slug, dirPath)}">新建笔记</a> <span class="entry-ops"><a href="${uploadUrl}">上传文件</a></span>`
     : ` ${READONLY_BADGE}`;
   // S11-T3「最近变更」入口一行（读门槛语义——编辑者与读者都可见；目标页由
   // T2 activity 模块持有，本模块只负责链接行）

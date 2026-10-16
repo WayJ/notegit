@@ -779,8 +779,9 @@ async function loadEmployees(append) {
     const page = await api('GET', url);
     for (const e of page.employees) {
       const tr = document.createElement('tr');
+      // 创建时间相对化（TD-1：ngt.relTime 与服务端 formatRelativeTime 同语义）
       const cells = [e.username, e.display_name, e.active ? '在岗' : '已停用',
-        e.is_instance_admin ? '是' : '否', e.created_at];
+        e.is_instance_admin ? '是' : '否', ngt.relTime(e.created_at)];
       for (const text of cells) {
         const td = document.createElement('td');
         td.textContent = String(text);
