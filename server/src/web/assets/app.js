@@ -13,6 +13,9 @@
  * 共有请求语义：同源 fetch（浏览器对非安全方法自动带 Origin——不显式设头）、
  * 无 body 不带 content-type、204 短路 null、JSON 解析容错回落 {}、!ok 抛 Error。
  * 不新增能力：无 401 跳登录、无显式 Origin 头（原内联均无——保持一致）。
+ * relTime（TD-1，S22-D2）：admin 员工表创建时间相对化的客户端单源——语义
+ * 逐字镜像服务端 pages.ts formatRelativeTime（刚刚/分/时/天/超一周回日期，
+ * NaN 回落原文）；时钟以取用时刻为准。
  */
 (function () {
   'use strict';
@@ -49,5 +52,20 @@
   // —— 状态文案注入（原 FETCH_HELPER 同体件：textContent 唯一通道，无 innerHTML）——
   function show(el, text) { el.textContent = text; }
 
-  window.ngt = { api: api, apiEnvelope: apiEnvelope, show: show };
+  // —— 相对时间（TD-1：与 pages.ts formatRelativeTime 同语义，勿单边漂移）——
+  function relTime(iso, now) {
+    const at = Date.parse(iso);
+    if (Number.isNaN(at)) return iso;
+    const diffSec = Math.max(0, Math.floor(((now === undefined ? new Date() : now).getTime() - at) / 1000));
+    if (diffSec < 60) return '刚刚';
+    const min = Math.floor(diffSec / 60);
+    if (min < 60) return `${min} 分钟前`;
+    const hour = Math.floor(min / 60);
+    if (hour < 24) return `${hour} 小时前`;
+    const day = Math.floor(hour / 24);
+    if (day <= 7) return `${day} 天前`;
+    return iso.slice(0, 10);
+  }
+
+  window.ngt = { api: api, apiEnvelope: apiEnvelope, show: show, relTime: relTime };
 })();
