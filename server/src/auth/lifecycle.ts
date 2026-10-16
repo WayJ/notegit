@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Subject } from '../app.ts';
 import type { PepperFile } from '../bootstrap/pepper.ts';
-import { COOKIE_NAME, readSidCookie, resolveSession } from './subject.ts';
+import { readSidCookie, resolveSession, sessionClearCookie } from './subject.ts';
 
 /**
  * 生命周期语义统一模块（S2-T5；identity §5 是唯一语义源）：
@@ -181,7 +181,7 @@ export function authFailureMessage(code: AuthFailureCode): string {
  *  会话载体失败同时清 Cookie——identity §5.2 停用行的「被登出」呈现。 */
 export function rejectAuth(reply: FastifyReply, failure: AuthFailure): FastifyReply {
   if (failure.carrier === 'session') {
-    reply.header('set-cookie', `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+    reply.header('set-cookie', sessionClearCookie());
   }
   return reply.code(401).send({
     error: { code: failure.code, message: FAILURE_MESSAGES[failure.code], details: { reason: failure.reason } },

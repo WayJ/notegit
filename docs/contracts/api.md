@@ -25,7 +25,7 @@
   | 访问凭据 | CLI / 程序化 API | `Authorization: Bearer ngt_<43 字符>` | identity §3.1（本条即其 §9 移交的 Bearer 形式定稿） |
   | 访问凭据 | Git Smart HTTP | HTTP Basic（用户名任意/员工名 + token 作口令） | identity §3.1 |
 - **认证与授权实时查库、无缓存**：每请求执行 [storage-model §4](storage-model.md) 的 `authn.token` / `authn.session` / `authz.role` 规范查询（identity §5.1/D-IC-05）。
-- **CSRF 机制**（identity §4 移交定稿）：在 SameSite=Lax 之上，凡**会话 Cookie 认证的状态改变请求**（非 GET/HEAD/OPTIONS）校验同源头：`Origin`（缺失时回退 `Referer`）与请求目标同源，否则 403 E-AUTH-006。`Bearer` 认证的请求不依赖环境凭据，豁免该校验。
+- **CSRF 机制**（identity §4 移交定稿）：在 SameSite=Lax 之上，凡**会话 Cookie 认证的状态改变请求**（非 GET/HEAD/OPTIONS）校验同源头：`Origin`（缺失时回退 `Referer`）与请求目标同源，否则 403 E-AUTH-006。`Bearer` 认证的请求不依赖环境凭据，豁免该校验。经**可信反向代理**（部署侧显式配置 `NOTEGIT_TRUST_PROXY` 白名单）时，请求目标 scheme 取 `X-Forwarded-Proto`——TLS 终结反代（架构 §10 定稿形态）下以浏览器实际协议判定同源；未配置时该头不参与判定（直连部署行为不变）。
 - **维护模式**：实例级全局写闸门（backup-recovery §3，进程内标志，传播上界 0）。开启后：一切写操作（本契约标注「写」的端点）→ 503 E-MAINT-001（`maintenance: true`）；登录与一切读放行。Git receive-pack → 403「维护中」（§8.4）；候选校验（§8.2 `validations`）为只读推导，放行。
 - **通用 401**：凡标注「需认证」语义的端点共享 401 映射：E-AUTH-001（无/无效凭据或会话）、E-AUTH-002/003/004（过期/撤销/停用，identity §5.2）；下文端点错误列不再逐条重复 401。
 - **404 语义**：无成员关系的库（含撤权后）与不存在的库同响应 404 E-RES-001，不泄露存在性（identity §5.2/D-IC-06）；**有成员关系但角色不足**用 403 E-AUTHZ-001（主体已知库存在，404 反而失真）。

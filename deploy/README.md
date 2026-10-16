@@ -19,11 +19,23 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 - 环境变量：`PORT`（默认 3000）、`HOST`（默认 0.0.0.0）；数据目录固定 `/data`
   （`NOTEGIT_DATA_DIR` 仅为测试覆盖保留）。
+- **部署面环境变量（S25/E9）**：
+  - `NOTEGIT_TRUST_PROXY`——可信反代白名单（逗号分隔 IP/CIDR，同机反代即
+    `127.0.0.1`）。设置后应用经 `X-Forwarded-Proto/For` 判定请求协议与来源
+    （TLS 终结反代形态，见「HTTPS 接入」节）；**未设置 = 不信任任何代理头**
+    （直连默认）。禁宽松 `true`——信任边界必须显式（E9 D53）。
+  - `NOTEGIT_COOKIE_SECURE`——会话 cookie `Secure` 属性裁决，默认开（未设置
+    即开）；仅精确 `0` 关闭：**纯 HTTP 本地/内网试用形态专用**（同链路可克隆
+    会话、口令明文），该形态禁生产；生产一律走 TLS（E9 D54）。
 - 镜像内以非 root 用户（`notegit`，uid/gid 10001）运行；`HEALTHCHECK` 探测
   `/healthz`（liveness；磁盘水位指标随 S8-T2）。
 - **Node 版本 pin**：默认 `node:24-alpine`（D10 基线）；生产部署建议
   `--build-arg NODE_IMAGE=node:<24.x.y>-alpine` 钉住补丁版——node:sqlite 处于
-  RC，行为漂移靠锁定具体 Node 版本规避（roadmap 风险表）。
+  RC，行为漂移靠锁定具体 Node 版本规避（roadmap 风险表）。**engines 强制
+  `>=24 <25`：Node 22/23 不支持**（E9 D52）——非达规运行时的 `EBADENGINE`
+  警告不得忽略。门禁在部署环境红时的接手核对顺序：① 运行时版本达规
+  （`node --version`）→ ② 克隆新鲜度（测试总数与 main 对表，陈旧克隆的用例
+  集不同）→ ③ 达规环境重跑四 gates；环境性红不构成产品缺陷、不以改代码响应。
 
 ## 最低规格
 
@@ -169,6 +181,12 @@ server {
   }
 }
 ```
+
+- **应用侧配套（S25/E9 D53）**：反代形态下应用必须显式设置
+  `NOTEGIT_TRUST_PROXY=<反代地址>`（同机即 `127.0.0.1`）——否则
+  `X-Forwarded-Proto` 不参与判定，TLS 终结后浏览器 https Origin 会被 CSRF
+  判异源（全站写操作 403）。完整站点模板（80→443 重定向 + Git 大包流式 +
+  配套注记）随仓库分发：[deploy/nginx/notegit.conf](nginx/notegit.conf)。
 
 ## 首次初始化
 

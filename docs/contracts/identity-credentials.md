@@ -73,7 +73,7 @@ scope 声明两维：`access ∈ {read, read_write}`；`vaults` 为库允许清�
 
 ## 4. Web 会话
 
-- 机制：**服务端会话表 + 不透明 session ID**（32 字节随机，base64url）。Cookie 属性：`HttpOnly; Secure; SameSite=Lax`，会话固定防护为登录成功后重发新 ID。ID 在会话表同样以 `HMAC-SHA256(pepper, sid)` 形式存储，键管理与 §3.2 同源。
+- 机制：**服务端会话表 + 不透明 session ID**（32 字节随机，base64url）。Cookie 属性：`HttpOnly; Secure; SameSite=Lax`（Secure 默认开；纯 HTTP 本地/内网试用形态可经 `NOTEGIT_COOKIE_SECURE=0` 显式关闭——该形态同链路可克隆会话、口令明文，禁生产，E9 D54），会话固定防护为登录成功后重发新 ID。ID 在会话表同样以 `HMAC-SHA256(pepper, sid)` 形式存储，键管理与 §3.2 同源。
   - 被拒备选：JWT/签名 Cookie 等无状态方案——账号停用与会话吊销必须对下一请求生效（§5、DOD-03），无状态令牌需维护实时拒绝名单，复杂且易错，违背 §4.1 即时撤销语义。
 - 过期：`idle_timeout` 默认 7 天（滑动续期）、`absolute_timeout` 默认 30 天，均管理员可配；过期判定以服务端存储的时间戳为准，逐请求比较。
 - CSRF：SameSite=Lax 之上，所有写操作校验同源请求头；具体机制随 T5 API 契约定稿。

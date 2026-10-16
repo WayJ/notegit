@@ -64,3 +64,19 @@ export function resolveSession(
   }
   return { ok: false, reason: 'invalid' };
 }
+
+/** 会话 Cookie 属性串单源（S25/E9 D54：routes.ts 发放/清除 ×3 + lifecycle.ts
+ *  rejectAuth 清除全走此处，防四处属性漂移）。Secure 由 NOTEGIT_COOKIE_SECURE
+ *  裁决：默认开（现行为）；仅精确 '0' 关闭——纯 HTTP 本地/内网试用形态，
+ *  同链路可克隆会话、口令明文，禁生产（deploy/README §安全边界）。 */
+export function cookieSecureEnabled(): boolean {
+  return process.env.NOTEGIT_COOKIE_SECURE !== '0';
+}
+
+export function sessionSetCookie(sid: string): string {
+  return `${COOKIE_NAME}=${sid}; Path=/; HttpOnly${cookieSecureEnabled() ? '; Secure' : ''}; SameSite=Lax`;
+}
+
+export function sessionClearCookie(): string {
+  return `${COOKIE_NAME}=; Path=/; HttpOnly${cookieSecureEnabled() ? '; Secure' : ''}; SameSite=Lax; Max-Age=0`;
+}
