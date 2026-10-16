@@ -1,7 +1,7 @@
 {
   "name": "notegit-validation",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Notegit shared content validator — code embodiment of docs/contracts/validation.md (single source for pre-commit hook / pre-receive / web-submit)",
   "type": "module",
   "engines": {
