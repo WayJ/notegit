@@ -32,15 +32,15 @@ https → 全站写操作将被 CSRF 判异源 403（潜伏，纯 HTTP 下不可
 
 | sprint | scope | state |
 |---|---|---|
-| S25 | T1 基线诊断判定（master）· T2 trustProxy 支持+CSRF 行为测试 · T3 cookie Secure 开关+属性锁定测试 · T4 nginx 模板 + deploy/README 口径 | in-progress |
+| S25 | T1 基线诊断判定（master）· T2 trustProxy 支持+CSRF 行为测试 · T3 cookie Secure 开关+属性锁定测试 · T4 nginx 模板 + deploy/README 口径 | done（2026-10-17 验收 pass——[acceptance](../acceptances/2026-10-17-S25-acceptance.md)；E9 关闭：基线判定在案、反代 TLS 写路径修复、部署物料入版，1610/1610） |
 
 ## Definition of Done
 
-- [ ] **DOD-E9-01 基线判定有据、环境口径落档** — receive-audit 于达规基线绿有实证
+- [x] **DOD-E9-01 基线判定有据、环境口径落档** — receive-audit 于达规基线绿有实证
       记录；deploy/README 载明 Node 24-only（engines 强制、EBADENGINE 不得忽略）与
-      接手核对步骤（版本 → 克隆新鲜度 → 再跑门禁）
-- [ ] **DOD-E9-02 反代 TLS 形态修复** — `NOTEGIT_TRUST_PROXY` 显式配置下 CSRF 同源
+      接手核对步骤（版本 → 克隆新鲜度 → 再跑门禁）——[acceptance](../acceptances/2026-10-17-S25-acceptance.md)
+- [x] **DOD-E9-02 反代 TLS 形态修复** — `NOTEGIT_TRUST_PROXY` 显式配置下 CSRF 同源
       判定经 X-Forwarded-Proto 正确（放行/拒绝两侧行为测试锁定）；未配置时代理头
-      不参与判定（现行为锁定）；四 gates 只增不减
-- [ ] **DOD-E9-03 环境漂移清偿** — `NOTEGIT_COOKIE_SECURE` 开关默认行为锁定（两种
-      形态测试）；nginx 反代模板入版；环境变量口径入 deploy/README
+      不参与判定（现行为锁定）；四 gates 只增不减（1610/1610）——[acceptance](../acceptances/2026-10-17-S25-acceptance.md)
+- [x] **DOD-E9-03 环境漂移清偿** — `NOTEGIT_COOKIE_SECURE` 开关默认行为锁定（两种
+      形态测试）；nginx 反代模板入版；环境变量口径入 deploy/README——[acceptance](../acceptances/2026-10-17-S25-acceptance.md)
