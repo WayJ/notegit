@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { execGit } from '../publish/git-exec.ts';
+import { invalidateVaultTreeCache } from '../readcache/tree-cache.ts';
 import { vaultRepoPath } from '../vaults/repo-path.ts';
 import { deriveVaultIndex, type DerivedIndex } from './derive.ts';
 
@@ -195,6 +196,13 @@ export class SearchIndexer {
       }[];
       this.watermark = limit; // 推进至扫描上界（含被过滤行——非默认分支/rejected 不重扫）
       if (rows.length === 0) return;
+      // S24 D2（E8 D48）git push 后端钩子链失效——与索引派生同触发点（同路）：
+      // settle 行即「引用已实际移动」的信号，先失效该库树缓存再排队重索引
+      // （读面先于派生面见到新树；web publish 亦经本面兜底——管线提交点已即时
+      // 失效，此处再失效一次收窄在途旧读回填竞界）
+      for (const row of rows) {
+        invalidateVaultTreeCache(vaultRepoPath(this.dataDir, row.vault_id));
+      }
       for (const row of rows) {
         this.dirty.set(row.vault_id, { by: row.event_kind, at: row.occurred_at });
       }

@@ -11,6 +11,7 @@ import { buildApp } from '../src/app.ts';
 import { createSession, DEFAULT_SESSION_TIMEOUTS } from '../src/auth/sessions.ts';
 import { initBareVaultRepo } from '../src/gitrepo/lifecycle.ts';
 import { vaultRepoPath } from '../src/vaults/repo-path.ts';
+import { invalidateVaultTreeCache } from '../src/readcache/tree-cache.ts';
 import { FIXTURE_DDL, addEmployee, addVault, addMember } from './credentials-fixtures.ts';
 
 /**
@@ -109,7 +110,9 @@ export function repoPathOf(h: BrowseHarness, vaultId: number): string {
   return vaultRepoPath(h.dataDir, vaultId);
 }
 
-/** 在既有提交之上追加一笔（clone→写→commit→push，快进）——实时读测试用 */
+/** 在既有提交之上追加一笔（clone→写→commit→push，快进）——实时读测试用。
+ *  S24-T1：直连 push 不经 HTTP/hook settle（无审计行）——push 后显式失效树缓存，
+ *  与生产 push 的失效语义对齐（尾随失效见 s24-tree-cache.test.ts 行为锁定）。 */
 export async function pushToVault(h: BrowseHarness, vaultId: number, files: Record<string, string>): Promise<void> {
   const repoPath = vaultRepoPath(h.dataDir, vaultId);
   const work = path.join(h.dataDir, `push-${vaultId}-${++seedSeq}`);
@@ -123,6 +126,7 @@ export async function pushToVault(h: BrowseHarness, vaultId: number, files: Reco
   await gitOut(['-C', work, '-c', 'user.email=seed@notegit.test', '-c', 'user.name=seed', 'commit', '-m', 'more']);
   await gitOut(['-C', work, 'push', 'origin', 'HEAD:refs/heads/main']);
   await rm(work, { recursive: true, force: true });
+  invalidateVaultTreeCache(repoPath);
 }
 
 /** spawn `git ls-tree`（-z 原始名）→ [type, name] 序列——页面渲染一致性对照 */
