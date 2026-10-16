@@ -15,6 +15,7 @@ import { MIGRATIONS } from '../src/db/migrations.ts';
 import { initBareVaultRepo } from '../src/gitrepo/lifecycle.ts';
 import { vaultRepoPath } from '../src/vaults/repo-path.ts';
 import { readFlatTree, type RunGit } from '../src/api-read/tree.ts';
+import { invalidateVaultTreeCache } from '../src/readcache/tree-cache.ts';
 import { FIXTURE_DDL, addEmployee, addVault, addMember } from './credentials-fixtures.ts';
 
 // S18-T2 目录树读取端点 GET /api/v1/vaults/{slug}/tree[?ref=<commit OID>]
@@ -89,6 +90,7 @@ async function pushToVault(dataDir: string, vaultId: number, files: Record<strin
   await gitOut(['-C', work, '-c', 'user.email=seed@notegit.test', '-c', 'user.name=seed', 'commit', '-q', '-m', 'more']);
   await gitOut(['-C', work, 'push', '--quiet', 'origin', 'HEAD:refs/heads/main']);
   await rm(work, { recursive: true, force: true });
+  invalidateVaultTreeCache(repoPath); // S24-T1：直连 push 无审计行——显式失效（对齐生产 push 语义）
 }
 
 before(async () => {

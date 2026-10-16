@@ -18,6 +18,7 @@ import {
 import { buildCandidateCommit, type CandidateResult, type CommitIdentity, type WebSubmitChange } from './candidate.ts';
 import type { DraftPreserved } from './draft.ts';
 import { execGit } from './git-exec.ts';
+import { invalidateVaultTreeCache } from '../readcache/tree-cache.ts';
 
 /**
  * 发布管线（S3-T7；架构 §5.4 第三入口与「网页不能通过直接 update-ref 绕过接收
@@ -453,6 +454,10 @@ const updateRefStep: Step = {
       // 原子 CAS：带预期旧值（全零=必须不存在）——比对步骤之后到执行之间的
       // 并发移动在此被拒，绝不覆盖
       await execGit(['update-ref', cmd.ref, cmd.newOid, cmd.oldOid], { cwd: ctx.repoPath });
+      // S24 D2（E8 D48）web publish 提交点失效：引用已原子移动——本仓库树缓存
+      // 立即失效（发布返回后的首读即见新内容；审计尾随面 settle 后还会同路兜底
+      // 再失效一次，收窄在途旧读回填竞界）
+      invalidateVaultTreeCache(ctx.repoPath);
       return { ok: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

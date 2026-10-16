@@ -1,15 +1,17 @@
 import { spawn } from 'node:child_process';
 import { extractFrontmatter } from 'notegit-validation';
-import { execGit } from '../../publish/git-exec.ts';
+import { readTreeCached } from '../../readcache/tree-cache.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
 import { treePathOk, type TreeEntry } from '../browse/tree.ts';
 
 /**
- * S5-T2 历史版本读取面（版本预览与还原的数据源）：任意提交的树条目/blob
- * 读取——与 S5-T1 log.ts 同规（每请求 spawn、无缓存；只读 plumbing；语义
- * 失败与 spawn 失败分类返回）。复用 browse/tree.ts 的条目形态与路径判定
- * （treePathOk/TreeEntry），寻址面=commit OID（hex 缩写/全 SHA——与 diff 页
- * 同判），不收 rev 形态。
+ * S5-T2 历史版本读取面（版本预览与还原的数据源；S18-T2 起 agent docs 端点
+ * 同一面消费）：任意提交的树条目/blob 读取——与 S5-T1 log.ts 同规（只读
+ * plumbing；语义失败与 spawn 失败分类返回）。S24-T1 起 rev-parse/ls-tree 经
+ * 单源跨请求树缓存（readcache/tree-cache.ts）服务——OID 锚定内容不可变，
+ * 缓存天然安全；blob 字节（readBlobBytes）不在缓存面。复用 browse/tree.ts
+ * 的条目形态与路径判定（treePathOk/TreeEntry），寻址面=commit OID（hex
+ * 缩写/全 SHA——与 diff 页同判），不收 rev 形态。
  */
 
 /** 提交 OID 寻址形状（hex 缩写/全 SHA；与 log.ts diff 寻址同判——寻址面收 OID） */
@@ -48,7 +50,7 @@ export async function readEntryAtCommit(
   const repo = vaultRepoPath(dataDir, vaultId);
   let full: string;
   try {
-    full = (await execGit(['rev-parse', '--verify', `${commitOid}^{commit}`], { cwd: repo })).trim();
+    full = (await readTreeCached(['rev-parse', '--verify', `${commitOid}^{commit}`], { cwd: repo })).trim();
   } catch (err) {
     if (!isGitExitFailure(err)) return { kind: 'unavailable' };
     return { kind: 'not-found' }; // 未知缩写/非提交对象（blob 等）
@@ -58,7 +60,7 @@ export async function readEntryAtCommit(
   const name = entryPath.slice(slash + 1);
   let out: string;
   try {
-    out = await execGit(['ls-tree', '-l', '-z', dirPath === '' ? full : `${full}:${dirPath}`], { cwd: repo });
+    out = await readTreeCached(['ls-tree', '-l', '-z', dirPath === '' ? full : `${full}:${dirPath}`], { cwd: repo });
   } catch (err) {
     if (!isGitExitFailure(err)) return { kind: 'unavailable' };
     return { kind: 'not-found' }; // 父目录在该提交树中不存在（含解析到 blob）

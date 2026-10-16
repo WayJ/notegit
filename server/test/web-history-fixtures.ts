@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { mkdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { browseHarness, gitOut, repoPathOf, type BrowseHarness } from './web-browse-fixtures.ts';
+import { invalidateVaultTreeCache } from '../src/readcache/tree-cache.ts';
 
 /**
  * S5-T1 测试夹具：在 web-browse-fixtures（会话/仓库/种子）之上追加「多笔顺序
@@ -47,6 +48,7 @@ export async function pushHistorySeries(
   }
   await gitOut(['-C', work, 'push', 'origin', 'HEAD:refs/heads/main']);
   await rm(work, { recursive: true, force: true });
+  invalidateVaultTreeCache(repoPath); // S24-T1：直连 push 无审计行——显式失效（对齐生产 push 语义）
 }
 
 /** 直通 `git log`：`[shortOid, authorName, authorDate, subject]` 序列（默认分支、

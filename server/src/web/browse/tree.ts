@@ -1,9 +1,12 @@
 import { execGit } from '../../publish/git-exec.ts';
+import { readTreeCached } from '../../readcache/tree-cache.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
 
 /**
- * S4-T1 Git tree 读取面（目录浏览的数据源）：默认分支实时读（每请求 spawn，
- * 无任何缓存——D-IC-05 精神），只读 plumbing（ls-tree / cat-file），不改引用。
+ * S4-T1 Git tree 读取面（目录浏览的数据源）：默认分支实时读，只读 plumbing
+ * （ls-tree / cat-file），不改引用。S24-T1 起 ls-tree/rev-parse 族经单源跨请求
+ * 树缓存（readcache/tree-cache.ts——失效钩子优先+TTL 兜底+fail-closed，E8 D48）
+ * 服务，读端点响应形态不变（只变服务方式）；cat-file/blob 正文不在树缓存面。
  * 消费既有导出面：execGit（S3-T7 发布组件同语义——退出码 0→stdout、超时
  * SIGKILL、异步强制）与 vaultRepoPath（S3-T1 路径映射）。
  *
@@ -83,14 +86,14 @@ export async function readDirTree(
   const repo = vaultRepoPath(dataDir, vaultId);
   const ref = refOf(defaultBranch);
   try {
-    await execGit(['rev-parse', '--verify', '--quiet', ref], { cwd: repo });
+    await readTreeCached(['rev-parse', '--verify', '--quiet', ref], { cwd: repo });
   } catch (err) {
     if (!isGitExitFailure(err)) return { kind: 'unavailable' }; // spawn 失败（目录缺失）
     return { kind: 'no-commits' }; // ref 不存在 = unborn 默认分支（空库）
   }
   const target = dirPath === '' ? ref : `${ref}:${dirPath}`;
   try {
-    const out = await execGit(['ls-tree', '-l', '-z', target], { cwd: repo });
+    const out = await readTreeCached(['ls-tree', '-l', '-z', target], { cwd: repo });
     return { kind: 'ok', entries: parseLsTree(out) };
   } catch (err) {
     if (!isGitExitFailure(err)) return { kind: 'unavailable' };
@@ -128,8 +131,8 @@ export type RunGit = typeof execGit;
  * --format=…`（记录分隔 %x1e / 字段分隔 %x1f——NUL 由 -z 保留给路径，防转义
  * 与换行歧义）由新到旧扫描全历史路径名单，条目名首见即定——blob=精确路径
  * 触及、tree=子路径前缀触及（`docs/nested-x` 不误配 `docs/nested/`）。逐条
- * spawn 禁止（D4：N+1 子进程风爆）；每请求实时派生、无缓存（D-IC-05 精神，
- * 与 readDirTree 同 spawn 面，不另受 githttp 闸门约束）。条目集与序不经此
+ * spawn 禁止（D4：N+1 子进程风爆）；每请求实时派生、无缓存（log 族不属
+ * ls-tree 族——S24 D1 缓存面外，不另受 githttp 闸门约束）。条目集与序不经此
  * 面——仅附加元数据（页面一致性断言仍以 ls-tree 为准）。记录首字段 commit
  * hash 未消费（解析健全性锚）；合并提交默认无路径名单，自然跳过（发布面无
  * 合并提交——语义与「任一父提交触及」近似）。
