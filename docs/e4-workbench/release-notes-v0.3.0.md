@@ -7,6 +7,7 @@
 | 版本清单 | 四包 0.3.0（server / cli / packages/validation / monorepo 根）；CLI `VERSION` 常量随行；跨包依赖随动（server dep + cli devDep notegit-validation 0.3.0——v0.2.0 同日热修教训固化）；rulesVersion 1.0.0-draft.2（未变）；schema 迁移 10 条（顶版 0010——**较 v0.2.0 零新增迁移**） |
 | 基线 | main @ 发布提交（E3–E7 全部关闭态：E4 10/10、E5 5/5、E6 5/5、E7 4/4 DoD） |
 | 前版 | v0.2.0（E2 GUI 可用性；docs/e2-gui/release-notes-v0.2.0.md） |
+| npm | **未发布**（操作者决定 2026-10-16）——发布面=git tag+本说明；与既往版本一致（v0.1/v0.2 均未上 registry，`npm view notegit` 无任何版本）；pack 验证已做（notegit-0.3.0.tgz 48 文件），后续需要时分发即可 |
 
 ## 本版主题：工作台化与 agent 底座（E3–E7）
 
