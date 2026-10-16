@@ -42,7 +42,7 @@ export interface UploadPageInput {
    *  缺省 = 写者形态：模板直调测试兼容；生产路由恒传实算值（D17 呈现层）） */
   readonly canWrite?: boolean;
   /** UI-RESTYLE：顶部导航登录态（呈现层透传） */
-  readonly viewer?: { username: string; is_instance_admin: boolean };
+  readonly viewer?: { username: string; display_name?: string; is_instance_admin: boolean };
 }
 
 /** 只读徽章（S10-T2：DESIGN.md badge-pill 形态——`.badge` 既有类，token 语义） */
@@ -63,7 +63,7 @@ export function uploadPage(input: UploadPageInput): string {
   <p class="page-meta">目标目录：<code>${dirPath === '' ? '（库根）' : escapeHtml(dirPath)}</code> · 传输契约：<code>application/octet-stream</code>（原始字节，fetch 直发）</p>
   </div>`;
   const nav: PageNav | undefined =
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined;
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined;
 
   // S10-T2 只读态（D4）：页面可达（门槛 read 成员不变）但表单禁用、不渲染提交
   // 控件 + 无写权限标注；无交互脚本（脚本绑定表单元素——禁用态不携带）
@@ -165,7 +165,7 @@ document.getElementById('upload-form').addEventListener('submit', async (ev) => 
 export function uploadStatePage(
   vault: { slug: string; name: string },
   note: string,
-  viewer?: { username: string; is_instance_admin?: boolean },
+  viewer?: { username: string; display_name?: string; is_instance_admin?: boolean },
 ): string {
   return layout(
     `上传 — ${vault.name}`,
@@ -177,7 +177,7 @@ export function uploadStatePage(
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
       : undefined,
   );
 }

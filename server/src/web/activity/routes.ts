@@ -1,10 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
-import type { AuthSuccess } from '../../auth/lifecycle.ts';
 import { authorize } from '../../auth/lifecycle.ts';
 import { createDbMembershipSource } from '../../vaults/membership.ts';
 import { VaultService } from '../../vaults/service.ts';
-import { html, sendPageNotFound } from '../page-kit.ts';
+import { html, sendPageNotFound, type PageAuth } from '../page-kit.ts';
 import { recentChangesForVault } from './query.ts';
 import { vaultActivityPage } from './pages.ts';
 
@@ -24,7 +23,7 @@ import { vaultActivityPage } from './pages.ts';
 /** activity 页所需选项（组装点传入项的结构化子集——模块不反向依赖 web/routes.ts） */
 export interface ActivityRoutesOptions {
   readonly db: DatabaseSync;
-  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<AuthSuccess | null>;
+  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<PageAuth | null>;
 }
 
 export function registerActivityRoutes(app: FastifyInstance, opts: ActivityRoutesOptions): void {
@@ -44,7 +43,7 @@ export function registerActivityRoutes(app: FastifyInstance, opts: ActivityRoute
       reply,
       vaultActivityPage({
         vault: { slug: row.slug, name: row.name },
-        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+        viewer: { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin },
         entries,
       }),
     );

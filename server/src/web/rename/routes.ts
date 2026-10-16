@@ -10,7 +10,7 @@ import { VaultService } from '../../vaults/service.ts';
 import { vaultRepoPath } from '../../vaults/repo-path.ts';
 import { publishWebSubmit, type RejectedResult } from '../../publish/index.ts';
 import { execGit } from '../../publish/git-exec.ts';
-import { html, sendPageNotFound } from '../page-kit.ts';
+import { html, sendPageNotFound, type PageAuth } from '../page-kit.ts';
 import { canWriteVault } from '../role-gate.ts';
 import { hintFor } from '../hints.ts';
 import { browseUrl, viewUrl } from '../browse/pages.ts';
@@ -42,7 +42,7 @@ import { renamePage, deleteConfirmPage, opStatePage, type OpNotice } from './pag
 export interface RenameRoutesOptions {
   readonly db: DatabaseSync;
   readonly dataDir?: string;
-  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<AuthSuccess | null>;
+  readonly requirePageUser: (req: FastifyRequest, reply: FastifyReply) => Promise<PageAuth | null>;
   /** 维护闸门（S4-T5 缝；缺省 = 无 gate 调用形态不检查——同 pipeline 缺省语义） */
   readonly maintenanceGate?: MaintenanceGate;
 }
@@ -147,7 +147,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     req: FastifyRequest,
     reply: FastifyReply,
     slug: string,
-  ): Promise<{ who: AuthSuccess; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
+  ): Promise<{ who: PageAuth; vault: { slug: string; name: string; id: number; defaultBranch: string } } | null> {
     const who = await opts.requirePageUser(req, reply);
     if (!who) return null;
     const decision = authorize(membershipSource, who.subject.employee_id, slug, 'read');
@@ -163,7 +163,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     reply: FastifyReply,
     vault: { slug: string; name: string; id: number; defaultBranch: string },
     entryPath: string,
-    viewer?: { username: string; is_instance_admin?: boolean },
+    viewer?: { username: string; display_name?: string; is_instance_admin?: boolean },
   ): Promise<{ oid: string; size: number | undefined } | null> {
     const read = await readEntryAt(opts.dataDir!, vault.id, vault.defaultBranch, entryPath);
     if (read.kind === 'unavailable') {
@@ -220,13 +220,13 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
         opStatePage(
           vault,
           '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。',
-          { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin }, // S12-T2 账户位（批准扩展）
+          { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin }, // S12-T2 账户位（批准扩展）
         ),
       );
     }
     const entryPath = ((req.params as Record<string, string>)['*'] ?? '').replace(/\/+$/, '');
     if (entryPath === '' || !treePathOk(entryPath)) return sendPageNotFound(reply);
-    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin });
+    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin });
     if (!entry) return reply;
     return html(
       reply,
@@ -237,7 +237,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
         // S10-T2 权限感知：reader 直开 URL 呈只读态（D4：门槛 read 成员不变；
         // canWriteVault 唯一判定面，D17 呈现层——POST 侧鉴权原样）
         canWrite: canWriteVault(membershipSource, who.subject.employee_id, vault.slug),
-        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+        viewer: { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin },
       }),
     );
   });
@@ -253,7 +253,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     const entryPath = ((req.params as Record<string, string>)['*'] ?? '').replace(/\/+$/, '');
     const form = (req.body ?? {}) as Record<string, string>;
     const to = String(form['to'] ?? '').trim();
-    const viewer = { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin };
+    const viewer = { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin };
     const fail = (status: number, notice: OpNotice) =>
       reply.code(status).send(renamePage({ vault, from: entryPath, to, notice, viewer }));
 
@@ -262,7 +262,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     }
     if (to === entryPath) return fail(400, { message: '路径未变化：新路径与原路径相同' });
 
-    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin });
+    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin });
     if (!entry) return reply;
 
     // 目标已存在：拒绝不覆盖（重命名不是覆盖写入；删除须走显式删除流程）
@@ -319,13 +319,13 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
         opStatePage(
           vault,
           '内容暂不可用（仓库存储未挂接——仅测试形态会出现）。',
-          { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin }, // S12-T2 账户位（批准扩展）
+          { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin }, // S12-T2 账户位（批准扩展）
         ),
       );
     }
     const entryPath = ((req.params as Record<string, string>)['*'] ?? '').replace(/\/+$/, '');
     if (entryPath === '' || !treePathOk(entryPath)) return sendPageNotFound(reply);
-    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin });
+    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin });
     if (!entry) return reply;
     return html(
       reply,
@@ -334,7 +334,7 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
         path: entryPath,
         // S10-T2 权限感知：同 rename GET——reader 只读态（D4/D17）
         canWrite: canWriteVault(membershipSource, who.subject.employee_id, vault.slug),
-        viewer: { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin },
+        viewer: { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin },
       }),
     );
   });
@@ -350,12 +350,12 @@ export function registerRenameRoutes(app: FastifyInstance, opts: RenameRoutesOpt
     const entryPath = ((req.params as Record<string, string>)['*'] ?? '').replace(/\/+$/, '');
     if (entryPath === '' || !treePathOk(entryPath)) return sendPageNotFound(reply);
 
-    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin });
+    const entry = await requireSourceEntry(reply, vault, entryPath, { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin });
     if (!entry) return reply;
 
     const repoPath = vaultRepoPath(opts.dataDir, vault.id);
     const baseCommit = await headCommit(repoPath, vault.defaultBranch);
-    const viewer = { username: who.subject.username, is_instance_admin: who.subject.is_instance_admin };
+    const viewer = { username: who.subject.username, display_name: who.display_name, is_instance_admin: who.subject.is_instance_admin };
     const publish = await publishWebSubmit({
       db: opts.db,
       dataDir: opts.dataDir,

@@ -88,6 +88,9 @@ const SPIKE_MARK =
   '<svg class="spike-mark" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><g stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5.6 5.6 18.4 18.4"/><path d="M18.4 5.6 5.6 18.4"/></g></svg>';
 
 const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string; readonly key: NonNullable<PageNav['active']> }> = [
+  // S21-T2（B1）：侧栏首项=「文库」（/vaults——文库是主目的地，置于查找之前；
+  // 枚举 'vaults' 既有，browse 族页面已按 active='vaults' 落位）。
+  { href: '/vaults', label: '文库', key: 'vaults' },
   { href: '/search', label: '查找', key: 'search' },
   { href: '/cite', label: '引用解析', key: 'cite' },
   { href: '/drafts', label: '我的草稿', key: 'drafts' }, // 认证全员可见（顶栏渲染过滤——匿名壳不呈现）
@@ -99,8 +102,10 @@ const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string; 
  * 图标为内联 SVG 线条标记（随色继承 currentColor，与 spike-mark 同一处理方式——
  * DESIGN.md 未覆盖侧栏组件，按其 Iteration Guide 原则推导：先结构与米色卡承载
  * 当前区，不引入第四种表面色、coral 不入侧栏）。
+ * S21-T2（B1）：文库项居首（主目的地）——DESIGN.md §4 侧栏首项条款。
  */
 const SIDE_ICONS: Readonly<Record<string, string>> = {
+  vaults: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="4" y="4" width="7.5" height="7.5" rx="1.5"/><rect x="4" y="12.5" width="7.5" height="7.5" rx="1.5"/><path d="M12.5 6.5h7M12.5 10.5h7M12.5 14.5h7M12.5 18.5h7"/></g></svg>',
   search: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 19 19"/></g></svg>',
   drafts: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M6 3.5h7.5L18 8v12.5H6z"/><path d="M13.5 3.5V8H18"/><path d="M9 12.5h6M9 16h4"/></g></svg>',
   cite: '<svg class="side-nav-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M4.5 5v13"/><path d="M8.5 7.5h11M8.5 12h11M8.5 16.5h6"/></g></svg>',
@@ -127,6 +132,8 @@ function sideNav(nav: PageNav): string {
   // ＋身份行（isAdmin 实例管理员/成员——纯呈现文案，判定面仍在 API 授权层）；
   // 分隔线隔开导航区（styles.css .side-foot border-top）。本函数仅登录态壳被调
   // 用（layout 判 nav.user），foot 的缺省守卫为形态完备性而设。
+  // S21-T1（B9）：displayName 与身份行文案碰撞（如显示名就叫「实例管理员」）时
+  // 身份行不重复渲染——姓名为准，去同文双行。
   const u = nav.user;
   const foot =
     u === undefined
@@ -134,8 +141,7 @@ function sideNav(nav: PageNav): string {
       : `\n  <div class="side-foot">
     <span class="side-foot-avatar" aria-hidden="true">${escapeHtml([...(u.displayName ?? u.username)][0] ?? '')}</span>
     <span class="side-foot-id">
-      <span class="side-foot-name">${escapeHtml(u.displayName ?? u.username)}</span>
-      <span class="side-foot-role">${u.isAdmin ? '实例管理员' : '成员'}</span>
+      <span class="side-foot-name">${escapeHtml(u.displayName ?? u.username)}</span>${(u.displayName ?? u.username) === (u.isAdmin ? '实例管理员' : '成员') ? '' : `\n      <span class="side-foot-role">${u.isAdmin ? '实例管理员' : '成员'}</span>`}
     </span>
   </div>`;
   return `<nav class="side-nav" aria-label="分区导航">
@@ -159,7 +165,9 @@ const ACCOUNT_SCRIPT = `
 `;
 
 function topNav(nav?: PageNav): string {
-  const items = NAV_ITEMS.filter((it) => it.key !== 'drafts' || nav?.user !== undefined).map(
+  // S21-T2（B1）：横向主菜单（仅匿名壳渲染）不承载「文库」——顶栏主 CTA「知识库」
+  // 已是 /vaults 的等价入口，不重复两处；侧栏（登录态）文库居首。
+  const items = NAV_ITEMS.filter((it) => it.key !== 'drafts' && it.key !== 'vaults').map(
     (it) =>
       `<li><a href="${it.href}"${nav?.active === it.key ? ' aria-current="page"' : ''}>${it.label}</a></li>`,
   );
@@ -168,11 +176,13 @@ function topNav(nav?: PageNav): string {
       ? `\n      <li><a href="/admin"${nav.active === 'admin' ? ' aria-current="page"' : ''}>管理</a></li>`
       : '';
   // 账户菜单（S12-T2）：details 零 JS 下拉——徽章（displayName 缺省回落用户名）+ 用户名；
+  // S21-T1（A1/D41）双槽同名单槽：徽章名与用户名相同（含 displayName 缺省回落）
+  // 时不再重复渲染 username 槽——身份呈现单形态。
   // 下拉=凭据/管理（仅实例管理员）/退出登录（id="logout"——顶栏全域承担，脚本见 ACCOUNT_SCRIPT）
   const account =
     nav?.user !== undefined
       ? `\n      <details class="nav-account">
-        <summary title="${escapeHtml(nav.user.username)}"><span class="badge">${escapeHtml(nav.user.displayName ?? nav.user.username)}</span> <span class="nav-user">${escapeHtml(nav.user.username)}</span></summary>
+        <summary title="${escapeHtml(nav.user.username)}"><span class="badge">${escapeHtml(nav.user.displayName ?? nav.user.username)}</span>${(nav.user.displayName ?? nav.user.username) === nav.user.username ? '' : ` <span class="nav-user">${escapeHtml(nav.user.username)}</span>`}</summary>
         <div class="account-menu">
           <a href="/credentials"${nav.active === 'credentials' ? ' aria-current="page"' : ''}>我的凭据</a>${
             nav.user.isAdmin
@@ -205,17 +215,27 @@ function topNav(nav?: PageNav): string {
 </header>`;
 }
 
-const SITE_FOOTER = `<footer class="site-footer">
-  <div class="site-footer-inner">
-    <span class="brand"><span class="brand-mark">${SPIKE_MARK}</span>Notegit</span>
-    <nav class="site-footer-links" aria-label="页脚">
+/**
+ * 页脚（S21-T1 / B2：登录态去导航）：登录态桌面导航唯一承担者=侧栏（S14 master
+ * B 方案），页脚不再重复渲染导航链接——登录态仅品牌＋fine print；匿名/无导航壳
+ * （登录页、403/404 兜底）保留三项链接（无侧栏，页脚为其唯一引导）。
+ */
+function siteFooter(nav?: PageNav): string {
+  const links =
+    nav?.user === undefined
+      ? `\n    <nav class="site-footer-links" aria-label="页脚">
       <a href="/search">查找</a>
       <a href="/cite">引用解析</a>
       <a href="/credentials">我的凭据</a>
-    </nav>
+    </nav>`
+      : '';
+  return `<footer class="site-footer">
+  <div class="site-footer-inner">
+    <span class="brand"><span class="brand-mark">${SPIKE_MARK}</span>Notegit</span>${links}
     <span class="foot-fine">团队知识库 · 服务端渲染</span>
   </div>
 </footer>`;
+}
 
 export function layout(title: string, body: string, script = '', nav?: PageNav, sharedScript = false): string {
   // S12-T2：登录态页面把账户菜单脚本并入页面唯一 script 块（每页仍恰好一个 <script>）
@@ -233,6 +253,7 @@ export function layout(title: string, body: string, script = '', nav?: PageNav, 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)} — Notegit</title>
+<link rel="icon" href="/favicon.ico">
 <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
@@ -242,7 +263,7 @@ ${side}<main>
 ${body}
 </main>
 </div>
-${SITE_FOOTER}
+${siteFooter(nav)}
 ${sharedRef}<script>
 ${inline}
 </script>
@@ -337,12 +358,22 @@ export function activityEntryRow(e: ActivityEntry): string {
 
 // ── S14-T3 工作台首页（`/` 原地升级——DOD-E4-02/04/07） ──────────────────────
 
+/**
+ * 显示层最近文档行（S21-T2/B7）：在查询面 RecentDocumentRow 之上仅追加呈现用
+ * `publishCount`（同库同路径在取数窗口内的发布次数——>1 时行内「N 次发布」微
+ * 标注）。去重与 HEAD 树求交在 web/workbench/display.ts（纯显示层，D25/D30
+ * 数据面语义不变）；查询面原行结构零改动（RecentDocumentRow 可直传——字段可选）。
+ */
+export interface RecentDocDisplay extends RecentDocumentRow {
+  readonly publishCount?: number;
+}
+
 /** 工作台首页数据（各能力全部来自 web/workbench/query.ts——页面零自算，D26：
  *  成员过滤与统计口径已在该层锁定，indexPage 只渲染） */
 export interface WorkbenchHomeData {
   readonly summary: WorkbenchSummary;
   readonly vaults: readonly VaultCard[];
-  readonly docs: readonly RecentDocumentRow[];
+  readonly docs: readonly RecentDocDisplay[];
   /** 页头索引状态位数据（S15-T2，D4：search_index_state 聚合——查询面已做成员过滤） */
   readonly indexStatus: IndexStatus;
   /** 跨库文档表视图（S15-T2，D5：querystring 记忆 view=list|grid；缺省 list——纯呈现偏好） */
@@ -397,13 +428,18 @@ function workbenchVaultCardHtml(v: VaultCard, index: number): string {
  * browse——防环，同 activityViewHref 手法）；维护者=Git 提交者元数据（DOD-03/
  * D25）——单元格 title 与区块脚注双通道如实标注；更新时间=服务端审计时间。
  */
-function workbenchDocRowHtml(d: RecentDocumentRow): string {
+function workbenchDocRowHtml(d: RecentDocDisplay): string {
   const view = activityViewHref(d.vaultSlug, d.path);
   const chips =
     d.tags.length === 0
       ? ''
       : `<span class="tag-chips">${d.tags.map((t) => `<span class="badge">${escapeHtml(t)}</span>`).join('')}</span>`;
-  const titleLink = `<a href="${view}">${escapeHtml(d.title ?? d.path)}</a>`;
+  // S21-T2/B7：同路径多次发布的微标注（去重后保留最新事件，次数如实随行）
+  const countNote =
+    d.publishCount !== undefined && d.publishCount > 1
+      ? `<span class="badge badge-muted doc-publish-count">${d.publishCount} 次发布</span>`
+      : '';
+  const titleLink = `<a href="${view}">${escapeHtml(d.title ?? d.path)}</a>${countNote}`;
   const pathPart = d.title === null ? '' : `<span class="doc-row-path">${escapeHtml(d.path)}</span>`;
   // S17-T1 差距7（静态原型对齐；S17 D4）：MD 文件图标片（29×32 surface 底 line
   // 描边 accent-ink 'MD'——v2 §5 文档表）＋维护者头像圆章（git 作者名首字，20px
@@ -442,14 +478,19 @@ function indexStatusHtml(s: IndexStatus): string {
  * （不新引表面色）；整卡链接=viewUrl 同构；卡题=title（无 title 如实落路径，
  * 与列表行同语义）。
  */
-function workbenchDocCardHtml(d: RecentDocumentRow, index: number): string {
+function workbenchDocCardHtml(d: RecentDocDisplay, index: number): string {
   const chips =
     d.tags.length === 0
       ? ''
       : `<span class="tag-chips">${d.tags.map((t) => `<span class="badge">${escapeHtml(t)}</span>`).join('')}</span>`;
+  // S21-T2/B7：网格卡同款微标注（列表/网格同形态）
+  const countNote =
+    d.publishCount !== undefined && d.publishCount > 1
+      ? ` <span class="badge badge-muted">${d.publishCount} 次发布</span>`
+      : '';
   return `<a class="vault-card" href="${activityViewHref(d.vaultSlug, d.path)}">
     <span class="vault-chip ${CHIP_VARIANTS[index % CHIP_VARIANTS.length]}" aria-hidden="true">▤</span>
-    <span class="vault-name">${escapeHtml(d.title ?? d.path)}</span>
+    <span class="vault-name">${escapeHtml(d.title ?? d.path)}${countNote}</span>
     <span class="doc-row-path">${escapeHtml(d.path)}</span>
     <span class="badge">${escapeHtml(d.vaultName)}</span>
     <span class="vault-card-meta" title="${escapeHtml(d.occurredAt)}">${escapeHtml(formatRelativeTime(d.occurredAt))}</span>${chips}
@@ -558,7 +599,7 @@ export function indexPage(
       ? '<p class="state-note">尚无最近发布的文档（各库发布动作产生后在此呈现）。</p>'
       : view === 'grid'
         ? `<div class="vault-grid">\n  ${docs.map(workbenchDocCardHtml).join('\n  ')}\n  </div>`
-        : `<div class="table-wrap">
+        : `<div class="table-wrap table-scroll">
   <table>
   <thead><tr><th>文档</th><th class="col-tertiary">所属库</th><th class="col-secondary">维护者</th><th class="col-tertiary">更新时间</th></tr></thead>
   <tbody>
@@ -570,7 +611,7 @@ export function indexPage(
   <div class="section-head">
     <div class="section-head-main">
       <h2>跨库最近文档</h2>
-      <p class="page-meta">按服务端审计时间排序的成功发布事件（触及文档路径，最近 ${escapeHtml(String(docs.length))} 条；路径与维护者从该次提交的 Git 记录派生）。维护者=Git 提交者元数据，非认证身份——操作主体以服务端审计记录为准。</p>
+      <p class="page-meta">按服务端审计时间排序的成功发布事件（按文档去重、只呈现各库当前仍存在的文档，最近 ${escapeHtml(String(docs.length))} 篇；路径与维护者从提交的 Git 记录派生）。维护者为提交记录自带信息（提交人可自行填写）——站内操作记录以认证员工为准。</p>
       ${viewToggleHtml(view)}
     </div>
     <a class="section-action" href="/search">查看全部文档 →</a>
@@ -621,19 +662,29 @@ export function indexPage(
   );
 }
 
-/** 管理页（UI-RESTYLE：分区 admin-section 米色卡 + 表格包裹层 + 一次性令牌深色窗） */
-export function adminPage(viewer?: { username: string; is_instance_admin: boolean }): string {
+/**
+ * 管理页（UI-RESTYLE：分区 admin-section 米色卡 + 表格包裹层 + 一次性令牌深色窗；
+ * S21-T1/A1：viewer 附 display_name——顶栏徽章单形态接线）。
+ * S21-T2/B10：维护模式区块呈现当前状态（maintenanceOn——服务端读闸门实态渲染；
+ * 开启=orange 高亮）＋「开启/关闭」按钮按状态定主次（下一步动作为主按钮）＋
+ * 文案去内部引用（员工可读——不引文档编号/任务注记）。
+ */
+export function adminPage(
+  viewer?: { username: string; display_name?: string; is_instance_admin: boolean },
+  maint?: { readonly maintenanceOn: boolean },
+): string {
+  const maintOn = maint?.maintenanceOn === true;
   return layout(
     '管理',
     `<div class="page">
   <div class="page-head">
     <h1>Notegit 管理</h1>
-    <p class="page-meta"><a href="/">← 返回</a></p>
+    <p class="page-sub page-sub-quiet"><a href="/">← 返回</a></p>
   </div>
 
   <section class="admin-section">
   <h2>员工管理</h2>
-  <div class="table-wrap">
+  <div class="table-wrap table-scroll">
   <table id="employees-table">
     <thead><tr><th>用户名</th><th>显示名</th><th>状态</th><th>实例管理员</th><th>创建时间</th><th>操作</th></tr></thead>
     <tbody></tbody>
@@ -652,8 +703,10 @@ export function adminPage(viewer?: { username: string; is_instance_admin: boolea
     </div>
     <p><button type="submit" class="btn-primary">邀请</button></p>
   </form>
+  <div class="token-block" hidden>
   <p>一次性口令重置令牌（明文仅此一次，经企业内渠道交付）：</p>
   <pre id="invite-token" class="token-view"></pre>
+  </div>
   <p><output id="invite-msg"></output></p>
   </section>
 
@@ -672,7 +725,7 @@ export function adminPage(viewer?: { username: string; is_instance_admin: boolea
   <section class="admin-section">
   <h2>成员与角色管理（我任库管理员的库）</h2>
   <p class="toolbar"><select id="member-vault"></select> <button id="member-load" type="button">加载成员</button></p>
-  <div class="table-wrap">
+  <div class="table-wrap table-scroll" id="members-table-wrap" hidden>
   <table id="members-table">
     <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>授权时间</th><th>操作</th></tr></thead>
     <tbody></tbody>
@@ -686,19 +739,29 @@ export function adminPage(viewer?: { username: string; is_instance_admin: boolea
     <p><button type="submit" class="btn-primary">授权 / 改角色</button></p>
   </form>
   <p><output id="member-msg"></output></p>
+  <div class="token-block" hidden>
   <p>重置口令的一次性令牌（明文仅此一次，独立于邀请令牌展示）：</p>
   <pre id="reset-token" class="token-view"></pre>
+  </div>
   </section>
 
-  <section class="admin-section">
+  <section class="admin-section" id="maint-section">
   <h2>维护模式</h2>
-  <p class="toolbar"><button id="maint-on" type="button">开启维护模式</button> <button id="maint-off" type="button">关闭维护模式</button></p>
-  <p>（实例级写闸门：开启后业务与管理写一律 503，登录与读放行；当前状态无查询端点——见 docs/credentials-ops.md 与任务 notes）</p>
+  <p class="maint-status${maintOn ? ' is-on' : ''}"><span class="status-dot" aria-hidden="true"></span>当前状态：<strong id="maint-state-text">${maintOn ? '维护中（写入已暂停）' : '正常运行'}</strong></p>
+  <p class="toolbar"><button id="maint-on" type="button"${maintOn ? '' : ' class="btn-primary"'}>开启维护模式</button> <button id="maint-off" type="button"${maintOn ? ' class="btn-primary"' : ''}>关闭维护模式</button></p>
+  <p class="page-meta">用于系统升级或数据恢复期间：开启后发布、编辑等一切写入被暂停（登录与浏览不受影响），关闭后立即恢复。</p>
   <p><output id="maint-msg"></output></p>
   </section>
 </div>
 `,
     `${SHARED_ALIAS}
+
+// —— 一次性令牌写入即展开（S21-T1 A3/D40：token 区块默认隐藏，生成后才显示）——
+function revealToken(id, value) {
+  const pre = document.getElementById(id);
+  pre.textContent = value || '';
+  if (pre.textContent) pre.closest('.token-block').hidden = false;
+}
 
 // —— 员工管理：列表（分页 limit=50 + cursor「加载更多」）+ 停用/启用 + 实例管理员开关 + 重置口令 ——
 
@@ -743,7 +806,7 @@ async function loadEmployees(append) {
           const r = await api('POST',
             '/api/v1/admin/employees/' + encodeURIComponent(e.username) + '/password-reset');
           // 独立展示区（不覆盖尚未交付的邀请令牌——两者明文都仅此一次，覆盖即丢失）
-          document.getElementById('reset-token').textContent = r.password_reset_token || '';
+          revealToken('reset-token', r.password_reset_token);
           show(document.getElementById('employees-msg'),
             e.username + ' 的重置令牌已生成（30 分钟内单次有效，见下方重置令牌区）');
         } catch (err) { show(document.getElementById('employees-msg'), err.message); }
@@ -784,7 +847,7 @@ document.getElementById('invite-form').addEventListener('submit', async (ev) => 
     const r = await api('POST', '/api/v1/admin/employees', {
       username: f.username.value, display_name: f.display_name.value,
     });
-    document.getElementById('invite-token').textContent = r.password_reset_token || '';
+    revealToken('invite-token', r.password_reset_token);
     show(document.getElementById('invite-msg'), '已邀请 ' + r.username);
     f.reset();
     await loadEmployees();
@@ -855,6 +918,7 @@ async function loadMembers() {
       tr.appendChild(td);
       tbody.appendChild(tr);
     }
+    document.getElementById('members-table-wrap').hidden = false; // S21-T1 A7：首批数据到位才呈现表头（未加载不裸表头）
     show(document.getElementById('member-msg'), slug + '：' + members.length + ' 名成员');
   } catch (err) {
     show(document.getElementById('member-msg'), '成员加载失败：' + err.message);
@@ -879,32 +943,52 @@ document.getElementById('member-form').addEventListener('submit', async (ev) => 
 
 // —— 维护模式（T7 端点：POST 开启 / DELETE 关闭；实例管理员） ——
 
+// S21-T2/B10：状态行与按钮主次随实态切换（初始态由服务端渲染，切换后本地同步）
+function updateMaintUi(on) {
+  document.getElementById('maint-state-text').textContent = on ? '维护中（写入已暂停）' : '正常运行';
+  document.getElementById('maint-section').querySelector('.maint-status').classList.toggle('is-on', on);
+  document.getElementById('maint-on').classList.toggle('btn-primary', !on);
+  document.getElementById('maint-off').classList.toggle('btn-primary', on);
+}
+
 document.getElementById('maint-on').addEventListener('click', async () => {
   try {
     await api('POST', '/api/v1/admin/maintenance');
-    show(document.getElementById('maint-msg'), '已进入维护模式（写入被拒，登录与读放行）');
+    updateMaintUi(true);
+    show(document.getElementById('maint-msg'), '已进入维护模式（写入被暂停，登录与浏览不受影响）');
   } catch (err) { show(document.getElementById('maint-msg'), err.message); }
 });
 document.getElementById('maint-off').addEventListener('click', async () => {
   try {
     await api('DELETE', '/api/v1/admin/maintenance');
-    show(document.getElementById('maint-msg'), '已退出维护模式');
+    updateMaintUi(false);
+    show(document.getElementById('maint-msg'), '已退出维护模式，写入恢复');
   } catch (err) { show(document.getElementById('maint-msg'), err.message); }
 });
 `,
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'admin' } : undefined,
+    viewer !== undefined
+      ? {
+          user: {
+            username: viewer.username,
+            isAdmin: viewer.is_instance_admin,
+            ...(viewer.display_name !== undefined ? { displayName: viewer.display_name } : {}),
+          },
+          active: 'admin',
+        }
+      : undefined,
     true, // S12-T3：引用共享脚本 /assets/app.js（FETCH_HELPER 迁出——行为零变化）
   );
 }
 
-/** 员工自助凭据页（UI-RESTYLE：分区卡 + 表格包裹层 + 一次性令牌深色窗） */
-export function credentialsPage(viewer?: { username: string; is_instance_admin: boolean }): string {
+/** 员工自助凭据页（UI-RESTYLE：分区卡 + 表格包裹层 + 一次性令牌深色窗；
+ * S21-T1/A1：viewer 附 display_name——顶栏徽章单形态接线） */
+export function credentialsPage(viewer?: { username: string; display_name?: string; is_instance_admin: boolean }): string {
   return layout(
     '我的访问凭据',
     `<div class="page">
   <div class="page-head">
     <h1>我的访问凭据</h1>
-    <p class="page-meta"><a href="/">← 返回</a></p>
+    <p class="page-sub page-sub-quiet"><a href="/">← 返回</a></p>
   </div>
 
   <section class="admin-section">
@@ -918,14 +1002,16 @@ export function credentialsPage(viewer?: { username: string; is_instance_admin: 
     <label>库范围（可空 = 全部有权库；逗号分隔 slug 清单 = 只能收窄） <input name="vaults" placeholder="vault-a, vault-b"></label>
     <p><button type="submit" class="btn-primary">创建</button></p>
   </form>
-  <p><strong>新凭据明文仅此一次展示，关闭/刷新后不可再取（identity §3.1）：</strong></p>
+  <div class="token-block" hidden>
+  <p><strong>新凭据的完整密钥只在创建后显示这一次，关闭或刷新页面后无法再次查看，请立即复制保存：</strong></p>
   <pre id="cred-token" class="token-view"></pre>
+  </div>
   <p><output id="cred-msg"></output></p>
   </section>
 
   <section class="admin-section">
   <h2>我的凭据（脱敏显示）</h2>
-  <div class="table-wrap">
+  <div class="table-wrap table-scroll">
   <table id="cred-table">
     <thead><tr><th>名称</th><th>凭据</th><th>权限</th><th>库范围</th><th>创建</th><th>到期</th><th>最近使用</th><th>状态</th><th>操作</th></tr></thead>
     <tbody></tbody>
@@ -936,6 +1022,13 @@ export function credentialsPage(viewer?: { username: string; is_instance_admin: 
 </div>
 `,
     `${SHARED_ALIAS}
+
+// —— 一次性令牌写入即展开（S21-T1 A3/D40：token 区块默认隐藏，生成后才显示）——
+function revealToken(id, value) {
+  const pre = document.getElementById(id);
+  pre.textContent = value || '';
+  if (pre.textContent) pre.closest('.token-block').hidden = false;
+}
 
 async function loadCredentials() {
   const tbody = document.querySelector('#cred-table tbody');
@@ -986,7 +1079,7 @@ document.getElementById('cred-form').addEventListener('submit', async (ev) => {
       expires_at: new Date(f.expires_at.value).toISOString(),
       scope,
     });
-    document.getElementById('cred-token').textContent = r.token || '';
+    revealToken('cred-token', r.token);
     show(document.getElementById('cred-msg'), '已创建（' + r.display_hint + '）——明文仅此一次，请立即保存');
     f.reset();
     await loadCredentials();
@@ -995,7 +1088,16 @@ document.getElementById('cred-form').addEventListener('submit', async (ev) => {
   }
 });
 `,
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'credentials' } : undefined,
+    viewer !== undefined
+      ? {
+          user: {
+            username: viewer.username,
+            isAdmin: viewer.is_instance_admin,
+            ...(viewer.display_name !== undefined ? { displayName: viewer.display_name } : {}),
+          },
+          active: 'credentials',
+        }
+      : undefined,
     true, // S12-T3：引用共享脚本 /assets/app.js（FETCH_HELPER 迁出——行为零变化）
   );
 }

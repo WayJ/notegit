@@ -58,7 +58,7 @@ export interface RenamePageInput {
    *  缺省 = 写者形态：模板直调/POST 回显形态兼容；生产 GET 路由恒传实算值（D17）） */
   readonly canWrite?: boolean;
   /** UI-RESTYLE：顶部导航登录态（呈现层透传） */
-  readonly viewer?: { username: string; is_instance_admin: boolean };
+  readonly viewer?: { username: string; display_name?: string; is_instance_admin: boolean };
 }
 
 /** 只读徽章（S10-T2：DESIGN.md badge-pill 形态——`.badge` 既有类，token 语义） */
@@ -95,7 +95,7 @@ export function renamePage(input: RenamePageInput): string {
 </div>
 `,
       '',
-      viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+      viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
     );
   }
   return layout(
@@ -119,7 +119,7 @@ export function renamePage(input: RenamePageInput): string {
 </div>
 `,
     '',
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -130,7 +130,7 @@ export interface DeleteConfirmInput {
   /** S10-T2 权限感知：同 RenamePageInput.canWrite（false=只读态——D4） */
   readonly canWrite?: boolean;
   /** UI-RESTYLE：顶部导航登录态（呈现层透传） */
-  readonly viewer?: { username: string; is_instance_admin: boolean };
+  readonly viewer?: { username: string; display_name?: string; is_instance_admin: boolean };
 }
 
 /** 删除确认页（GET 无写操作；历史保留如实标注——S5 历史页可查旧版本） */
@@ -161,7 +161,7 @@ export function deleteConfirmPage(input: DeleteConfirmInput): string {
 </div>
 `,
       '',
-      viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+      viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
     );
   }
   return layout(
@@ -183,7 +183,7 @@ export function deleteConfirmPage(input: DeleteConfirmInput): string {
 </div>
 `,
     '',
-    viewer !== undefined ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
+    viewer !== undefined ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin }, active: 'vaults' } : undefined,
   );
 }
 
@@ -192,7 +192,7 @@ export function deleteConfirmPage(input: DeleteConfirmInput): string {
 export function opStatePage(
   vault: { slug: string; name: string },
   message: string,
-  viewer?: { username: string; is_instance_admin?: boolean },
+  viewer?: { username: string; display_name?: string; is_instance_admin?: boolean },
 ): string {
   return layout(
     `${vault.name} 操作`,
@@ -204,7 +204,7 @@ export function opStatePage(
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
       : undefined,
   );
 }

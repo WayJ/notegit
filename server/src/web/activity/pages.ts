@@ -16,7 +16,7 @@ export function activityUrl(slug: string): string {
 /** 库内最近变更页：面包屑 + 条目列表（新→旧）+ 主体标注 */
 export function vaultActivityPage(input: {
   vault: { slug: string; name: string };
-  viewer: { username: string; is_instance_admin?: boolean };
+  viewer: { username: string; display_name?: string; is_instance_admin?: boolean };
   entries: readonly ActivityEntry[];
 }): string {
   const { vault, viewer, entries } = input;
@@ -31,15 +31,15 @@ export function vaultActivityPage(input: {
   <div class="page-head">
   <h1>${escapeHtml(vault.name)} 最近变更</h1>
   <nav aria-label="面包屑"><a href="/vaults">知识库</a> <span aria-hidden="true">›</span> <a href="${vaultHref}/browse">${escapeHtml(vault.name)}</a> <span aria-hidden="true">›</span> 最近变更</nav>
-  <p class="page-meta">当前登录：${escapeHtml(viewer.username)} · 数据源=服务端审计（成功发布事件，最近 ${entries.length} 条） · <a href="${vaultHref}/browse">返回目录</a> · <a href="${vaultHref}/history">提交历史</a></p>
+  <p class="page-sub page-sub-quiet">数据源=服务端审计（成功发布事件，最近 ${entries.length} 条） · <a href="${vaultHref}/browse">返回目录</a> · <a href="${vaultHref}/history">提交历史</a></p>
   </div>
   ${listing}
-  <p class="note">条目主体=服务端审计记录的认证员工（commit 作者为 Git 元数据展示，推送方可填写任意值——DOD-03）。</p>
+  <p class="note">条目主体为服务端审计记录的认证员工（提交记录中的作者名是推送方可自行填写的 Git 元数据，不代表登录身份）。</p>
 </div>
 `,
     '',
     {
-      user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true },
+      user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true },
       active: 'vaults',
     },
   );

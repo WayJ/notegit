@@ -166,6 +166,39 @@ export async function readLastCommits(
   return latest;
 }
 
+/**
+ * 单路径「最后触及提交」元数据（S21-T2/B4 阅读页维护者·更新时间数据源）：
+ * `git log -n 1 --format=<oid, author, iso> <ref> -- <path>` 单次 spawn——与
+ * readLastCommits 同读取面（默认分支实时读、无缓存），仅收窄为单个树路径。
+ * 无提交触及（路径不存在于历史）/ 分支不存在 / 仓库缺失 → null（呈现层如实
+ * 省略该徽章，不虚构）。
+ */
+export async function readLastCommitForPath(
+  dataDir: string,
+  vaultId: number,
+  defaultBranch: string,
+  entryPath: string,
+  runGit: RunGit = execGit,
+): Promise<{ author: string; isoTime: string } | null> {
+  let out: string;
+  try {
+    out = await runGit(
+      ['log', '-n', '1', '-z', '--name-only', '--format=\x1e%H\x1f%an\x1f%aI', `refs/heads/${defaultBranch}`, '--', entryPath],
+      { cwd: vaultRepoPath(dataDir, vaultId) },
+    );
+  } catch {
+    return null;
+  }
+  const record = out.indexOf('\x1e');
+  if (record === -1) return null;
+  const rest = out.slice(record + 1);
+  const headEnd = rest.indexOf('\0');
+  const head = (headEnd === -1 ? rest : rest.slice(0, headEnd)).split('\x1f');
+  const [, author, iso] = head;
+  if (author === undefined || author === '' || iso === undefined || iso === '') return null;
+  return { author, isoTime: iso };
+}
+
 /** 以「父目录列表 + 文件名」解析单个条目（view 占位定位用；空路径不是条目） */
 export async function readEntryAt(
   dataDir: string,

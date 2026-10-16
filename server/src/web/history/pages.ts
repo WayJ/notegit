@@ -1,4 +1,4 @@
-import { escapeHtml, layout } from '../pages.ts';
+import { escapeHtml, formatRelativeTime, layout } from '../pages.ts';
 import { editUrl } from '../view/pages.ts';
 import type { CommitEntry } from './log.ts';
 import { formatCitation } from './cite.ts';
@@ -55,9 +55,10 @@ function browseHref(slug: string): string {
   return `/vaults/${encodeURIComponent(slug)}/browse`;
 }
 
-/** DOD-03 主体标注（库级/路径级历史页共用）：作者=可填写元数据，主体=认证员工 */
+/** 主体标注（库级/路径级历史页共用；S21-T2/B6 页级说明——不逐行括注）：
+ *  作者与时间为提交记录自带信息，主体=认证员工（员工可读表述） */
 const AUTHOR_NOTE =
-  '<p class="note">提交作者为 Git 元数据展示（推送方可填写任意值）；操作主体以服务端审计记录的认证员工为准（DOD-03）。</p>';
+  '<p class="note">提交人与提交时间为 Git 元数据（推送方可自行填写，不代表登录身份）；站内操作记录以认证员工为准。</p>';
 
 /** 历史页（库级 treePath='' / 路径级 treePath=树路径）：提交行 data 属性与
  *  `git log --format` 对照（一致性断言所依）；分页跨页导航 rel=prev/next。
@@ -67,7 +68,7 @@ const AUTHOR_NOTE =
 export function historyPage(input: {
   vault: { slug: string; name: string };
   /** 当前认证员工（主体视角呈现——与作者元数据区分） */
-  viewer: { username: string; is_instance_admin?: boolean };
+  viewer: { username: string; display_name?: string; is_instance_admin?: boolean };
   treePath: string;
   commits: readonly CommitEntry[];
   page: number;
@@ -100,9 +101,16 @@ export function historyPage(input: {
     treePath === ''
       ? ''
       : ` <a href="${versionUrl(vault.slug, oid, treePath)}">预览</a> <a href="${restoreUrl(vault.slug, oid, treePath)}">还原到此版本</a> <code class="citation">${escapeHtml(formatCitation(vault.slug, treePath, oid))}</code>`;
+  // S21-T2/B6：历史行两段式——主行=短 OID＋提交主题；次行=作者 · 相对时间
+  // （title=ISO 绝对时间——全站相对时间统一）· diff/预览/还原链接。「（Git
+  // 元数据）」逐行括注退役，由页级 AUTHOR_NOTE 说明承担。data-* 属性序列
+  // 原样保留（一致性断言与 fixtures pageCommitSeq 提取所依）。
   const rows = commits
     .map(
-      (c) => `  <li class="commit" data-short="${escapeHtml(c.shortOid)}" data-author="${escapeHtml(c.authorName)}" data-date="${escapeHtml(c.authorDate)}" data-oid="${escapeHtml(c.oid)}" data-email="${escapeHtml(c.authorEmail)}" data-subject="${escapeHtml(c.subject)}">${escapeHtml(c.shortOid)} ${escapeHtml(c.subject)} — ${escapeHtml(c.authorName)}（Git 元数据） ${escapeHtml(c.authorDate)}${diffLinks(c)}${rowLinks(c.oid)}</li>`,
+      (c) => `  <li class="commit" data-short="${escapeHtml(c.shortOid)}" data-author="${escapeHtml(c.authorName)}" data-date="${escapeHtml(c.authorDate)}" data-oid="${escapeHtml(c.oid)}" data-email="${escapeHtml(c.authorEmail)}" data-subject="${escapeHtml(c.subject)}">
+    <div class="commit-main"><code class="commit-oid">${escapeHtml(c.shortOid)}</code> <span class="commit-subject">${escapeHtml(c.subject)}</span></div>
+    <div class="commit-meta"><span title="${escapeHtml(c.authorDate)}">${escapeHtml(c.authorName)} · ${escapeHtml(formatRelativeTime(c.authorDate))}</span>${diffLinks(c)}${rowLinks(c.oid)}</div>
+  </li>`,
     )
     .join('\n');
   const listing =
@@ -120,7 +128,7 @@ export function historyPage(input: {
   <div class="page-head">
   <h1>${escapeHtml(vault.name)} 提交历史${scope}</h1>
   <nav aria-label="面包屑">${breadcrumb(vault, treePath)}</nav>
-  <p class="page-meta">当前登录：${escapeHtml(viewer.username)} · 默认分支实时读 Git · <a href="${backToBrowse}">返回目录</a>${editEntry}</p>
+  <p class="page-sub page-sub-quiet">默认分支实时读 Git · <a href="${backToBrowse}">返回目录</a>${editEntry}</p>
   </div>
   ${listing}
   ${pager}
@@ -129,7 +137,7 @@ export function historyPage(input: {
 `,
     '',
     {
-      user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true },
+      user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true },
       active: 'vaults',
     },
   );
@@ -140,7 +148,7 @@ export function historyPage(input: {
 export function historyStatePage(
   vault: { slug: string; name: string },
   message: string,
-  viewer?: { username: string; is_instance_admin?: boolean },
+  viewer?: { username: string; display_name?: string; is_instance_admin?: boolean },
 ): string {
   return layout(
     `${vault.name} 提交历史`,
@@ -152,7 +160,7 @@ export function historyStatePage(
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
       : undefined,
   );
 }
@@ -182,7 +190,7 @@ export function diffPage(input: {
   treePath: string;
   diff: string;
   /** S12-T2（coordinator 批准扩展）：可选 viewer → 顶栏账户位 */
-  viewer?: { username: string; is_instance_admin?: boolean };
+  viewer?: { username: string; display_name?: string; is_instance_admin?: boolean };
 }): string {
   const { vault, commitOid, treePath, diff, viewer } = input;
   const body =
@@ -207,7 +215,7 @@ export function diffPage(input: {
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
       : undefined,
   );
 }
@@ -240,7 +248,7 @@ export function versionPage(input: {
    *  知识 Markdown——其余形态不生成（edit GET 对非 .md 一律 404）。 */
   canWrite?: boolean;
   /** S12-T2（coordinator 批准扩展）：可选 viewer → 顶栏账户位 */
-  viewer?: { username: string; is_instance_admin?: boolean };
+  viewer?: { username: string; display_name?: string; is_instance_admin?: boolean };
 }): string {
   const { vault, commitOid, treePath, sizeBytes, body, canWrite, viewer } = input;
   const name = treePath.includes('/') ? treePath.slice(treePath.lastIndexOf('/') + 1) : treePath;
@@ -278,7 +286,7 @@ export function versionPage(input: {
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'vaults' }
       : undefined,
   );
 }
@@ -332,7 +340,7 @@ export function restorePage(input: {
 const CITE_FORMAT_HINT = '库 / 路径 @ commit（例：v-handbook / docs/getting-started.md @ 4c55b7a0d1e2f3a4）';
 
 /** 引用解析入口页（GET /cite 空输入：粘贴表单 + 格式说明——GET 表单、无 JS） */
-export function citeEntryPage(viewer?: { username: string; is_instance_admin?: boolean }): string {
+export function citeEntryPage(viewer?: { username: string; display_name?: string; is_instance_admin?: boolean }): string {
   return layout(
     '引用解析',
     `<div class="page page-narrow">
@@ -352,13 +360,13 @@ export function citeEntryPage(viewer?: { username: string; is_instance_admin?: b
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
       : { active: 'cite' },
   );
 }
 
 /** 引用格式失败页（404）：非三要素形态的可理解错误（静态同页——只谈格式，不触库判定） */
-export function citeFormatErrorPage(viewer?: { username: string; is_instance_admin?: boolean }): string {
+export function citeFormatErrorPage(viewer?: { username: string; display_name?: string; is_instance_admin?: boolean }): string {
   return layout(
     '引用格式无法解析',
     `<div class="page page-narrow">
@@ -370,7 +378,7 @@ export function citeFormatErrorPage(viewer?: { username: string; is_instance_adm
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
       : { active: 'cite' },
   );
 }
@@ -378,7 +386,7 @@ export function citeFormatErrorPage(viewer?: { username: string; is_instance_adm
 /** 引用存在性失败页（404 反存在性）：已过权限判定的引用未能对应任何历史版本。
  *  静态同页不区分原因（提交未知/非提交对象/该路径在该提交处不存在——不泄露
  *  库内容）；无权/未知库不在此页（D-IC-06 与页面族同页同码 404）。 */
-export function citeUnresolvablePage(viewer?: { username: string; is_instance_admin?: boolean }): string {
+export function citeUnresolvablePage(viewer?: { username: string; display_name?: string; is_instance_admin?: boolean }): string {
   return layout(
     '引用无法解析',
     `<div class="page page-narrow">
@@ -389,7 +397,7 @@ export function citeUnresolvablePage(viewer?: { username: string; is_instance_ad
 `,
     '',
     viewer !== undefined
-      ? { user: { username: viewer.username, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
+      ? { user: { username: viewer.username, displayName: viewer.display_name, isAdmin: viewer.is_instance_admin === true }, active: 'cite' }
       : { active: 'cite' },
   );
 }
