@@ -1,5 +1,5 @@
 {
- "date": "2026-10-16T15:25:13.658Z",
+ "date": "2026-10-16T16:02:29.177Z",
  "results": [
   {
    "name": "P1 anon / → 302 /login",
@@ -19,7 +19,7 @@
   {
    "name": "P4 越权 404 与不存在 404 逐字节同体",
    "pass": true,
-   "detail": "create=201 priv=404 none=404 identical=true"
+   "detail": "create=409 priv=404 none=404 identical=true"
   },
   {
    "name": "P5 favicon 200",
