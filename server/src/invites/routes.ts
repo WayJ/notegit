@@ -5,6 +5,7 @@ import { createInvite, consumePasswordReset, issuePasswordResetToken, InviteErro
 import { passwordPolicyError } from './passwordPolicy.ts';
 import { TokenError } from '../bootstrap/token.ts';
 import { recordAuditEvent } from '../audit/audit.ts';
+import { isValidUsername } from '../identity/username.ts';
 
 /**
  * GET  /api/v1/admin/employees（员工列表，api.md §3.1，需实例管理员）
@@ -61,8 +62,8 @@ export function registerInviteRoutes(app: FastifyInstance, deps: WiredAppDeps): 
     const b = (req.body ?? {}) as Record<string, unknown>;
     const username = typeof b.username === 'string' ? b.username.trim() : '';
     const displayName = typeof b.display_name === 'string' ? b.display_name.trim() : '';
-    if (!username || !displayName || username.length > 64 || displayName.length > 64) {
-      return sendError(reply, 400, 'E-RES-004', '缺少或非法必填项：username / display_name（1–64 字符）');
+    if (!username || !displayName || displayName.length > 64 || !isValidUsername(username)) {
+      return sendError(reply, 400, 'E-RES-004', '缺少或非法必填项：username 须为小写字母/数字起首的裸名（≤64）或 name@workspace 带域形态；display_name 1–64 字符');
     }
     try {
       const { token } = createInvite(deps.db, deps.pepper, { username, displayName, invitedBy: outcome.subject.employee_id }, new Date());

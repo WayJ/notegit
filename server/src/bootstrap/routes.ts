@@ -5,6 +5,7 @@ import { completeBootstrap, TokenError } from './token.ts';
 import type { WiredAppDeps } from '../app.ts';
 import { passwordPolicyError } from '../invites/passwordPolicy.ts';
 import { recordAuditEvent } from '../audit/audit.ts';
+import { isValidUsername } from '../identity/username.ts';
 
 /**
  * POST /api/v1/auth/bootstrap（api.md §3，一次性）：
@@ -28,6 +29,9 @@ export function registerBootstrapRoutes(app: FastifyInstance, deps: WiredAppDeps
     const displayName = typeof b.display_name === 'string' ? b.display_name.trim() : '';
     if (!token || !username || !displayName || typeof b.password !== 'string') {
       return sendError(reply, 400, 'E-RES-004', '缺少必填项：bootstrap_token / username / display_name / password');
+    }
+    if (!isValidUsername(username)) {
+      return sendError(reply, 400, 'E-RES-004', 'username 格式非法：小写字母/数字起首的裸名（≤64）或 name@workspace 带域形态');
     }
     const policyError = passwordPolicyError(b.password);
     if (policyError) {
