@@ -177,4 +177,58 @@ export const vaultsPlugin: FastifyPluginAsync<VaultsPluginOptions> = async (
     });
     return reply.code(204).send();
   });
+
+  // —— S37 实例管理员治理面（api.md §5 增补；dshent 平台授面专用，notegit Web UI 不消费） ——
+
+  /** 实例管理员判定：认证 + is_instance_admin（否则 403 E-AUTHZ-001）；返回 null 表示已回复 */
+  async function requireInstanceAdmin(req: FastifyRequest, reply: FastifyReply): Promise<AuthSuccess | null> {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return null;
+    if (!auth.subject.is_instance_admin) return send403(reply), null;
+    return auth;
+  }
+
+  function actorOf(auth: AuthSuccess) {
+    return {
+      employeeId: auth.subject.employee_id,
+      entry: auth.entry,
+      carrierRef: auth.carrierRef,
+      viaAdmin: true as const,
+    };
+  }
+
+  instance.get('/api/v1/admin/vaults', async (request, reply) => {
+    const auth = await requireInstanceAdmin(request, reply);
+    if (!auth) return reply;
+    return { vaults: svc.listAllVaults() };
+  });
+
+  instance.get('/api/v1/admin/vaults/:slug/members', async (request, reply) => {
+    const auth = await requireInstanceAdmin(request, reply);
+    if (!auth) return reply;
+    const { slug } = request.params as { slug: string };
+    const row = svc.getVaultRow(slug);
+    if (!row) return send404(reply);
+    return { members: svc.listMembers(row.id) };
+  });
+
+  instance.put('/api/v1/admin/vaults/:slug/members/:username', async (request, reply) => {
+    const auth = await requireInstanceAdmin(request, reply);
+    if (!auth) return reply;
+    const { slug, username } = request.params as { slug: string; username: string };
+    const row = svc.getVaultRow(slug);
+    if (!row) return send404(reply);
+    const body = (request.body ?? {}) as { role?: unknown };
+    return svc.putMember(row.id, username, body.role, actorOf(auth));
+  });
+
+  instance.delete('/api/v1/admin/vaults/:slug/members/:username', async (request, reply) => {
+    const auth = await requireInstanceAdmin(request, reply);
+    if (!auth) return reply;
+    const { slug, username } = request.params as { slug: string; username: string };
+    const row = svc.getVaultRow(slug);
+    if (!row) return send404(reply);
+    svc.deleteMember(row.id, username, actorOf(auth));
+    return reply.code(204).send();
+  });
 };

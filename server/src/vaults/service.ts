@@ -23,6 +23,8 @@ export interface VaultActor {
   readonly entry: 'web' | 'api';
   /** 载体标识（session:<id> / credential:<id>，不含凭据材料） */
   readonly carrierRef: string;
+  /** S37 admin 治理面（实例管理员代行）：审计 detail 记 via:'admin' */
+  readonly viaAdmin?: boolean;
 }
 
 export interface VaultPublic {
@@ -287,6 +289,17 @@ export class VaultService {
       .all(vaultId) as unknown as MemberPublic[];
   }
 
+  /** S37 admin 治理面：全库概览（实例管理员；member_count 聚合） */
+  listAllVaults(): Array<{ id: number; slug: string; name: string; member_count: number }> {
+    return this.db
+      .prepare(
+        `SELECT v.id, v.slug, v.name, COUNT(m.employee_id) AS member_count
+         FROM vaults v LEFT JOIN vault_members m ON m.vault_id = v.id
+         GROUP BY v.id ORDER BY v.slug`,
+      )
+      .all() as unknown as Array<{ id: number; slug: string; name: string; member_count: number }>;
+  }
+
   /**
    * 授权/改角色（api.md §5 PUT members：upsert）。PK (vault_id, employee_id) 使
    * 一员工一库至多一行——重复授权落 UPDATE；granted_by/granted_at 随最近一次
@@ -342,12 +355,13 @@ export class VaultService {
 
   /** 审计事件（storage-model §5：vault/member 域直接终态；主体=认证员工） */
   private audit(actor: VaultActor, eventKind: 'vault.create' | 'vault.update' | 'member.grant' | 'member.revoke', vaultId: number, detail: Record<string, unknown>): void {
+    const full = actor.viaAdmin === true ? { ...detail, via: 'admin' } : detail;
     this.db
       .prepare(
         `INSERT INTO audit_events (occurred_at, actor_kind, employee_id, credential_ref, entry, event_kind, vault_id, status, detail)
          VALUES (?, 'employee', ?, ?, ?, ?, ?, 'succeeded', ?)`,
       )
-      .run(this.now(), actor.employeeId, actor.carrierRef, actor.entry, eventKind, vaultId, JSON.stringify(detail));
+      .run(this.now(), actor.employeeId, actor.carrierRef, actor.entry, eventKind, vaultId, JSON.stringify(full));
   }
 
   /**

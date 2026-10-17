@@ -240,6 +240,13 @@
 #### GET /api/v1/vaults/{slug}/members（库管理员）
 - 成功：200 `{members: [{username, display_name, role, granted_at}]}`。错误：403 E-AUTHZ-001 / 404 E-RES-001。
 
+#### 实例管理员治理面（S37 增补；dshent 平台授面专用）
+- **GET /api/v1/admin/vaults**（读）：200 `{vaults: [{id, slug, name, member_count}]}`（slug 升序）。
+- **GET /api/v1/admin/vaults/{slug}/members**（读）：200 同库管理员 members 响应。
+- **PUT /api/v1/admin/vaults/{slug}/members/{username}**（写）：`{role}`；语义/错误同库管理员端点（upsert；目标员工不存在 404 E-RES-001）。
+- **DELETE /api/v1/admin/vaults/{slug}/members/{username}**（写）：204；撤权下一请求生效（identity §5.2）。
+- 均需实例管理员（否则 403 E-AUTHZ-001）；审计 `member.grant`/`member.revoke` detail 记 `via:"admin"`。
+
 #### PUT /api/v1/vaults/{slug}/members/{username}（写；库管理员）
 - 请求：`{role: "reader"|"editor"|"admin"}`。
 - 成功：200（upsert：授权或改角色）；审计 `member.grant`。错误：404 E-RES-001（库或目标员工不存在）；422 E-RES-007；403 E-AUTHZ-001。
