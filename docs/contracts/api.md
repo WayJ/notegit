@@ -196,7 +196,7 @@
 自助与管理员代管并存（identity §3.5）。明文只在创建响应出现一次；此后任何端点不回显明文，仅 `ngt_` 前缀与末 4 位（identity §3.1）。
 
 #### GET /api/v1/credentials
-- 成功：200 `{credentials: [{id, name, display_hint, scope_access, scope_vaults, created_at, expires_at, revoked_at, last_used_at}]}`（`display_hint` 形如 `ngt_ab…wxyz`）。
+- 成功：200 `{credentials: [{id, name, display_hint, scope_access, scope_vaults, created_at, expires_at, revoked_at, last_used_at, origin}]}`（`display_hint` 形如 `ngt_ab…wxyz`；`origin ∈ {self, admin_delegated}`——S37 增补，凭据来源标注）。
 - 错误：401（通用，§1）。
 
 #### POST /api/v1/credentials（写）
@@ -210,6 +210,11 @@
 
 #### GET /api/v1/admin/employees/{username}/credentials ／ DELETE …/credentials/{id}（写）
 - 管理员代管（identity §3.5）：响应/错误同上；DELETE 审计 `credential.revoke`（detail 记代管）。需实例管理员，否则 403 E-AUTHZ-001。
+
+#### POST /api/v1/admin/employees/{username}/credentials（写：管理员代签；S37 增补）
+- 请求同自助签发：`{name, expires_at, scope?}`；**scope 校验同自助**（identity §3.4——只能收窄**该目标员工**当前权限，代签不能扩权）。需实例管理员，否则 403 E-AUTHZ-001。
+- 成功：201 `{token, …同列表字段, origin:"admin_delegated"}`（明文仅此一次）；凭据归属目标员工；审计 `credential.create`（主体=代签管理员，detail 记 `{delegated:true, username}`——dshent 平台委托签发面）。
+- 错误：404 E-RES-001（目标员工不存在）；409 E-RES-005；422 E-RES-007；400 E-RES-004。
 
 ## 5. 库与成员
 
@@ -361,7 +366,7 @@
 审计以认证主体记录（架构 §4.4；表结构 [storage-model §3.8](storage-model.md)）。响应行不含任何 token 材料（`credential_ref` 仅凭据/会话标识）。
 
 #### GET /api/v1/vaults/{slug}/audit?actor=&event_kind=&status=&since=&until=&limit=&cursor=（库管理员或实例管理员）
-- 成功：200 `{events: [{occurred_at, actor_kind, actor, credential_ref, entry, event_kind, ref_name, old_commit, new_commit, status, detail}], next_cursor}`。
+- 成功：200 `{events: [{occurred_at, actor_kind, actor, credential_ref, credential_origin, entry, event_kind, ref_name, old_commit, new_commit, status, detail}], next_cursor}`（`credential_origin`：actor 为凭据时其来源 `self`/`admin_delegated`，否则 null——S37 增补，凭据来源可区分；零 token 材料）。
 - 错误：403 E-AUTHZ-001（成员但非管理员）；404 E-RES-001（非成员）。
 
 #### GET /api/v1/admin/audit?vault=&actor=&event_kind=&status=&since=&until=&limit=&cursor=（实例管理员）

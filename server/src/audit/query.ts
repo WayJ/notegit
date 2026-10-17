@@ -65,6 +65,7 @@ interface AuditRowShape {
   actor_username: string | null;
   actor_display: string | null;
   credential_ref: string | null;
+  credential_origin: string | null;
   entry: string;
   event_kind: string;
   ref_name: string | null;
@@ -83,13 +84,15 @@ function detailOf(text: string): unknown {
   }
 }
 
-/** 行 → §9 契约形状（字段不增不减；actor=展示名||用户名，非员工主体如实 null） */
+/** 行 → §9 契约形状（字段不增不减；actor=展示名||用户名，非员工主体如实 null）；
+ *  credential_origin = S37 增补：actor 为凭据时其来源（self/admin_delegated），否则 null。 */
 function toEvent(row: AuditRowShape): Record<string, unknown> {
   return {
     occurred_at: row.occurred_at,
     actor_kind: row.actor_kind,
     actor: row.actor_display !== null && row.actor_display !== '' ? row.actor_display : row.actor_username,
     credential_ref: row.credential_ref,
+    credential_origin: row.credential_origin,
     entry: row.entry,
     event_kind: row.event_kind,
     ref_name: row.ref_name,
@@ -105,9 +108,11 @@ const SELECT_BASE = `
          emp.username AS actor_username, emp.display_name AS actor_display,
          a.credential_ref AS credential_ref, a.entry AS entry, a.event_kind AS event_kind,
          a.ref_name AS ref_name, a.old_commit AS old_commit, a.new_commit AS new_commit,
-         a.status AS status, a.detail AS detail
+         a.status AS status, a.detail AS detail,
+         cred.origin AS credential_origin
   FROM audit_events a
-  LEFT JOIN employees emp ON emp.id = a.employee_id`;
+  LEFT JOIN employees emp ON emp.id = a.employee_id
+  LEFT JOIN credentials cred ON a.credential_ref = 'credential:' || cred.id`;
 
 export interface AuditPage {
   readonly events: ReturnType<typeof toEvent>[];

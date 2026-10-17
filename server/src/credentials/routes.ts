@@ -137,6 +137,23 @@ export const credentialsPlugin: FastifyPluginAsync<CredentialsPluginOptions> = a
     return { credentials: svc.listCredentials(target) };
   });
 
+  // S37 管理员代签（api.md §4 增补）：凭据归属目标员工，scope 校验同自助（§3.4 只能收窄）；
+  // origin=admin_delegated；审计主体=代签管理员（detail 记委托）。
+  instance.post('/api/v1/admin/employees/:username/credentials', async (request, reply) => {
+    const admin = requireAdmin(request);
+    const username = (request.params as { username: string }).username;
+    const target = employeeIdByUsername(username);
+    const { record, token } = svc.createCredential(target, (request.body ?? {}) as Record<string, unknown>, {
+      entry: admin.entry,
+      delegatedBy: { employeeId: admin.employeeId, username },
+    });
+    request.log.info(
+      { event: 'credential.create', employee_id: admin.employeeId, credential_id: record.id, delegated_for: username },
+      'credential created (delegated)',
+    );
+    reply.code(201).send({ token, ...record });
+  });
+
   instance.delete('/api/v1/admin/employees/:username/credentials/:id', async (request, reply) => {
     const admin = requireAdmin(request);
     const username = (request.params as { username: string }).username;

@@ -190,6 +190,7 @@ const ROW_FIELDS = [
   'actor_kind',
   'actor',
   'credential_ref',
+  'credential_origin',  // S37 增补：actor 为凭据时其来源（self/admin_delegated），否则 null
   'entry',
   'event_kind',
   'ref_name',

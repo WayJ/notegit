@@ -36,14 +36,19 @@ function allVersions(): number[] {
   return Array.from({ length: MIGRATIONS.length }, (_, i) => i + 1);
 }
 
-test('迁移 0004：与契约 @schema 块逐行等价（D11 同步后无任何增量，防漂移）', () => {
-  const contract = contractCredentialsLines();
+test('迁移 0004：与契约 @schema 块逐行等价（S37 origin 行除外，防漂移）', () => {
+  const contract = contractCredentialsLines()
+    .filter((l) => !l.includes('S37 增补'))
+    // origin 行剔除后，契约的 last_used_at 尾逗号恢复为 v4 的无逗号尾列形态（逗号位→空格，列宽不变）
+    .map((l) => (l.trim().startsWith('last_used_at TEXT,') ? l.replace('last_used_at TEXT,', 'last_used_at TEXT ') : l));
   const mine = migrationV4Lines();
-  // D11 后契约已含 display_hint 列：迁移与契约应完全一致（顺序 + 逐字）
+  // D11 后契约已含 display_hint 列：迁移与契约应完全一致（顺序 + 逐字）。
+  // S37 origin 列经迁移 0011 append（已发版基线 0001–0010 不可改写）——0004 比对剔除该行
+  // （origin 行在 last_used_at 之后，剔除后 v4 尾列无逗号形态与契约一致）。
   assert.deepEqual(
     mine,
     contract,
-    '迁移 0004 应与 storage-model.md @schema credentials 块逐行一致（D11 同步后）',
+    '迁移 0004 应与 storage-model.md @schema credentials 块逐行一致（S37 origin 行除外）',
   );
 });
 
@@ -60,8 +65,18 @@ test('迁移 0004：在 v2（employees）之上应用，credentials 表与约束
 
   const cols = (db.prepare('PRAGMA table_info(credentials)').all() as { name: string }[]).map((c) => c.name);
   assert.deepEqual(cols.sort(), [
-    'created_at', 'display_hint', 'employee_id', 'expires_at', 'id', 'last_used_at', 'name', 'revoked_at', 'scope_access', 'scope_vaults', 'token_hash',
+    'created_at', 'display_hint', 'employee_id', 'expires_at', 'id', 'last_used_at', 'name', 'origin', 'revoked_at', 'scope_access', 'scope_vaults', 'token_hash',
   ]);
+  // 迁移 0011（S37）：origin 默认 'self'（既有行语义不变），CHECK 限定两值
+  const originCol = (db.prepare('PRAGMA table_info(credentials)').all() as { name: string; dflt_value: string }[]).find((c) => c.name === 'origin');
+  assert.ok(originCol, 'origin 列应存在');
+  assert.ok(originCol.dflt_value.includes('self'), "origin 默认值应为 'self'");
+  db.prepare(`INSERT INTO employees (username, display_name, password_hash, is_instance_admin, active, created_at) VALUES ('o1','o1','x',1,1,?)`).run(new Date().toISOString());
+  assert.throws(() =>
+    db.prepare(`INSERT INTO credentials (employee_id, name, token_hash, display_hint, created_at, expires_at, origin) VALUES (1,'c','h1','ngt_ab…wxyz',?,?,'bogus')`).run(new Date().toISOString(), new Date().toISOString()),
+    /CHECK constraint failed/i,
+    'origin CHECK 应拒绝非法取值',
+  );
   const idx = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'credentials'").all() as { name: string }[];
   assert.ok(idx.some((r) => r.name === 'idx_credentials_employee'), '应有 idx_credentials_employee 索引（identity §3.5）');
 

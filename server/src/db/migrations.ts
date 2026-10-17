@@ -268,4 +268,14 @@ CREATE TABLE search_index_state (
       `ALTER TABLE search_index ADD COLUMN body TEXT NOT NULL DEFAULT ''`,
     ],
   },
+  {
+    // S37（迁移 0011，本任务独占）：凭据 origin 标记——区分员工自助（self）与
+    // 管理员代签（admin_delegated，dshent 平台委托签发）。默认 'self'：既有行
+    // 语义不变；列表（api.md §4）与审计读面（§9 credential_origin）透出。
+    version: 11,
+    description: "S37: credentials origin marker — 'self' vs 'admin_delegated' (admin delegation issuance; identity §3.5 amendment)",
+    statements: [
+      `ALTER TABLE credentials ADD COLUMN origin TEXT NOT NULL DEFAULT 'self' CHECK (origin IN ('self','admin_delegated'))`,
+    ],
+  },
 ];

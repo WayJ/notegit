@@ -52,6 +52,8 @@ export type ScopeAccess = 'read' | 'read_write';
 /** 审计入口归因（identity §8；api.md §8.5）：凭据操作经会话载体（Web）或 token 载体（API）发起 */
 export type AuditEntry = 'web' | 'api';
 
+export type CredentialOrigin = 'self' | 'admin_delegated';
+
 export interface CredentialPublic {
   id: number;
   name: string;
@@ -62,6 +64,8 @@ export interface CredentialPublic {
   expires_at: string;
   revoked_at: string | null;
   last_used_at: string | null;
+  /** S37：self=员工自助；admin_delegated=实例管理员代签（api.md §4 透出） */
+  origin: CredentialOrigin;
 }
 
 export interface AuthTokenContext {
@@ -115,11 +119,13 @@ export class CredentialsService {
   }
 
   /** 创建凭据：明文仅随本返回值出现一次；写路径 BEGIN IMMEDIATE（storage-model §1）。
-   *  auditCtx.entry = 载体归因（会话=web / token=api，identity §8；缺省 api）。 */
+   *  auditCtx.entry = 载体归因（会话=web / token=api，identity §8；缺省 api）。
+   *  auditCtx.delegatedBy = S37 管理员代签：origin=admin_delegated，审计主体=代签管理员
+   *  （detail 记 {delegated:true, username}，同代管撤销主体先例）；scope 校验同自助（§3.4 只能收窄）。 */
   createCredential(
     employeeId: number,
     input: CreateCredentialInput,
-    auditCtx?: { entry?: AuditEntry },
+    auditCtx?: { entry?: AuditEntry; delegatedBy?: { employeeId: number; username: string } },
   ): { record: CredentialPublic; token: string } {
     if (typeof input.name !== 'string' || input.name.length === 0) {
       throw new ApiError(400, 'E-RES-004', '请求形态错误：name 必填且为非空字符串');
@@ -131,6 +137,8 @@ export class CredentialsService {
     const tokenHash = hashToken(this.pepper.active, token);
     const hint = displayHint(token);
     const createdAt = this.now();
+    const delegatedBy = auditCtx?.delegatedBy;
+    const origin: CredentialOrigin = delegatedBy ? 'admin_delegated' : 'self';
 
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -148,12 +156,16 @@ export class CredentialsService {
       }
       const info = this.db
         .prepare(
-          `INSERT INTO credentials (employee_id, name, token_hash, display_hint, scope_access, scope_vaults, created_at, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO credentials (employee_id, name, token_hash, display_hint, scope_access, scope_vaults, created_at, expires_at, origin)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(employeeId, input.name, tokenHash, hint, scope.access, JSON.stringify(scope.vaultIds), createdAt, expiresAt);
+        .run(employeeId, input.name, tokenHash, hint, scope.access, JSON.stringify(scope.vaultIds), createdAt, expiresAt, origin);
       const id = Number(info.lastInsertRowid);
-      this.audit(employeeId, `credential:${id}`, 'credential.create', { name: input.name }, auditCtx?.entry ?? 'api');
+      if (delegatedBy) {
+        this.audit(delegatedBy.employeeId, `credential:${id}`, 'credential.create', { name: input.name, delegated: true, username: delegatedBy.username }, auditCtx?.entry ?? 'api');
+      } else {
+        this.audit(employeeId, `credential:${id}`, 'credential.create', { name: input.name }, auditCtx?.entry ?? 'api');
+      }
       this.db.exec('COMMIT');
       return {
         record: {
@@ -166,6 +178,7 @@ export class CredentialsService {
           expires_at: expiresAt,
           revoked_at: null,
           last_used_at: null,
+          origin,
         },
         token,
       };
@@ -195,6 +208,7 @@ export class CredentialsService {
         expires_at: String(r['expires_at']),
         revoked_at: r['revoked_at'] === null ? null : String(r['revoked_at']),
         last_used_at: r['last_used_at'] === null ? null : String(r['last_used_at']),
+        origin: String(r['origin']) as CredentialOrigin,
       };
     });
   }

@@ -118,7 +118,8 @@ CREATE TABLE credentials (
   expires_at   TEXT    NOT NULL,               -- 依据：identity §3.3 到期必填，≤ 实例上限（默认 90 天可配）；认证层逐请求比较
   revoked_at   TEXT,                           -- 依据：identity §3.3 NULL = 未撤销；四状态之一
   display_hint TEXT    NOT NULL,               -- D11 增补（2026-10-13 ADR）：形如 ngt_ab…wxyz（前 2+末 4），创建时自明文生成；api.md §4 列表响应与 identity §3.1 展示语义所需，HMAC 单向不可反推
-  last_used_at TEXT                            -- 依据：identity §3.3 观测字段，≥60 秒节流批量写，不参与任何授权判断
+  last_used_at TEXT,                           -- 依据：identity §3.3 观测字段，≥60 秒节流批量写，不参与任何授权判断
+  origin       TEXT    NOT NULL DEFAULT 'self' CHECK (origin IN ('self','admin_delegated'))  -- S37 增补：self=员工自助；admin_delegated=实例管理员代签（dshent 平台委托）；api.md §4 列表与 §9 审计 credential_origin 透出
 ) STRICT;
 
 CREATE INDEX idx_credentials_employee ON credentials(employee_id);  -- 依据：identity §3.5 每员工上限（默认 20，应用层）与员工凭据列表查询
