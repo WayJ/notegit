@@ -110,7 +110,18 @@ export function registerCommitsReadRoutes(app: FastifyInstance, opts: CommitsRea
     if (resolved.kind === 'bad-shape') {
       return sendError(reply, 400, 'E-RES-004', '请求形态错误：ref 只支持 commit OID（分支名等 rev 形态 v1 不支持——D38）');
     }
-    if (resolved.kind === 'not-found') return sendNotFound(reply);
+    if (resolved.kind === 'not-found') {
+      // 缺省（默认分支）不存在的唯一常态是 unborn——刚建的空库（web 历史页「尚无提交」同判），
+      // 返回空列表：平台建库即进目录/新建文档的基线路径（显式 ref 的未知 OID 仍 404 反存在性）。
+      if (ref !== undefined) return sendNotFound(reply);
+      return reply.send({
+        vault: vault.slug,
+        ref: vault.defaultBranch,
+        commit_oid: '',
+        commits: [],
+        has_more: false,
+      });
+    }
     if (resolved.kind === 'unavailable') {
       return reply.code(503).send({ error: { message: '内容暂不可用（仓库目录缺失或读取失败）' } });
     }

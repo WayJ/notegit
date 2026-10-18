@@ -88,8 +88,11 @@ before(async () => {
   aliceId = addEmployee(db, { username: 'alice' });
   const bobId = addEmployee(db, { username: 'bob' });
   alphaId = addVault(db, 'alpha', aliceId);
+  const hollowId = addVault(db, 'hollow', aliceId);
   addMember(db, alphaId, aliceId, 'editor', aliceId);
+  addMember(db, hollowId, aliceId, 'editor', aliceId);
   await initBareVaultRepo(dataDir, alphaId);
+  await initBareVaultRepo(dataDir, hollowId);
   await commitToVault(dataDir, alphaId, 'first: 根提交', { 'README.md': '# 导航\n', 'docs/guide.md': '# 指南 v1\n' });
   await commitToVault(dataDir, alphaId, 'second: 改指南', { 'docs/guide.md': '# 指南 v2\n' });
   await commitToVault(dataDir, alphaId, 'third: 加公告', { 'NOTICE.md': '公告\n' });
@@ -170,6 +173,14 @@ test('ref 锚定：首条=锚定提交；非 OID 形态 400（D38 同判）', as
     method: 'GET', url: '/api/v1/vaults/alpha/commits?ref=HEAD~1', headers: bearer(aliceToken),
   });
   assert.equal(bad.statusCode, 400);
+});
+
+test('空库（unborn 默认分支）：返回空列表而非 404——平台建库即进目录/新建文档的基线路径', async () => {
+  const res = await h.app.inject({ method: 'GET', url: '/api/v1/vaults/hollow/commits', headers: bearer(aliceToken) });
+  assert.equal(res.statusCode, 200, res.body);
+  const body = JSON.parse(res.body) as { commits: unknown[]; has_more: boolean };
+  assert.deepEqual(body.commits, []);
+  assert.equal(body.has_more, false);
 });
 
 test('鉴权：匿名 401；非成员 404 同形态（不泄露树内容）', async () => {
