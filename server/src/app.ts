@@ -25,6 +25,7 @@ import { registerApiReadVaultRoutes } from './api-read/vaults.ts';
 import { SearchIndexer } from './search/indexer.ts';
 import { registerTreeReadRoutes } from './api-read/tree.ts';
 import { registerDocsReadRoutes } from './api-read/docs.ts';
+import { registerCommitsReadRoutes } from './api-read/commits.ts';
 import { registerAuditQueryRoutes } from './audit/routes.ts';
 import { metricsCollector } from './metrics/collector.ts';
 import { registerMetricsRoutes } from './metrics/routes.ts';
@@ -228,6 +229,11 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
     // （匿名 401），授权 authorize read + token scope 收窄（无权=不存在 404
     // D-IC-06）；GET 免 CSRF；只读无审计行；写通道零变更。
     registerTreeReadRoutes(app, {
+      db: wired.db,
+      authenticateRequest: wired.authenticateRequest,
+      dataDir: deps.dataDir,
+    });
+    registerCommitsReadRoutes(app, {
       db: wired.db,
       authenticateRequest: wired.authenticateRequest,
       dataDir: deps.dataDir,
