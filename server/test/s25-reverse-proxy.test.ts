@@ -21,7 +21,9 @@ import { hashPassword } from '../src/auth/password.ts';
 //   关闭（纯 HTTP 本地/内网试用形态，禁生产——identity §安全代价在案）。
 //   login 发放与 401 清除两路径同规则（单源化前的四处发放点全收敛）。
 
-const NOW = new Date('2026-10-16T00:00:00.000Z');
+// 会话夹具取当前时刻：请求路径按真实墙钟校验 idle 7d，冻结历史日期建会话会随
+// 时间过期（同 csrf.test.ts 时间炸弹教训）——创建时刻须贴近墙钟。
+const NOW = new Date();
 
 interface Ctx {
   app: FastifyInstance;

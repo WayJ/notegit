@@ -17,7 +17,9 @@ import { hashPassword } from '../src/auth/password.ts';
 // （缺失时回退 Referer 的 origin 部分）与请求目标（scheme+host+port）同源；
 // 回退链终点（两者皆缺失）无法确立同源 → 403。Bearer（Authorization 头）豁免。
 
-const NOW = new Date('2026-10-13T00:00:00.000Z');
+// 会话夹具取当前时刻：请求路径（app.inject）按真实墙钟校验 idle 7d，冻结历史
+// 日期建会话会随时间过期（idle 窗越过冻结点即全量 401 误红）——创建时刻须贴近墙钟。
+const NOW = new Date();
 
 interface Ctx {
   app: FastifyInstance;
