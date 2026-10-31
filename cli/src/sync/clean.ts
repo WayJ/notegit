@@ -31,6 +31,7 @@ import { existsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { localRootOf } from '../ls/local-status.ts'
+import { isSafeVaultSlug, safeVaultDir } from '../vault-shape.ts'
 import { readSyncState, removeVaultEntry } from './state.ts'
 import { repoLockPath, withFileLock } from './lock.ts'
 import { EXIT_ERROR, EXIT_FAIL, EXIT_OK } from '../exit-codes.ts'
@@ -124,18 +125,16 @@ type CleanOutcome =
   | { readonly kind: 'forced'; readonly detail: string }
   | { readonly kind: 'failed'; readonly message: string }
 
-/** 安全 slug（状态文件键理论上可被手改——删除路径拒绝路径穿越形态）。 */
-function isSafeSlug(slug: string): boolean {
-  return /^[A-Za-z0-9][A-Za-z0-9-]*$/.test(slug) && slug !== '.' && slug !== '..'
-}
-
 /**
  * 清理单库（repo 锁内）：检查 →（默认）拒绝或删除 /（强制）警示后删除；
  * 删除/无副本后移除状态条目（锁序 repo → state）。
  */
 async function cleanVault(root: string, slug: string, ops: CleanInspectOps, force: boolean): Promise<CleanOutcome> {
   return withFileLock(repoLockPath(root, slug), async () => {
-    const dir = path.join(root, slug)
+    // 删除面同样经 safeVaultDir 拼装（与摄入面同一口径——删除路径与摄入面不得再
+    // 各持一套判定）；取不到目录即拒绝删除。
+    const dir = safeVaultDir(root, slug)
+    if (dir === null) return { kind: 'failed', message: '库标识形态不合法（拒绝越界路径）' }
     if (!existsSync(dir)) {
       await removeVaultEntry(root, slug)
       return { kind: 'no_copy' }
@@ -176,7 +175,7 @@ export async function runSyncClean(argv: string[], env: NodeJS.ProcessEnv = proc
   let refused = 0
   let failed = 0
   for (const slug of marked) {
-    if (!isSafeSlug(slug)) {
+    if (!isSafeVaultSlug(slug)) {
       process.stderr.write(`${slug}：失败——状态文件中的库形态不合法（拒绝执行删除）\n`)
       failed++
       continue

@@ -192,6 +192,7 @@ handbook           未知     reader  main    员工手册  9d81e02   2026-10-12
 | 未配置凭据（无 `NOTEGIT_SERVER`/`NOTEGIT_TOKEN`） | `notegit ls: 未配置服务器或凭据（设置 NOTEGIT_SERVER 与 NOTEGIT_TOKEN；S6-T2 login 交付后将接管凭据获取）` | 1 | 设置两个环境变量（见「环境变量」） |
 | 令牌无效/过期/撤销（服务端 401） | `notegit ls: 认证失败（401）：token 无效、过期或已撤销` | 1 | 网页端新建凭据后更新 `NOTEGIT_TOKEN` |
 | server 不可达 | `notegit ls: 无法连接服务器 https://…：fetch failed` | 1 | 核对 `NOTEGIT_SERVER` 地址/网络 |
+| 服务端返回的库标识（slug）或默认分支名形态不合法 | `notegit ls: 响应不符合 /api/v1/vaults 契约（库标识 slug 或默认分支名形态不合法）` | 1 | 核对所连服务端是否为可信实例；形态不合的库整份拒绝（fail-closed，不静默丢弃条目） |
 | `notegit ls --verbose`（未知选项） | `notegit ls: 未知选项：--verbose（notegit ls --help 查看用法）` | 2 | 只使用 `--json`/`-h` |
 
 ---
@@ -408,6 +409,7 @@ v-handbook：失败——快进失败：服务器 HTTP 错误 500（fatal: … T
 同步完成：共 2 库（成功 0、跳过 0、失败 2）
 ```
 服务器整体不可达（库列表拉取失败）时不产出逐库结果，stderr 给出可理解报错与离线提示：`notegit sync: 无法连接服务器 https://…：fetch failed；本地副本未刷新、可能过期（notegit ls 可查看各库 HEAD 与上次同步时间）`。
+服务端返回的库标识（slug）或默认分支名形态不合法时同样整份拒绝（fail-closed，不逐库处理、不静默丢弃条目）：`notegit sync: 响应不符合 /api/v1/vaults 契约（库标识 slug 或默认分支名形态不合法）`。
 
 ```json
 {

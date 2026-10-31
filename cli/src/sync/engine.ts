@@ -21,11 +21,11 @@
  * 使用最新知识）+ 克隆失败清理半成品目录（库内无半更新）。NOTEGIT_SYNC_TIMEOUT_MS
  * 为网络操作超时注入缝（缺省 clone 300s / fetch 120s）。
  */
-import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import type { SyncInfo, SyncState } from '../ls/local-status.ts'
+import { safeVaultDir } from '../vault-shape.ts'
 import { readLastSync } from './last-sync.ts'
 
 /** 变更操作缝（clone/快进；单元测试注入假件，真实实现见 realSyncOps）。 */
@@ -182,7 +182,12 @@ export async function applySyncStrategy(args: {
 }): Promise<SyncOutcome> {
   const { slug, cloneUrl, defaultBranch, info, ops } = args
   const syncedAt = args.syncedAt ?? new Date().toISOString()
-  const dir = info.path ?? path.join(args.root, slug)
+  // 库目录一律经 safeVaultDir 拼装（纵深防御：越出同步根即拒绝——恶意 slug 不得
+  // 让 git clone 写到同步根之外）。取不到目录 → 直接判失败，绝不调用 ops.clone。
+  const dir = info.path ?? safeVaultDir(args.root, slug)
+  if (dir === null) {
+    return { action: 'failed', slug, path: null, code: 'status_error', message: '库标识形态不合法（拒绝越界路径）' }
+  }
   if (info.state === 'error') {
     // S7-T6：判定面失败（含获取远端失败的断网形态）且本地 HEAD 可读 → message 明示离线副本
     return { action: 'failed', slug, path: info.path, code: 'status_error', message: `${info.message ?? '状态判定失败'}${offlineHint(args.root, info.path, info.head)}` }

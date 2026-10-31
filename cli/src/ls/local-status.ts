@@ -23,6 +23,7 @@ import { execFile } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
 import { readCliConfig } from '../setup/config.ts'
+import { safeVaultDir } from '../vault-shape.ts'
 
 export type LocalStatus = 'not_cloned' | 'cloned' | 'behind' | 'unknown'
 
@@ -69,7 +70,10 @@ export async function computeLocalStatus(args: {
   cloneUrl: string
   ops: GitOps
 }): Promise<LocalInfo> {
-  const dir = path.join(args.root, args.slug)
+  // 库目录一律经 safeVaultDir 拼装（纵深防御：越出同步根即拒绝——即便字符集判定
+  // 将来被放宽，路径也不得逃出 root）
+  const dir = safeVaultDir(args.root, args.slug)
+  if (dir === null) return { path: null, status: 'unknown', head: null, remote_tip: null }
   if (!existsSync(dir)) return { path: null, status: 'not_cloned', head: null, remote_tip: null }
   const head = await args.ops.revParse(dir, `refs/heads/${args.defaultBranch}`)
   if (head === undefined) return { path: dir, status: 'unknown', head: null, remote_tip: null }
@@ -179,7 +183,12 @@ export async function computeSyncStatus(args: {
   cloneUrl: string
   ops: SyncGitOps
 }): Promise<SyncInfo> {
-  const dir = path.join(args.root, args.slug)
+  // 库目录一律经 safeVaultDir 拼装（纵深防御：越出同步根即拒绝——即便字符集判定
+  // 将来被放宽，路径也不得逃出 root）
+  const dir = safeVaultDir(args.root, args.slug)
+  if (dir === null) {
+    return { state: 'error', path: null, branch: null, head: null, remote_tip: null, message: '库标识形态不合法（拒绝越界路径）' }
+  }
   if (!existsSync(dir)) return { state: 'new', path: null, branch: null, head: null, remote_tip: null, message: null }
   const repoHead = await args.ops.revParse(dir, 'HEAD')
   if (repoHead === undefined) {

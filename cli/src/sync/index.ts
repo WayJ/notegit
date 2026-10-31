@@ -33,6 +33,7 @@ import { writeLastSync } from './last-sync.ts'
 import { repoLockPath, withFileLock } from './lock.ts'
 import { stateEntryOfOutcome, writeVaultEntry } from './state.ts'
 import { runSyncClean } from './clean.ts'
+import { safeVaultDir } from '../vault-shape.ts'
 import { EXIT_ERROR, EXIT_FAIL } from '../exit-codes.ts'
 
 interface SyncArgs {
@@ -150,7 +151,7 @@ export async function runSync(argv: string[], env: NodeJS.ProcessEnv = process.e
       out = {
         action: 'failed',
         slug: v.slug,
-        path: path.join(root, v.slug),
+        path: safeVaultDir(root, v.slug),
         code: 'lock_failed',
         message: `并发锁或状态写入失败：${err instanceof Error ? err.message : String(err)}`,
       }

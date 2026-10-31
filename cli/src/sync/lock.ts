@@ -20,6 +20,7 @@ import { open, mkdir, readFile, rename, writeFile, unlink, stat } from 'node:fs/
 import path from 'node:path'
 import process from 'node:process'
 import { randomUUID } from 'node:crypto'
+import { isSafeVaultSlug } from '../vault-shape.ts'
 
 /** 获取选项（测试注入小值；缺省见 DEFAULTS）。 */
 export interface LockOptions {
@@ -155,8 +156,15 @@ export async function withFileLock<T>(file: string, fn: () => Promise<T>, opts?:
   }
 }
 
-/** 每库 Git 操作锁路径：<root>/.notegit/locks/<slug>.lock（与 state 文件同住 .notegit，整体可弃）。 */
+/**
+ * 每库 Git 操作锁路径：<root>/.notegit/locks/<slug>.lock（与 state 文件同住 .notegit，整体可弃）。
+ *
+ * 形态收窄：slug 必须是安全单段（vault-shape.ts）——锁路径以 slug 拼装，非法 slug
+ * 会把锁文件写到 .notegit 之外（路径穿越面）。非法即抛错（调用方在 try 内 →
+ * 折叠为 lock_failed outcome；clean.ts 在调用前已校验）。
+ */
 export function repoLockPath(root: string, slug: string): string {
+  if (!isSafeVaultSlug(slug)) throw new Error('库标识形态不合法')
   return path.join(root, '.notegit', 'locks', `${slug}.lock`)
 }
 
