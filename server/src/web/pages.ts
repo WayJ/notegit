@@ -71,6 +71,15 @@ export function escapeHtml(s: string): string {
 }
 
 /**
+ * 脚本字面量插值：JSON 序列化后把 `<` 转义为反斜杠 + u003c 形式——防 `</script>` 提前闭合
+ * 页内脚本块（escapeHtml 不适用于脚本块内：脚本数据态只认 `<` 起始的闭合标记）。
+ * 页内脚本字面量的**唯一**插值通道（edit/upload 各页共用本函数，防第三处再犯）。
+ */
+export function js(v: string): string {
+  return JSON.stringify(v).replaceAll('<', '\\u003c');
+}
+
+/**
  * 顶部导航上下文（DESIGN.md top-nav 组件的登录态/主菜单落位）：
  * - user 存在 → 右侧呈现账户菜单（S12-T2：details 零 JS 下拉——display_name
  *   徽章 + 用户名 + 凭据/管理/退出登录）；isAdmin 才出现「管理」链接

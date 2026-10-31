@@ -1,4 +1,4 @@
-import { escapeHtml, layout } from '../pages.ts';
+import { escapeHtml, js, layout } from '../pages.ts';
 import { draftPutUrl } from './draft.ts';
 import type { ParsedForForm } from './form.ts';
 
@@ -109,11 +109,6 @@ function fieldRow(label: string, control: string, field: string): string {
 
 function attr(v: string): string {
   return escapeHtml(v);
-}
-
-/** 脚本字面量插值：JSON 序列化后转义 `<`（防 `</script>` 逃逸——escapeHtml 不适用于脚本块内） */
-function js(v: string): string {
-  return JSON.stringify(v).replaceAll('<', '\\u003c');
 }
 
 // ── 页内脚本共享块（S10-T3 抽出：editPage 与 newNotePage 同一来源——editPage

@@ -1,9 +1,10 @@
-import { escapeHtml, layout, type PageNav } from '../pages.ts';
+import { escapeHtml, js, layout, type PageNav } from '../pages.ts';
 
 /**
  * S4-T8 上传 UI 页模板（T4 遗留收口；breakdown §2.3 S4-T8 行 3）。D5 极简：
  * 服务端渲染 + 页内脚本 fetch 直发 octet-stream（T4 契约形态——唯一内容类型，
- * 不引 multipart）；插值唯一通道 escapeHtml（脚本字面量经 JSON 转义 `<`）。
+ * 不引 multipart）；插值唯一通道 escapeHtml（HTML 文本）与 js（页内脚本字面量——
+ * 目录路径等 URL 反射值经 `<` 转义，防 `</script>` 提前闭合脚本块）。
  *
  * 错误呈现 = S4-T8 统一提示：upload POST 拒绝信封已携带 error.code/message/
  * hint（web/hints.ts 注册表映射），页内直接展示——不在页内复制映射表。
@@ -88,8 +89,8 @@ export function uploadPage(input: UploadPageInput): string {
   }
   const apiBase = `/vaults/${encodeURIComponent(vault.slug)}/upload`;
   const script = `
-const DIR = ${JSON.stringify(dirPath)};
-const POST_BASE = ${JSON.stringify(apiBase)};
+const DIR = ${js(dirPath)};
+const POST_BASE = ${js(apiBase)};
 
 // 选择文件后以文件名预填相对路径（可改——支持再嵌子目录）
 document.getElementById('file').addEventListener('change', () => {

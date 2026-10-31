@@ -44,6 +44,27 @@ test('上传 UI 页：成员 GET 根/子目录 200，携带端点与传输契约
   }
 });
 
+test('上传 UI 页：目录路径含 </script> 时页内脚本字面量经转义（防反射型 XSS）', async () => {
+  const { h } = await setup();
+  try {
+    // 载荷原样进入页内脚本块（DIR 字面量）→ 未转义时 </script> 提前闭合脚本块，
+    // 其后文本按 HTML 解析 → 反射型 XSS。URL 侧 </ 与空格均百分号编码。
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/vaults/alpha/upload/x%3C/script%3E%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E',
+      headers: h.session(1),
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    // 页内 </script> 只应出现模板收尾那一次——载荷不得提前闭合脚本块
+    const closers = res.body.match(/<\/script>/g) ?? [];
+    assert.equal(closers.length, 1, `页内 </script> 应恰为模板收尾 1 次（实际 ${closers.length} 次）`);
+    // 闭合序列的 '<' 已转义（\u003c）→ 脚本数据态无法被提前终止
+    assert.ok(res.body.includes('\\u003c/script>'), '脚本字面量应把 < 转义为 \\u003c');
+  } finally {
+    await h.close();
+  }
+});
+
 test('上传 UI 页：未认证 302 /login；非成员与未知库 404（D-IC-06）', async () => {
   const { h } = await setup();
   try {
