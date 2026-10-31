@@ -201,8 +201,9 @@
 
 #### POST /api/v1/credentials（写）
 - 请求：`{name, expires_at, scope: {access: "read"|"read_write", vaults: [<slug 清单>]}}`（scope 可省 = read_write + 全部有权库；只能收窄，identity §3.4）。
-- 成功：201 `{token: "ngt_<43 字符>", …同上字段}`（**明文仅此一次**）；审计 `credential.create`。
-- 错误：409 E-RES-005（超上限）；422 E-RES-007（expires_at 超实例上限 90 天/scope 非法）；400 E-RES-004。
+- **签发面收窄**（identity §3.4 末段，S38 补记）：生效 scope = 请求 scope ∩ 发起载体 scope——token 载体为 read 时签出凭据至多 read；token 载体的库清单与请求库清单取交集（自助签发），交集为空 → 422 E-RES-007。会话载体无收窄。
+- 成功：201 `{token: "ngt_<43 字符>", …同上字段}`（**明文仅此一次**）；审计 `credential.create`（`credential_ref` = 发起载体，identity §8；被创建凭据 id 记于 `detail.credential_id`）。
+- 错误：409 E-RES-005（超上限）；422 E-RES-007（expires_at 超实例上限 90 天/scope 非法/与载体 scope 无交集）；400 E-RES-004。
 
 #### DELETE /api/v1/credentials/{id}（写：撤销）
 - 成功：204（即时生效，下一请求 401，identity §5.2）；审计 `credential.revoke`。
@@ -213,7 +214,8 @@
 
 #### POST /api/v1/admin/employees/{username}/credentials（写：管理员代签；S37 增补）
 - 请求同自助签发：`{name, expires_at, scope?}`；**scope 校验同自助**（identity §3.4——只能收窄**该目标员工**当前权限，代签不能扩权）。需实例管理员，否则 403 E-AUTHZ-001。
-- 成功：201 `{token, …同列表字段, origin:"admin_delegated"}`（明文仅此一次）；凭据归属目标员工；审计 `credential.create`（主体=代签管理员，detail 记 `{delegated:true, username}`——dshent 平台委托签发面）。
+- **签发面收窄**（S38 补记）：access 维按发起载体收窄（管理员载体为 read 时，代签凭据至多 read）；库维按目标员工权限判定（管理员载体的库清单属另一个库宇宙，不参与交集）。
+- 成功：201 `{token, …同列表字段, origin:"admin_delegated"}`（明文仅此一次）；凭据归属目标员工；审计 `credential.create`（主体=代签管理员，detail 记 `{delegated:true, username, credential_id}`——dshent 平台委托签发面）。
 - 错误：404 E-RES-001（目标员工不存在）；409 E-RES-005；422 E-RES-007；400 E-RES-004。
 
 ## 5. 库与成员

@@ -60,6 +60,7 @@ export const credentialsPlugin: FastifyPluginAsync<CredentialsPluginOptions> = a
         scopeAccess: outcome.token.scopeAccess,
         scopeVaultIds: [...outcome.token.scopeVaultIds],
         entry: 'api',
+        carrierRef: outcome.carrierRef,
       });
       return;
     }
@@ -71,6 +72,7 @@ export const credentialsPlugin: FastifyPluginAsync<CredentialsPluginOptions> = a
       scopeAccess: 'read_write',
       scopeVaultIds: [],
       entry: 'web',
+      carrierRef: outcome.carrierRef,
     });
   });
 
@@ -98,6 +100,12 @@ export const credentialsPlugin: FastifyPluginAsync<CredentialsPluginOptions> = a
     const user = requireUser(request);
     const { record, token } = svc.createCredential(user.employeeId, (request.body ?? {}) as Record<string, unknown>, {
       entry: user.entry,
+      // 载体 = 发起方（会话/凭据）：签发面的 scope 上界与审计归因同源（identity §3.4/§8）
+      carrier: {
+        ref: user.carrierRef,
+        access: user.scopeAccess,
+        vaultIds: user.scopeVaultIds,
+      },
     });
     request.log.info(
       { event: 'credential.create', employee_id: user.employeeId, credential_id: record.id },
@@ -146,6 +154,14 @@ export const credentialsPlugin: FastifyPluginAsync<CredentialsPluginOptions> = a
     const { record, token } = svc.createCredential(target, (request.body ?? {}) as Record<string, unknown>, {
       entry: admin.entry,
       delegatedBy: { employeeId: admin.employeeId, username },
+      // 载体 = 代签管理员本人：access 维收窄（read 载体不得签出 read_write 凭据）；
+      // 库维按**目标员工**权限判定（代签凭据归属目标员工，管理员载体库清单属另一个
+      // 库宇宙——不适用，见 validateScope）
+      carrier: {
+        ref: admin.carrierRef,
+        access: admin.scopeAccess,
+        vaultIds: admin.scopeVaultIds,
+      },
     });
     request.log.info(
       { event: 'credential.create', employee_id: admin.employeeId, credential_id: record.id, delegated_for: username },

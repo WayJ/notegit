@@ -76,6 +76,9 @@ export interface AuthTokenContext {
   scopeVaultIds: number[];
   /** 入口归因（identity §8）：会话载体=web、token 载体=api（S2-T5 统一缝携带） */
   entry: AuditEntry;
+  /** 载体标识（identity §8）：`credential:<id>` / `session:<id>`——审计行的
+   *  credential_ref 取此值（凭据域审计：发起动作的载体，非被操作对象） */
+  carrierRef: string;
 }
 
 /** 授权层 scope 判定结果：not_found 与「库不存在」不可区分（identity §5.2/D-IC-06，404 语义） */
@@ -87,6 +90,20 @@ export interface CreateCredentialInput {
   name?: unknown;
   expires_at?: unknown;
   scope?: unknown;
+}
+
+/**
+ * 签发载体（identity §3.4/§8）：
+ * - `ref`：载体标识——审计行 credential_ref 的取值（`credential:<id>` / `session:<id>`）；
+ * - `access`：载体 access 上界——载体 read 时只能签出 read（签发面不得放大载体权限）；
+ * - `vaultIds`：载体库清单上界（空 = 不额外收窄）。自助签发时与请求库清单取交集；
+ *   管理员代签时不适用（载体库清单描述的是管理员自己的可达库，与目标员工的库宇宙
+ *   不同——代签 scope 按目标员工权限判定，api.md §4）。
+ */
+export interface CredentialCarrier {
+  readonly ref: string;
+  readonly access: ScopeAccess;
+  readonly vaultIds: readonly number[];
 }
 
 export interface ServiceConfig {
@@ -125,13 +142,18 @@ export class CredentialsService {
   createCredential(
     employeeId: number,
     input: CreateCredentialInput,
-    auditCtx?: { entry?: AuditEntry; delegatedBy?: { employeeId: number; username: string } },
+    auditCtx?: {
+      entry?: AuditEntry;
+      delegatedBy?: { employeeId: number; username: string };
+      /** 发起载体（scope 上界 + 审计归因）；缺省 = 无载体上下文（内部直调） */
+      carrier?: CredentialCarrier;
+    },
   ): { record: CredentialPublic; token: string } {
     if (typeof input.name !== 'string' || input.name.length === 0) {
       throw new ApiError(400, 'E-RES-004', '请求形态错误：name 必填且为非空字符串');
     }
     const expiresAt = this.validateExpiresAt(input.expires_at);
-    const scope = this.validateScope(employeeId, input.scope);
+    const scope = this.validateScope(employeeId, input.scope, auditCtx?.carrier, auditCtx?.delegatedBy !== undefined);
 
     const token = generateToken();
     const tokenHash = hashToken(this.pepper.active, token);
@@ -161,10 +183,13 @@ export class CredentialsService {
         )
         .run(employeeId, input.name, tokenHash, hint, scope.access, JSON.stringify(scope.vaultIds), createdAt, expiresAt, origin);
       const id = Number(info.lastInsertRowid);
+      // 审计归因（identity §8）：credential_ref = 发起动作的载体（凭据/会话），
+      // 非被创建对象——受限载体发起的签发须在审计中可归因（取证面）。
+      const carrierRef = auditCtx?.carrier?.ref ?? `credential:${id}`;
       if (delegatedBy) {
-        this.audit(delegatedBy.employeeId, `credential:${id}`, 'credential.create', { name: input.name, delegated: true, username: delegatedBy.username }, auditCtx?.entry ?? 'api');
+        this.audit(delegatedBy.employeeId, carrierRef, 'credential.create', { name: input.name, credential_id: id, delegated: true, username: delegatedBy.username }, auditCtx?.entry ?? 'api');
       } else {
-        this.audit(employeeId, `credential:${id}`, 'credential.create', { name: input.name }, auditCtx?.entry ?? 'api');
+        this.audit(employeeId, carrierRef, 'credential.create', { name: input.name, credential_id: id }, auditCtx?.entry ?? 'api');
       }
       this.db.exec('COMMIT');
       return {
@@ -277,6 +302,7 @@ export class CredentialsService {
           scopeAccess: hit.scope_access,
           scopeVaultIds: JSON.parse(hit.scope_vaults) as number[],
           entry: 'api', // token 载体认证即 API 入口（identity §8）
+          carrierRef: `credential:${hit.credential_id}`, // 载体标识（identity §8）
         };
       }
       // 归因：哈希命中存量行但被规范查询过滤 → 按四状态区分错误码
@@ -361,7 +387,35 @@ export class CredentialsService {
    * 清单非空而全部未命中 → 统一 422（文案不区分「不存在」与「非成员」，防探测，也防
    * 「声明收窄、实得空清单=全部有权库」的放大陷阱）。
    */
-  private validateScope(employeeId: number, input: unknown): ResolvedScope {
+  private validateScope(
+    employeeId: number,
+    input: unknown,
+    carrier?: CredentialCarrier,
+    delegated = false,
+  ): ResolvedScope {
+    const requested = this.resolveRequestedScope(employeeId, input);
+    if (carrier === undefined) return requested;
+    // access 维：载体 read 时签出的凭据至多 read（载体 scope 在签发面的传递——
+    // 否则一枚 read 限定的 token 可签出 read_write 凭据自我提权，identity §3.4 失守）
+    const access: ScopeAccess = carrier.access === 'read' ? 'read' : requested.access;
+    // vault 维：仅自助签发时收窄——管理员代签时载体库清单描述的是管理员自己的可达库，
+    // 与目标员工的库宇宙不同（api.md §4 代签 scope 按目标员工权限判定）
+    if (delegated) return { access, vaultIds: requested.vaultIds, slugs: requested.slugs };
+    if (carrier.vaultIds.length === 0) return { access, vaultIds: requested.vaultIds, slugs: requested.slugs };
+    const allowed = new Set(carrier.vaultIds);
+    // 请求未列库（=全部有权库）时取「成员库 ∩ 载体库」；已列库时取二者交集
+    const candidate = requested.vaultIds.length === 0 ? this.memberVaultIds(employeeId) : requested.vaultIds;
+    const effective = candidate.filter((id) => allowed.has(id));
+    if (effective.length === 0) {
+      // 交集为空不得落为「空清单 = 全部有权库」（§3.4 放大陷阱）→ 显式失败
+      throw new ApiError(422, 'E-RES-007', '参数语义不符：scope.vaults 未命中当前凭据授权范围');
+    }
+    const slugs = effective.map((id) => this.slugOfVault(id)).filter((slug): slug is string => slug !== undefined);
+    return { access, vaultIds: effective, slugs };
+  }
+
+  /** 请求 scope → 生效 scope（按凭据归属员工的成员关系收窄；未命中的 slug 静默剔除） */
+  private resolveRequestedScope(employeeId: number, input: unknown): ResolvedScope {
     if (input === undefined) return { access: 'read_write', vaultIds: [], slugs: [] };
     if (typeof input !== 'object' || input === null || Array.isArray(input)) {
       throw new ApiError(422, 'E-RES-007', '参数语义不符：scope 须为对象');
@@ -379,13 +433,7 @@ export class CredentialsService {
       throw new ApiError(422, 'E-RES-007', '参数语义不符：scope.vaults 须为 slug 字符串数组');
     }
     const slugs = [...new Set(vaults as string[])];
-    const memberVaults = this.db
-      .prepare(
-        `SELECT v.id, v.slug FROM vaults v
-         JOIN vault_members m ON m.vault_id = v.id
-         WHERE m.employee_id = ?`,
-      )
-      .all(employeeId) as { id: number; slug: string }[];
+    const memberVaults = this.memberVaultsOf(employeeId);
     const memberBySlug = new Map(memberVaults.map((r) => [r.slug, r.id] as const));
     const vaultIds: number[] = [];
     const resolvedSlugs: string[] = [];
@@ -400,6 +448,28 @@ export class CredentialsService {
       throw new ApiError(422, 'E-RES-007', '参数语义不符：scope.vaults 未命中任何当前有权库');
     }
     return { access, vaultIds, slugs: resolvedSlugs };
+  }
+
+  /** 凭据归属员工的成员库（id + slug） */
+  private memberVaultsOf(employeeId: number): { id: number; slug: string }[] {
+    return this.db
+      .prepare(
+        `SELECT v.id, v.slug FROM vaults v
+         JOIN vault_members m ON m.vault_id = v.id
+         WHERE m.employee_id = ?`,
+      )
+      .all(employeeId) as { id: number; slug: string }[];
+  }
+
+  /** 凭据归属员工的成员库 id 清单 */
+  private memberVaultIds(employeeId: number): number[] {
+    return this.memberVaultsOf(employeeId).map((m) => m.id);
+  }
+
+  /** 库 id → slug */
+  private slugOfVault(vaultId: number): string | undefined {
+    const row = this.db.prepare('SELECT slug FROM vaults WHERE id = ?').get(vaultId) as { slug: string } | undefined;
+    return row?.slug;
   }
 
   /** 审计事件（identity §8；storage-model §5：直接终态、credential_ref 不含 token 材料） */

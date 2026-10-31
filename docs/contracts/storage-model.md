@@ -319,7 +319,7 @@ ORDER BY occurred_at, id;
 | `vault.web_submit` | 同上 | 是 | 架构 §4.4/§5.4 |
 | `vault.create` / `vault.update`（含 slug 改名、main_admin_only） | 直接终态 | 是 | 架构 §4.2/§4.3 |
 | `member.grant` / `member.revoke` | 直接终态 | 是 | 架构 §4.2；identity §5.2 |
-| `credential.create` / `credential.revoke` | 直接终态 | 否 | identity §8 凭据域 |
+| `credential.create` / `credential.revoke` | 直接终态 | 否 | identity §8 凭据域（`credential.create` 的 `credential_ref` = 发起动作的载体，被创建凭据 id 记于 `detail.credential_id`；`credential.revoke` 的 `credential_ref` = 被撤销凭据 id——撤销事件的对象即被撤销凭据，无其他字段承载） |
 | `employee.create` / `employee.deactivate` / `employee.activate` / `employee.password_reset` | 直接终态 | 否 | identity §8 |
 | `account.bootstrap` | 直接终态 | 否 | identity §7.1（actor_kind=bootstrap） |
 | `admin.host_recovery` | 直接终态 | 否 | identity §7.2/§8（主机侧恢复，记来源） |
