@@ -278,4 +278,24 @@ CREATE TABLE search_index_state (
       `ALTER TABLE credentials ADD COLUMN origin TEXT NOT NULL DEFAULT 'self' CHECK (origin IN ('self','admin_delegated'))`,
     ],
   },
+  {
+    // Git over SSH 传输面（迁移 0012）：SSH 公钥登记册——公钥 → 员工身份的绑定与吊销。
+    // 只存公钥本体与指纹（私钥永不进库）；指纹唯一索引只覆盖未吊销行（吊销后同指纹可再登记）。
+    version: 12,
+    description: "git-ssh: ssh_keys registry (public key ↔ employee binding for the Git SSH transport)",
+    statements: [
+      `CREATE TABLE ssh_keys (
+  id              INTEGER NOT NULL PRIMARY KEY,
+  employee_id     INTEGER NOT NULL REFERENCES employees(id),
+  key_type        TEXT    NOT NULL,
+  key_fingerprint TEXT    NOT NULL,
+  key_blob        TEXT    NOT NULL,
+  label           TEXT,
+  created_at      TEXT    NOT NULL,
+  revoked_at      TEXT
+) STRICT`,
+      `CREATE UNIQUE INDEX ux_ssh_keys_fingerprint_live ON ssh_keys(key_fingerprint) WHERE revoked_at IS NULL`,
+      `CREATE INDEX idx_ssh_keys_employee ON ssh_keys(employee_id)`,
+    ],
+  },
 ];

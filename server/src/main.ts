@@ -7,6 +7,7 @@ import { openDatabase } from './db/connection.ts';
 import { migrate } from './db/migrate.ts';
 import { MIGRATIONS } from './db/migrations.ts';
 import { buildApp, type PasswordHasher } from './app.ts';
+import { startGitSshServer, type StartedGitSshServer } from './gitssh/server.ts';
 import type { RequestAuthenticator } from './auth/lifecycle.ts';
 import { loadOrCreatePepper } from './bootstrap/pepper.ts';
 import { ensureBootstrapToken } from './bootstrap/token.ts';
@@ -49,6 +50,8 @@ export interface StartedApp {
   readonly dataDir: string;
   readonly bootstrapTokenFile: string;
   readonly port: number;
+  /** Git over SSH 监听端口（未开 SSH 面时 undefined）。 */
+  readonly sshPort?: number;
   close(): Promise<void>;
 }
 
@@ -99,6 +102,23 @@ export async function startApp(opts: StartOptions = {}): Promise<StartedApp> {
       hashPassword: opts.hashPassword,
       trustProxy: opts.trustProxy ?? trustProxyFromEnv(),
     });
+    // Git over SSH 传输面：NOTEGIT_SSH_PORT 缺省 = 不起（默认只开 HTTP 面；
+    // 起端口即对宿主暴露一条 SSH 入口——部署面须显式开端口并自管防火墙）。
+    const sshPort = process.env.NOTEGIT_SSH_PORT === undefined ? undefined : Number(process.env.NOTEGIT_SSH_PORT);
+    let sshServer: StartedGitSshServer | undefined;
+    if (sshPort !== undefined && Number.isInteger(sshPort) && sshPort > 0 && app.sshContext !== undefined) {
+      sshServer = await startGitSshServer({
+        dataDir,
+        db,
+        dbFile,
+        membershipSource: app.sshContext.membershipSource,
+        maintenanceGate: app.sshContext.maintenanceGate,
+        childProcessGate: app.sshContext.childProcessGate,
+        port: sshPort,
+      });
+      console.log(`[notegit] git ssh listening on port ${sshServer.port}`);
+    }
+
     const host = opts.host ?? process.env.HOST ?? '0.0.0.0';
     const port = opts.port ?? Number(process.env.PORT ?? 3000);
     await app.listen({ host, port }); // listen 最后
@@ -110,7 +130,9 @@ export async function startApp(opts: StartOptions = {}): Promise<StartedApp> {
       dataDir,
       bootstrapTokenFile,
       port: bound.port,
+      sshPort: sshServer?.port,
       close: async () => {
+        if (sshServer !== undefined) await sshServer.close();
         await app.close();
         db.close();
       },

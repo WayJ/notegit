@@ -55,6 +55,14 @@ export function parseGitSmartRequest(
   return null;
 }
 
+/**
+ * clone URL 惯例后缀剥离：`<slug>.git` → `<slug>`。纯 URL 解析——磁盘目录名仍只出自
+ * repo-path.ts（静态规则：`.git` 字面量只允许出现在 repo-path/cgi/migrations 三处）。
+ */
+export function stripRepoSuffix(path: string): string {
+  return path.endsWith('.git') ? path.slice(0, -4) : path;
+}
+
 /** HTTP Basic 解析：`user:password`（首个冒号切分——token 不含冒号，用户名任意）。
  *  非 Basic scheme / 畸形 base64 / 无冒号 → null（→ 401，不回退其他载体）。 */
 export function parseBasicAuth(header: string | undefined): { username: string; password: string } | null {

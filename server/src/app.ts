@@ -16,6 +16,7 @@ import { vaultsPlugin } from './vaults/routes.ts';
 import { draftsPlugin } from './drafts/routes.ts';
 import { createVaultRepoOps } from './gitrepo/lifecycle.ts';
 import { gitHttpPlugin } from './githttp/http-backend.ts';
+import { sshKeyPlugin } from './gitssh/routes.ts';
 import { createGitChildGate, effectiveGitLimits } from './limits/git-gate.ts';
 import { createMaintenanceGate, maintenanceGuard } from './maintenance/gate.ts';
 import { registerMaintenanceRoutes } from './maintenance/routes.ts';
@@ -272,6 +273,8 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
       ...(deps.dataDir !== undefined ? { dataDir: deps.dataDir } : {}),
     });
     // S3-T2 Git Smart HTTP 入口（api.md §8.4）：CGI 包装 git http-backend，认证
+    // Git over SSH：公钥登记管理面（实例管理员代成员登记；SSH 会话只认登记册里的公钥）。
+    app.register(sshKeyPlugin, { db: wired.db, authenticateRequest: wired.authenticateRequest });
     // 经 Basic→token（同一凭据域服务）、授权经同一 authorize/membershipSource、
     // 维护模式 write 403——与 Web/API 三入口共用组件；dataDir 注入时注册。
     // S8-T8：每请求 git 子进程并发闸门（git.maxConcurrentChildren，FIFO 排队，
@@ -288,6 +291,12 @@ export function buildApp(deps?: AppDeps): FastifyInstance {
         childProcessGate,
         db: deps.db, // S3-T6：receive 子进程退出后的中断清扫（pending → 待核对）
       });
+      // SSH 传输面与 HTTP 面共用授权源、维护闸门与子进程容量池（main.ts 起服务）。
+      app.sshContext = {
+        membershipSource: createDbMembershipSource(deps.db),
+        maintenanceGate,
+        childProcessGate,
+      };
     }
   }
   return app;
